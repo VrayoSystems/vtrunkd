@@ -1,0 +1,102 @@
+#
+#   vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
+#
+#   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+#
+#   Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
+#   vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   Makefile.in,v 1.6.2.4.2.1 2006/11/16 04:03:44 mtbishop Exp
+#  
+CC = @CC@
+CFLAGS = @CFLAGS@ @CPPFLAGS@ 
+LDFLAGS = @LIBS@
+
+YACC = @YACC@
+YACCFLAGS = -d
+
+LEX = @LEX@
+LEXFLAGS = -t 
+
+INSTALL = @INSTALL@
+INSTALL_OWNER = -o root -g 0
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+
+SBIN_DIR = @sbindir@
+MAN_DIR  = @mandir@
+ETC_DIR  = @sysconfdir@
+VAR_DIR  = @localstatedir@
+
+PID_FILE = ${VAR_DIR}/run/vtrunkd.pid
+CFG_FILE = ${ETC_DIR}/vtrunkd.conf
+STAT_DIR = ${VAR_DIR}/log/vtrunkd
+LOCK_DIR = ${VAR_DIR}/lock/vtrunkd
+
+DEFS = -DVTUN_CONFIG_FILE=\"$(CFG_FILE)\" -DVTUN_PID_FILE=\"$(PID_FILE)\" \
+       -DVTUN_STAT_DIR=\"$(STAT_DIR)\" -DVTUN_LOCK_DIR=\"$(LOCK_DIR)\" \
+       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)\"
+
+OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
+       frame_llist.o llist.o auth.o tunnel.o lock.o netlib.o  \
+       tun_dev.o tap_dev.o pty_dev.o pipe_dev.o \
+       tcp_proto.o udp_proto.o \
+       linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o 
+
+CONFIGURE_FILES = Makefile config.status config.cache config.h config.log 
+
+%.o: %.c vtun.h lib.h
+	$(CC) $(CFLAGS) $(DEFS) -c $<
+
+vtrunkd: $(OBJS)
+	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(LFD_OBJS) $(LDFLAGS)
+
+cfg_file.tab.c: cfg_file.y cfg_kwords.h config.h
+	$(YACC) $(YACCFLAGS) -b cfg_file cfg_file.y
+
+cfg_file.lex.c: cfg_file.l cfg_kwords.h config.h
+	$(LEX) $(LEXFLAGS) cfg_file.l > cfg_file.lex.c 
+
+depend:
+	makedepend -- $(CFLAGS) -- *.c
+
+clean:
+	rm -f core cfg_file.tab.* cfg_file.lex.* *.o *~ *.bak vtrunkd
+
+distclean: clean
+	rm -f $(CONFIGURE_FILES)
+	rm -f `cat vtun.drivers`	
+
+install_man: 
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(MAN_DIR)/man8
+	$(INSTALL) -m 644 $(INSTALL_OWNER) vtrunkd.8 $(DESTDIR)$(MAN_DIR)/man8
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(MAN_DIR)/man5
+	$(INSTALL) -m 644 $(INSTALL_OWNER) vtrunkd.conf.5 $(DESTDIR)$(MAN_DIR)/man5
+	rm -f $(DESTDIR)$(MAN_DIR)/man8/vtrunkd.8 
+	ln -s vtrunkd.8 $(DESTDIR)$(MAN_DIR)/man8/vtrunkd.8 
+
+install_config: 
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(ETC_DIR)
+	if [ ! -f $(ETC_DIR)/vtrunkd.conf ]; then \
+	  $(INSTALL) -m 600 $(INSTALL_OWNER) vtrunkd.conf $(DESTDIR)$(ETC_DIR); \
+	fi
+
+install: vtrunkd install_config install_man
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(VAR_DIR)/run
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(STAT_DIR)
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(LOCK_DIR)
+	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(SBIN_DIR)
+	$(INSTALL) -m 755 $(INSTALL_OWNER) vtrunkd $(DESTDIR)$(SBIN_DIR)
+
+# DO NOT DELETE THIS LINE -- make depend depends on it.

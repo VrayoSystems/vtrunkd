@@ -1,0 +1,28 @@
+- make protocol more consistent: use headers+payload scheme
+- debug sysv semaphore code
+- remove or fix retransmit mode code
+- udp port analysis for channels
+- set compiled-in values via configure script; add AC_ checks for bison, flex
+- do not ping if data is sent via this channel within PING intvl
+- ping_all_channels option true/false (in case we're not behind dull DNAT we
+    don't need to ping each of our TCP channels => greatly reduce load on
+    links with very many channels -- configurable per-link)
+- set max_delays etc. in millisecond (millisecond resolution option, in configure
+    compile-time defines? does it really add such an overhead?)
+- clean up code tree, rewrite docs (scripts, packages, freebsd)
+    - move assert_cnt to #ifdef DEBUGG
+    - define protocol data structures instead of [horrible] casting
+    - define [inline?] methods for duplicating code
+- dynamic SHM buffer
+- enable encrytion code
+
+further work:
+- internal QoS: send ssh traffic via link with lower latency [and no penalty]
+- assymmetric multi-endpoint support w/best route selection
+- encapsulate icmp into icmp tunnel, udp in udp.. etc., -> fair use of QoS
+    - emulate L7 protocol identifiers
+- non-linux OS support (shared memory, pthread semaphores, fd passing, SO_MARK ??)
+
+vtrunkd 2:
+- L2TP aggregation support [less overhead; in-kernel congestion control support;
+    L3 switching hardware support]

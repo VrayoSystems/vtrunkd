@@ -1,0 +1,37 @@
+vtrunkd - virtual link trunking in userspace
+Copyright (C) 2011 Andrew Gryaznov <realgrandrew@gmail.com>
+
+Based on original package vtun - Copyright (C) 1998-2004 
+Maxim Krasnyansky <max_mk@yahoo.com>
+
+This product includes software developed by the OpenSSL Project
+for use in the OpenSSL Toolkit. (http://www.openssl.org/).
+Copyright (c) 1998-2004 The OpenSSL Project.  All rights reserved.
+
+Compilation and Installation:
+
+In order to compile VTun you need several software packages.
+Required packages: 
+  - Good C compiler (gcc, egcs, etc)
+  - Lexical Analyzer (flex, lex)
+  - YACC (yacc, bison, byacc)
+  - Universal TUN/TAP driver 	http://vtun.sourceforge.net/tun
+
+To configure run:
+  ./configure 
+
+Configure automatically searches for all required library and header
+files.  However you might need to specify location of the files which
+could not be found in default location:
+  SSL(Crypto) library:
+  --with-ssl-lib=/path/to/library (libcrypto.a) 
+  --with-ssl-headers=/path/to/headers (md5.h blowfish.h)
+
+To compile and install run:
+  make install
+
+If you have any suggestions, ideas, wishes send them to 
+realgrandrew@gmail.com
+ 
+vtrunkd and vtrunkd algorithm (C) Andrew Gryaznov
+Vtun (c) Maxim Krasnyansky

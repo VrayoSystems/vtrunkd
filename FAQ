@@ -1,0 +1,40 @@
+- sudden stop
+check MTUs to be set correctly. the overhead is 6 bytes
+
+
+- max == 0 read errors
+check that no other vtrunkd daemon is competing for this connection
+
+
+- poor router TCP performance
+May be because of broken routers. Try this:
+echo "4096 16384 131072" > /proc/sys/net/ipv4/tcp_wmem
+echo "4096 87380 174760" > /proc/sys/net/ipv4/tcp_rmem
+will give about ~600k max
+doubling the values,
+echo "4096 32767 262144" > /proc/sys/net/ipv4/tcp_wmem
+echo "4096 174760 524288" > /proc/sys/net/ipv4/tcp_rmem
+will give ~1000k
+note that this will use more router memory 
+
+- I don't get more than 3.5-5 MBit/s on my linksys router
+You may be running max out of your router CPU power. Try disabling wi-fi, that
+will free some CPU to vtrunkd.
+vtrunkd is very CPU-intensive program, it does L4 analysis, protocol calculations,
+uses IPC, shared memory and precise timing. As of version 0.1b, WRT54GL can get
+up to 420 kilobytes/s on an optimized wireless and up to about 550 KB/s on LAN
+for http download by using 100% of 199MHz boradcom CPU.
+
+
+- openwrt build environment complains about relocations in ELF
+You have not done 'make distclean' before creating package .gz
+
+
+How do i do vtrunkd multi process profiling?
+- Makefile: add -pg and/or --coverage; -O0 recommended
+- compile with --DDEBUGG to enable children monitoring along with very verbosive logging
+- set environment value XXXXXXXXXXXXXXXXX before launch
+- be sure to be running from build dir and as root: profiler will create files at / and current build dir for coverage
+- be sure to exit vtrunkd before searching for profiler files
+- algorithm is implemented in linkfd.c, so do read coverage stats only for this file: gcov linkfd.c
+- compiling with DEBUGG will add some extra code that will show up in profile stats; ignore it

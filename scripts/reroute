@@ -1,0 +1,63 @@
+#!/bin/bash
+#
+# Maxim Krasnyansky <max_mk@yahoo.com>
+# reroute,v 1.2.6.1 2006/11/16 04:04:59 mtbishop Exp
+#
+IP=/sbin/ip
+
+if [ $# -ne 3 ]; then
+   echo "Usage: reroute option Source_IP Destination_IP"
+   echo "Options:"
+   echo "   -m - Move route Source_IP -> Destination_IP to table 100."
+   echo "        Configure source based routing." 
+
+   echo "   -r - Restore route Source_IP -> Destination_IP to default table."
+   echo "        Delete source based routing."
+   exit 1;
+fi
+
+MODE=$1
+IP_S=$2
+IP_D=$3
+
+# Get original route
+ROUTE=`$IP route get $IP_D from $IP_S | grep dev`
+
+# Parse route 
+set - $ROUTE
+while [ "$1" != "" ]; do
+    if [ "$1" = "src" ]; then
+	shift
+	O_SRC=$1
+    fi
+    if [ "$1" = "dev" ]; then
+	shift
+	O_DEV=$1
+    fi
+    if [ "$1" = "via" ]; then
+	shift
+	O_GW=$1
+    fi
+    shift
+done
+
+# Flush all routes, rules and cache for that IP 
+$IP route flush $IP_D table all >/dev/null 2>&1
+$IP rule del from $IP_S to $IP_D >/dev/null 2>&1
+
+case $MODE in
+   -m)
+	# Add route via orig device to table 100
+	$IP route add $ROUTE table 100 >/dev/null 2>&1
+
+	# Add source based routing 
+	$IP rule add from $IP_S to $IP_D table 100 >/dev/null 2>&1
+	;;
+
+   -r)
+	# Add route via orig device to defaul table
+	$IP route add $ROUTE >/dev/null 2>&1
+	;;
+esac
+
+exit 0

@@ -1,0 +1,26 @@
+#
+!BASEDIR=/usr/local
+#
+i pkginfo=vtun.solaris.info
+i version=vtun.desc
+#
+!search $BASEDIR
+!default 755 root root
+d none sbin 
+d none var 
+d none var/run 
+d none var/log/vtund 
+d none var/lock/vtund 
+d none man 
+d none man/man8
+d none man/man5
+d none etc
+
+!search $BASEDIR/sbin $BASEDIR/etc $BASEDIR/man/man8 $BASEDIR/man/man5
+!default 644 root root
+f none man/man8/vtund.8
+f none man/man5/vtund.conf.5
+s none man/man8/vtun.8=vtund.8
+
+f none etc/vtund.conf 0600 root root
+f none sbin/vtund 0755 root root

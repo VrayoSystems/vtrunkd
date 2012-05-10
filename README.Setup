@@ -1,0 +1,152 @@
+VTun Setup recommendations and Config samples.
+
+1. General recommendations:
+1.1 IP tunnel
+    type tun;
+    proto udp;
+    keepalive yes; 
+    up {
+       ifconfig "%% xxxxxxx";
+    };
+  This will give you reliable and the fastest possible Point-to-Point
+  tunnel.  Use this tunnel type whenever it's possible, especially
+  if performance and efficiency is concerned. If you need compression,
+  use LZO or TCP protocol and ZLIB. 
+
+1.2 Ethernet tunnel
+    type ether;
+    proto udp;
+    keepalive yes; 
+    up {
+       ifconfig "%% xxxxxxx";
+    };
+  This will give you reliable and fast Ethernet tunnel. You can tunnel
+  any protocol that works with Ethernet IP, IPX, Appletalk, DECnet, etc
+  If you need compression, use LZO or TCP protocol and ZLIB. 
+
+1.3 PPP or SLIP tunnel
+    type tty;
+    proto tcp;
+    keepalive yes; 
+    up {
+       ppp "xxxxxxxxxxx";
+    };
+  This will give you reliable and fast PPP or SLIP tunnel. 
+  You can safely use compression. 
+
+1.4 Anything else :))
+    type pipe; or type tty; if it depends on TTYs
+    proto tcp;
+    keepalive yes;
+    up {
+       program /xx/xx "yyyyy";
+    } 
+  Never use UDP with 'pipe' tunnel type. VTun allows it, but it is not 
+  a good idea. Compression, encryption and shaping are safe for almost
+  everything.
+
+2. Configuration samples.
+2.1 Example 1. 
+We have to create virtual tunnels between 3 private IP networks in 
+different locations on the Internet. All networks are being serviced 
+by Linux boxes having dedicated links and a fixed IP address to the 
+Internet. 
+Network addresses and servers: 
+   192.168.0.0 - Server S1 
+   192.168.1.0 - Server S2
+   192.168.2.0 - Server S3
+We can setup S1 as a VTun server for S2 and S3 and create 3 tunnels.
+But in this case we'll get a star net topology with unreliable and 
+inefficient routing. That's why we will create 6 tunnels, each server 
+will have two tunnels with other servers. 
+S1 will have only server config, S2 will have server and client 
+config and S3 only client config.
+
+Here are VTun configs for each server:
+Server S1
+   default {
+	type tun;
+	proto udp;
+	comp lzo:1;
+	keepalive yes;
+   }
+
+   # Tunnel between S1 and S2 (192.168.0.0 <-> 192.168.1.0)
+   # Server entry
+   s2 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.1 pointopoint 192.168.0.2";
+	   route "add -net 192.168.1.0 netmask 255.255.255.0 gw 192.168.0.2";
+	   program /sbin/arp "-sD 192.168.0.2 eth0 pub";
+	};
+   }
+
+   # Tunnel between S1 and S3 (192.168.0.0 <-> 192.168.2.0)
+   # Server entry
+   s3_1 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.1 pointopoint 192.168.0.3";
+	   route "add -net 192.168.2.0 netmask 255.255.255.0 gw 192.168.0.3";
+	   program /sbin/arp "-sD 192.168.0.3 eth0 pub";
+	};
+   }
+   Start vtund as 'vtund -s'
+
+Server S2
+   default {
+	type tun;
+	proto udp;
+	comp lzo:1;
+	keepalive yes;
+   }
+
+   # Tunnel between S2 and S1 (192.168.1.0 <-> 192.168.0.0)
+   # Client entry
+   s2 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.2 pointopoint 192.168.0.1";
+	   route "add -net 192.168.0.0 netmask 255.255.255.0 gw 192.168.0.1";
+	};
+   }
+
+   # Tunnel between S2 and S3 (192.168.1.0 <-> 192.168.2.0)
+   # Server entry
+   s3_2 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.2 pointopoint 192.168.0.3";
+	   route "add -net 192.168.2.0 netmask 255.255.255.0 gw 192.168.0.3";
+	};
+   }
+	
+   Start vtund as 
+   'vtund -s'
+   'vtund s2 real_address_of_s1'
+
+Server S3
+   # Tunnel between S3 and S1 (192.168.2.0 <-> 192.168.0.0)
+   # Client entry
+   s3_1 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.3 pointopoint 192.168.0.1";
+	   route "add -net 192.168.0.0 netmask 255.255.255.0 gw 192.168.0.1";
+	};
+   }
+
+   # Tunnel between S3 and S2 (192.168.2.0 <-> 192.168.1.0)
+   # Client entry
+   s3_2 {
+	pass XXXX;
+	up {
+	   ifconfig "%% 192.168.0.3 pointopoint 192.168.0.2";
+	   route "add -net 192.168.1.0 netmask 255.255.255.0 gw 192.168.0.2";
+	};
+   }
+   
+   Start vtund as
+   'vtund s3_1 real_address_of_s1'
+   'vtund s3_2 real_address_of_s2'
