@@ -329,12 +329,23 @@ inline int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned 
 }
 
 
-
+/**
+ * Generate new packet number, wrapping packet and add to resend queue.
+ *
+ * @param conn_num
+ * @param buf - data for send
+ * @param out - pointer to pointer to output packet
+ * @param len - data length
+ * @param seq_num - output packet number
+ * @param flag
+ * @param sender_pid
+ * @return
+ */
 int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long seq_num, unsigned short flag, int sender_pid) {
     int oldidx = shm_conn_info->resend_buf_idx;
     int newf = oldidx;
     int ic = 0;
-
+    // TODO reimplement - get free slot
     do {
         if((!shm_conn_info->resend_frames_buf[newf].seq_num) || (shm_conn_info->resend_frames_buf[newf].seq_num <
                 shm_conn_info->write_buf[shm_conn_info->resend_frames_buf[newf].chan_num].remote_lws))
@@ -966,7 +977,9 @@ int lfd_linker(void)
     
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
 
-
+/**
+ * Main program loop
+ */
     while( !linker_term ) {
         errno = 0;
         gettimeofday(&cur_time, NULL);
@@ -998,7 +1011,7 @@ int lfd_linker(void)
 #else
                 sem_wait_tw(write_buf_sem);
 #endif
-
+                // bigger weight more to wait(weight == penalty)
                 if(weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
                     if(mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP) {
                          if( (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_DIV) ) // increase reverse weight..

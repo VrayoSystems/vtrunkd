@@ -1,0 +1,9 @@
+Makefile
+.cproject
+.project
+cfg_file.tab.*
+cfg_file.lex.*
+*.o
+*~
+*.bak
+vtrunkd
