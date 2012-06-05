@@ -127,8 +127,8 @@ struct {
     int pkts_dropped;
     int rxmit_req; // outdated: use max_latency_hit + max_reorder_hit
     int rxmit_req_rx;
-    int rxmits;
-    int rxmits_notfound;
+    int rxmits;	// number of resended packets
+    int rxmits_notfound; // number of resend packets which not found
     int max_latency_hit; // new
     int max_reorder_hit; // new
     int mode_switches;
@@ -789,9 +789,9 @@ int lfd_linker(void)
     //int weight = 1; // defined at top!!!???
 
     // weight processing in delay algo
-    int delay_acc = 0;
-    int delay_cnt = 0;
-    int mean_delay = 0;
+    int delay_acc = 0; // accumulated send delay
+    int delay_cnt = 0; //
+    int mean_delay = 0; // mean_delay = delay_acc/delay_cnt (arithmetic(al) mean)
 
     // TCP sepconn vars
     struct sockaddr_in my_addr, cl_addr, localaddr, rmaddr;
@@ -1011,18 +1011,22 @@ int lfd_linker(void)
 #else
                 sem_wait_tw(write_buf_sem);
 #endif
-                // bigger weight more to wait(weight == penalty)
-                if(weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
-                    if(mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP) {
-                         if( (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_DIV) ) // increase reverse weight..
-                              if ( (mean_delay/lfd_host->WEIGHT_SAW_STEP_UP_DIV) < lfd_host->MAX_WEIGHT_NORM ) { // ignore noize peaks...
-                                   shm_conn_info->stats[my_conn_num].weight += (mean_delay/lfd_host->WEIGHT_SAW_STEP_UP_DIV);
-                              }
-                         else shm_conn_info->stats[my_conn_num].weight += mean_delay; // to have a direct close-up
-                    } else {
-                         shm_conn_info->stats[my_conn_num].weight += lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP;
-                    }
-                }
+				// bigger weight more to wait(weight == penalty)
+				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
+//					if (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP) {
+					if ((mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_DIV) && (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP)) { // increase reverse weight..
+						if ((mean_delay / lfd_host->WEIGHT_SAW_STEP_UP_DIV) < lfd_host->MAX_WEIGHT_NORM) { // ignore noize peaks...
+							shm_conn_info->stats[my_conn_num].weight += (mean_delay / lfd_host->WEIGHT_SAW_STEP_UP_DIV);
+						} else {
+							shm_conn_info->stats[my_conn_num].weight += mean_delay; // to have a direct close-up
+						}
+					} else {
+						shm_conn_info->stats[my_conn_num].weight += lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP;
+					}
+//					} else {
+//						shm_conn_info->stats[my_conn_num].weight += lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP;
+//					}
+				}
                 
                 min_weight = 100000000;
                 for(j=0; j<MAX_AG_CONN; j++) {
@@ -1035,21 +1039,22 @@ int lfd_linker(void)
                 
                 if(min_weight == 100000000) min_weight = shm_conn_info->stats[my_conn_num].weight;
 
-                for(j=0; j<MAX_AG_CONN; j++) {
-                    if( (shm_conn_info->stats[j].pid !=0 ) &&
-                            ( (cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD+2) ) {
-                        if(shm_conn_info->stats[j].weight == min_weight) shm_conn_info->stats[j].weight = 0;
-                        else {
-                              /*
-                               * Here lies the "direct close-up problem": for DN DIV the DIV value is usually
-                               * smaller than for UP; so the impact on DN of close-up is much lower since
-                               * it will still smoothen step-downs while wtep-ups will come unsmoothed
-                               * at this threshold
-                               */
-                              shm_conn_info->stats[j].weight -= min_weight/lfd_host->WEIGHT_SAW_STEP_DN_DIV;
-                        }
-                    }
-                }
+				for (j = 0; j < MAX_AG_CONN; j++) {
+					if ((shm_conn_info->stats[j].pid != 0) &&
+							((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2)) {
+						if (shm_conn_info->stats[j].weight == min_weight)
+							shm_conn_info->stats[j].weight = 0;
+						else {
+							/*
+							 * Here lies the "direct close-up problem": for DN DIV the DIV value is usually
+							 * smaller than for UP; so the impact on DN of close-up is much lower since
+							 * it will still smoothen step-downs while wtep-ups will come unsmoothed
+							 * at this threshold
+							 */
+							shm_conn_info->stats[j].weight -= min_weight / lfd_host->WEIGHT_SAW_STEP_DN_DIV;
+						}
+					}
+				}
 
 
                 weight = shm_conn_info->stats[my_conn_num].weight;
@@ -1059,17 +1064,17 @@ int lfd_linker(void)
                 sem_post(write_buf_sem);
 #endif
 
-                if(weight >= lfd_host->MAX_WEIGHT_NORM) {
-                    if(shm_conn_info->normal_senders > 1) {
-                        //rxmt_mode_request = 1;
-                        //vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight");
-                        vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight (but RXM MODE disabled)");
-                        shm_conn_info->rxmt_mode_pid = getpid();
-                    } else {
-                        vtun_syslog(LOG_ERR, "WARNING! overweight hit on an only normal sender left");
-                    }
-                }
-            }
+				if (weight >= lfd_host->MAX_WEIGHT_NORM) {
+					if (shm_conn_info->normal_senders > 1) {
+						//rxmt_mode_request = 1;
+						//vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight");
+						vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight (but RXM MODE disabled)");
+						shm_conn_info->rxmt_mode_pid = getpid();
+					} else {
+						vtun_syslog(LOG_ERR, "WARNING! overweight hit on an only normal sender left");
+					}
+				}
+			}
             if(rxmt_mode_request) {
                 channel_mode = MODE_RETRANSMIT;
                 shm_conn_info->normal_senders--;
@@ -1736,7 +1741,7 @@ int lfd_linker(void)
                         if(assert_cnt(7)) break; // TODO: add #ifdef DEBUGG
 #endif
                     }
-
+                    // send lws(last written sequence number) to remote side
                     if(shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS)) {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %lu chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
@@ -1760,7 +1765,8 @@ int lfd_linker(void)
                     }
                     if(buf_len > lfd_host->MAX_REORDER) {
                         // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
-                        sem_post_if(&dev_my, rd_sem); // we will do nothing more this time..??
+                        //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
+                    	sem_post_if(&dev_my, rd_sem); // we will do nothing more this time..??
                         incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
 #ifdef NOSEM
                         sem_post2(write_buf_sem);
@@ -1769,6 +1775,7 @@ int lfd_linker(void)
 #endif
                         if(incomplete_seq_len) {
                             for(imf=0; imf < incomplete_seq_len; imf++) {
+                            	// TODO: use free channel to send packets that are late to fight the congestion
                                 if(check_sent(incomplete_seq_buf[imf], sq_rq_buf, &sq_rq_pos, chan_num_virt)) continue;
                                 tmp_l = htonl(incomplete_seq_buf[imf]);
                                 if( memcpy(buf, &tmp_l, sizeof(unsigned long)) < 0) {
@@ -2008,24 +2015,25 @@ int lfd_linker(void)
             delay_acc += (int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec));
             delay_cnt++;
 
-            if( ((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && ping_rcvd) {
-               ping_rcvd = 0;
-               gettimeofday(&cur_time, NULL);
+            //Check time interval and ping if need.
+			if (((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && ping_rcvd) {
+				ping_rcvd = 0;
+				gettimeofday(&cur_time, NULL);
 
-                ping_req_ts = ( (cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
+				ping_req_ts = ((cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
 
-                last_ping = cur_time.tv_sec;
+				last_ping = cur_time.tv_sec;
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "PING2");
+				vtun_syslog(LOG_INFO, "PING2");
 #endif
-                // ping ALL channels! this is required due to 120-sec limitation on some NATs
-                for(i=0; i<chan_amt; i++) { // TODO: remove ping DUP code
-                    if( proto_write(channels[i], buf, VTUN_ECHO_REQ) < 0 ) {
-                        vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
-                        break;
-                    }
-                }
-            }
+				// ping ALL channels! this is required due to 120-sec limitation on some NATs
+				for (i = 0; i < chan_amt; i++) { // TODO: remove ping DUP code
+					if (proto_write(channels[i], buf, VTUN_ECHO_REQ) < 0) {
+						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
+						break;
+					}
+				}
+			}
 
             gettimeofday(&cur_time, NULL);
             last_action = cur_time.tv_sec;

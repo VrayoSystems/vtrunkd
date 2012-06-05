@@ -262,39 +262,39 @@ struct vtun_host {
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */
-    struct frame_llist now;
-    unsigned long last_written_seq;
-    struct timeval last_write_time;
+    struct frame_llist now; // maybe unused
+    unsigned long last_written_seq; // last pack number has written into device
+    struct timeval last_write_time; // into device
     int buf_len;
     int broken_cnt;
-    unsigned long remote_lws;
+    unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
 };
 
 struct conn_stats {
     int pid; /* current pid */
     long int weight; /* bandwith-delay product */
-    long int last_tick;
+    long int last_tick; // watch dog timer
 };
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t fd_sem;
-    struct frame_seq frames_buf[FRAME_BUF_SIZE];
-    struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];
+    struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
+    struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_CONN_AMOUNT];
-    struct frame_llist wb_free_frames; /* init all elements here */
+    struct _write_buf write_buf[MAX_TCP_CONN_AMOUNT]; // input
+    struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem;
-    struct _write_buf resend_buf[MAX_TCP_CONN_AMOUNT];
-    struct frame_llist rb_free_frames; /* init all elements here */
+    struct _write_buf resend_buf[MAX_TCP_CONN_AMOUNT]; // output
+    struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
     sem_t resend_buf_sem;
-    unsigned long seq_counter[MAX_TCP_CONN_AMOUNT];
+    unsigned long seq_counter[MAX_TCP_CONN_AMOUNT];	// packet sequense counter
     short usecount;
-    short lock_pid;
+    short lock_pid;	// who has locked shm
     char normal_senders;
-    int rxmt_mode_pid;
+    int rxmt_mode_pid; // unused?
     struct conn_stats stats[MAX_AG_CONN];
     //int broken_cnt;
     long int lock_time;
