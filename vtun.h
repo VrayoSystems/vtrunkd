@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <stdio.h>
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -222,6 +223,9 @@ struct vtun_host {
 //
 // -= these are not tunable... =-
 //
+
+// absolutly minimal weight
+#define MIN_WEIGHT 100000000
 
 // asserts of frame seq_num difference 
 #define STRANGE_SEQ_FUTURE 1000 // unsigned long int frames

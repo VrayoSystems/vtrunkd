@@ -7,3 +7,4 @@ cfg_file.lex.*
 vtrunkd
 debug/
 release/
+autom4te.cache/

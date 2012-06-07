@@ -75,6 +75,7 @@
 #include "linkfd.h"
 #include "lib.h"
 #include "driver.h"
+#include "weight_calculation.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -99,7 +100,7 @@ int sem_semid;
 
 int my_conn_num = 0;
 char rxmt_mode_request = 0; // flag
-long int weight = 0;
+long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
 int acnt = 0; // assert variable
 short int chan_amt = 0; // ns pollution
@@ -708,7 +709,6 @@ int lfd_linker(void)
     
     unsigned short tmp_s;
     unsigned long tmp_l;
-    long tmp_cal;
 
 #ifdef NOSEM
     int rd_sem = FD_SEM;
@@ -777,8 +777,6 @@ int lfd_linker(void)
     int mypid = getpid(); // watchdog; really unnessesary
     int sender_pid; // tmp var for resend detect my own pid
     unsigned long last_last_written_seq[MAX_TCP_CONN_AMOUNT]; // for LWS notification TODO: move this to write_buf!
-
-    long int min_weight; // weight processing
 
     // ping stats
     int rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
@@ -1011,53 +1009,13 @@ int lfd_linker(void)
 #else
                 sem_wait_tw(write_buf_sem);
 #endif
-				// bigger weight more to wait(weight == penalty)
+
 				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
-//					if (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP) {
-					if ((mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_DIV) && (mean_delay > lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP)) { // increase reverse weight..
-						if ((mean_delay / lfd_host->WEIGHT_SAW_STEP_UP_DIV) < lfd_host->MAX_WEIGHT_NORM) { // ignore noize peaks...
-							shm_conn_info->stats[my_conn_num].weight += (mean_delay / lfd_host->WEIGHT_SAW_STEP_UP_DIV);
-						} else {
-							shm_conn_info->stats[my_conn_num].weight += mean_delay; // to have a direct close-up
-						}
-					} else {
-						shm_conn_info->stats[my_conn_num].weight += lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP;
-					}
-//					} else {
-//						shm_conn_info->stats[my_conn_num].weight += lfd_host->WEIGHT_SAW_STEP_UP_MIN_STEP;
-//					}
+					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_conn_num);
 				}
-                
-                min_weight = 100000000;
-                for(j=0; j<MAX_AG_CONN; j++) {
-                    if( (shm_conn_info->stats[j].pid !=0 ) &&
-                            (shm_conn_info->stats[j].weight < min_weight) &&
-                            ( (cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD+2) ) {
-                              min_weight = shm_conn_info->stats[j].weight;
-                    } 
-                }
-                
-                if(min_weight == 100000000) min_weight = shm_conn_info->stats[my_conn_num].weight;
+				// weight landing
+				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_conn_num);
 
-				for (j = 0; j < MAX_AG_CONN; j++) {
-					if ((shm_conn_info->stats[j].pid != 0) &&
-							((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2)) {
-						if (shm_conn_info->stats[j].weight == min_weight)
-							shm_conn_info->stats[j].weight = 0;
-						else {
-							/*
-							 * Here lies the "direct close-up problem": for DN DIV the DIV value is usually
-							 * smaller than for UP; so the impact on DN of close-up is much lower since
-							 * it will still smoothen step-downs while wtep-ups will come unsmoothed
-							 * at this threshold
-							 */
-							shm_conn_info->stats[j].weight -= min_weight / lfd_host->WEIGHT_SAW_STEP_DN_DIV;
-						}
-					}
-				}
-
-
-                weight = shm_conn_info->stats[my_conn_num].weight;
 #ifdef NOSEM
                 sem_post2(write_buf_sem);
 #else
@@ -1089,7 +1047,7 @@ int lfd_linker(void)
           timersub(&cur_time, &last_timing, &tv_tmp);
 
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
-               
+
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
@@ -1125,7 +1083,7 @@ int lfd_linker(void)
                       }
        
                }
-       
+               // TODO:!!!!!!!!!!!!!!!!!!! move last_rxmit_drop to shm
                if(cur_time.tv_sec - last_rxmit_drop >= lfd_host->RXMIT_CNT_DROP_PERIOD) {
                    mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
                    last_rxmit_drop = cur_time.tv_sec;
@@ -1137,40 +1095,13 @@ int lfd_linker(void)
        #endif
        
                    if( (shm_conn_info->stats[my_conn_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
-                         if(lfd_host->WEIGHT_START_STICKINESS > 0) {
-                              tmp_cal = (lfd_host->WEIGHT_START_STICKINESS * (lfd_host->START_WEIGHT - shm_conn_info->stats[my_conn_num].weight)) / lfd_host->WEIGHT_SCALE;
-                              if(tmp_cal !=0)
-                                   shm_conn_info->stats[my_conn_num].weight += tmp_cal;
-                              else
-                                   shm_conn_info->stats[my_conn_num].weight = lfd_host->START_WEIGHT;
-                         }
-                         if(lfd_host->WEIGHT_SMOOTH_DIV > 0) {
-                              tmp_cal = (lfd_host->WEIGHT_SMOOTH_DIV * (shm_conn_info->stats[my_conn_num].weight)) / lfd_host->WEIGHT_SCALE;
-                              if(tmp_cal != 0)
-                                   shm_conn_info->stats[my_conn_num].weight -= tmp_cal;
-                              else
-                                   shm_conn_info->stats[my_conn_num].weight = 0;
-                         }
+                	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_start(shm_conn_info->stats[my_conn_num].weight, lfd_host);
+                	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_conn_num].weight, lfd_host);
                    }
        
-                   // now do weight "landing"
-                   // actually try to fix weights for suddenly closed connections...
-                   min_weight = 100000000;
-                   for(j=0; j<MAX_AG_CONN; j++) {
-                       // WARNING! may be problems here if MIN belongs to a dead process! TODO some watchdog
-                       if( (shm_conn_info->stats[j].pid !=0 ) &&
-                               (shm_conn_info->stats[j].weight < min_weight) &&
-                               ( (cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD+2) )
-                           min_weight = shm_conn_info->stats[j].weight;
-                   }
-                   if(min_weight == 100000000) min_weight = shm_conn_info->stats[my_conn_num].weight;
-                   for(j=0; j<MAX_AG_CONN; j++) {
-                       if( (shm_conn_info->stats[j].pid !=0 ) &&
-                               ( (cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD+2) )
-                           shm_conn_info->stats[j].weight -= min_weight;
-                   }
-       
-                   weight = shm_conn_info->stats[my_conn_num].weight;
+                // now do weight "landing"
+				// actually try to fix weights for suddenly closed connections...
+				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_conn_num);
        
        #ifdef NOSEM
                    sem_post2(write_buf_sem);
