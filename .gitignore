@@ -1,4 +1,4 @@
-Makefile
+./Makefile
 cfg_file.tab.*
 cfg_file.lex.*
 *.o
