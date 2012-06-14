@@ -1014,7 +1014,7 @@ int lfd_linker(void)
 					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_conn_num);
 				}
 				// weight landing
-				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_conn_num);
+				//weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_conn_num);
 
 #ifdef NOSEM
                 sem_post2(write_buf_sem);
@@ -1094,14 +1094,15 @@ int lfd_linker(void)
                    sem_wait_tw(write_buf_sem);
        #endif
        
-                   if( (shm_conn_info->stats[my_conn_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
+                   //if( (shm_conn_info->stats[my_conn_num].weight > 0) && 
+		if (channel_mode == MODE_NORMAL)  {
                 	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_start(shm_conn_info->stats[my_conn_num].weight, lfd_host);
                 	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_conn_num].weight, lfd_host);
                    }
        
                 // now do weight "landing"
 				// actually try to fix weights for suddenly closed connections...
-				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_conn_num);
+				//weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_conn_num);
        
        #ifdef NOSEM
                    sem_post2(write_buf_sem);

@@ -99,15 +99,16 @@ install_config:
 	if [ ! -f $(ETC_DIR)/vtrunkd-cli.test.conf ]; then \
 	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/vtrunkd-cli.test.conf $(DESTDIR)$(ETC_DIR); \
 	fi
+install_scripts:
 	if [ ! -f $(prefix)/cli.sh ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/cli.sh $(DESTDIR)$(prefix); \
+	  $(INSTALL) -m 755 $(INSTALL_OWNER) test/cli.sh $(DESTDIR)$(prefix); \
 	fi
 	if [ ! -f $(prefix)/srv.sh ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/srv.sh $(DESTDIR)$(prefix); \
+	  $(INSTALL) -m 755 $(INSTALL_OWNER) test/srv.sh $(DESTDIR)$(prefix); \
 	fi
 
 
-install: vtrunkd install_config install_man
+install: vtrunkd install_config install_man install_scripts
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(VAR_DIR)/run
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(STAT_DIR)
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(LOCK_DIR)

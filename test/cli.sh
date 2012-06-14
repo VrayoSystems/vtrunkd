@@ -1,6 +1,4 @@
 #!/bin/bash
-cd /home/andrew
-vtrunkd -f ./vtrunkd-cli.test.conf atest3 172.16.1.1 -P 5003
-vtrunkd -f ./vtrunkd-cli.test.conf atest1 172.16.2.1 -P 5003
-vtrunkd -f ./vtrunkd-cli.test.conf atest2 172.16.3.1 -P 5003
-
+vtrunkd -f /etc/vtrunkd-cli.test.conf atest1 192.168.57.101 -P 5003
+vtrunkd -f /etc/vtrunkd-cli.test.conf atest2 192.168.58.101 -P 5003
+vtrunkd -f /etc/vtrunkd-cli.test.conf atest3 192.168.59.101 -P 5003
