@@ -81,13 +81,11 @@ long int inline weight_landing_sub(struct conn_info *shm_conn_info, struct vtun_
  * @return - recalculation weight
  */
 long int inline weight_trend_to_start(long int weight, struct vtun_host *lfd_host) {
-	long tmp_cal;
 	if (lfd_host->WEIGHT_START_STICKINESS > 0) {
-		tmp_cal = (lfd_host->WEIGHT_START_STICKINESS * (lfd_host->START_WEIGHT - weight)) / lfd_host->WEIGHT_SCALE;
-		if (tmp_cal != 0)
-			weight += tmp_cal;
-		else
-			weight = lfd_host->START_WEIGHT;
+		weight = ((weight - lfd_host->START_WEIGHT) / lfd_host->WEIGHT_START_STICKINESS) + lfd_host->START_WEIGHT;
+		if (weight < 0) {
+			weight = 0;
+		}
 	}
 	return weight;
 }
@@ -98,13 +96,11 @@ long int inline weight_trend_to_start(long int weight, struct vtun_host *lfd_hos
  * @return - recalculation weight
  */
 long int inline weight_trend_to_zero(long int weight, struct vtun_host *lfd_host) {
-	long tmp_cal;
 	if (lfd_host->WEIGHT_SMOOTH_DIV > 0) {
-		tmp_cal = (lfd_host->WEIGHT_SMOOTH_DIV * weight) / lfd_host->WEIGHT_SCALE;
-		if (tmp_cal != 0)
-			weight -= tmp_cal;
-		else
+		weight = weight / lfd_host->WEIGHT_SMOOTH_DIV;
+		if (weight < 0) {
 			weight = 0;
+		}
 	}
 	return weight;
 }
