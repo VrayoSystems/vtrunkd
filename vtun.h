@@ -257,6 +257,7 @@ struct vtun_host {
 #define FRAME_JUST_STARTED 2
 #define FRAME_PRIO_PORT_NOTIFY 3
 #define FRAME_LAST_WRITTEN_SEQ 4
+#define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
 
 #define HAVE_MSGHDR_MSG_CONTROL
 

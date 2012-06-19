@@ -205,7 +205,10 @@ static void sig_usr2(int sig)
      }
      statb.rxm_ntf++;
 }*/
-
+/**
+ * колличество отставших пакетов
+ * buf[] - номера пакетов
+ */
 int missing_resend_buffer (int chan_num, unsigned long buf[], int *buf_len) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     unsigned long isq,nsq, k;
@@ -371,19 +374,31 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
     shm_conn_info->resend_frames_buf[newf].chan_num = conn_num;
 
 
-    memcpy( (shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV), buf, len);
-    seq_num = htonl(seq_num);
-    memcpy( (shm_conn_info->resend_frames_buf[newf].out+LINKFD_FRAME_RESERV+len), (char *)(&seq_num), sizeof(unsigned long));
-    *((unsigned short *)(shm_conn_info->resend_frames_buf[newf].out+LINKFD_FRAME_RESERV+len+sizeof(unsigned long))) = htons(flag);
-    *out = shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV;
-    shm_conn_info->resend_frames_buf[newf].len = len+sizeof(unsigned long)+sizeof(unsigned short);
+    memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV), buf, len);
+	seq_num = htonl(seq_num);
+	memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV + len), (char *) (&seq_num), sizeof(unsigned long));
+	*((unsigned short *) (shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV + len + sizeof(unsigned long))) = htons(flag);
+	*out = shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV;
+	shm_conn_info->resend_frames_buf[newf].len = len + sizeof(unsigned long) + sizeof(unsigned short);
 
-    return shm_conn_info->resend_frames_buf[newf].len;
+	return shm_conn_info->resend_frames_buf[newf].len;
 }
 
-
-
-
+/**
+ * Return new info packet in network format
+ *
+ *  @param
+ *  @param
+ *  @param
+ *  @return
+ *
+ *  TODO: Issue #12
+ */
+void* get_info_frame(unsigned long payload, unsigned short flag, void *buf) {
+	*((unsigned long *) buf) = htonl(payload);
+	*((unsigned short *) (buf + sizeof(unsigned long))) = htons(flag);
+	return buf;
+}
 
 inline int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
     char *ptr;
@@ -644,7 +659,9 @@ inline void sem_post_if(int *dev_my, sem_t *rd_sem) {
     *dev_my = 0;
 }
 #endif
-
+/**
+ * не отправлен ли потерянный пакет уже на перезапрос
+ */
 inline int check_sent (unsigned long seq_num, struct resent_chk sq_rq_buf[], int *sq_rq_pos, int chan_num) {
     int i;
     for(i=(RESENT_MEM-1); i>=0; i--) {
@@ -694,7 +711,8 @@ int lfd_linker(void)
     register int len, fl;
     int err=0;
     struct timeval tv;
-    char *buf, *out, *out2;
+    char *out, *out2;
+    void *buf; // in common for info packet
     unsigned long int seq_num;
     int buf_len;
     fd_set fdset;
@@ -1466,9 +1484,11 @@ int lfd_linker(void)
 #endif
                             if( ntohl(*((unsigned long *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((unsigned long *)buf));
                             continue;
-                        } else {
-                            vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int)flag_var);
-                        }
+						} else if (flag_var == FRAME_TIME_LAG) {
+							//TODO: Issue #11 get time_lag from net here
+						} else
+							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int) flag_var);
+					}
 
 //vtun_syslog(LOG_INFO, "sem_wait_tw 4");
 #ifdef NOSEM
@@ -1656,7 +1676,9 @@ int lfd_linker(void)
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num ,shm_conn_info->write_buf[chan_num_virt].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders, weight, shm_conn_info->frames_buf[fprev].len, chan_num_virt);
 #endif
-
+                            //TODO: time_lag = old last written time - new written time
+                            // and send time_lag to another side
+                            //github.com - Issue #11
                             shm_conn_info->write_buf[chan_num_virt].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
@@ -1683,6 +1705,7 @@ int lfd_linker(void)
 #else
                         sem_post(write_buf_sem);
 #endif
+                        //TODO: send here time_lag Issue #11
                         *((unsigned long *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
