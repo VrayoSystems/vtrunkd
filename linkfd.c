@@ -48,6 +48,7 @@
 #include <syslog.h>
 #include <time.h>
 #include <semaphore.h>
+#include <stdint.h>
 
 #ifdef SYSVSEM
      #include <sys/types.h>
@@ -98,6 +99,9 @@ struct my_ip {
 int sem_semid;
 #endif
 
+// flags:
+uint8_t time_lag_ready;
+
 int my_conn_num = 0;
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
@@ -139,6 +143,9 @@ struct {
     int bytes_sent_chan[MAX_TCP_CONN_AMOUNT];
     int bytes_rcvd_chan[MAX_TCP_CONN_AMOUNT];
 } statb;
+
+struct time_lag_info time_lag_info_arr[MAX_TCP_CONN_AMOUNT];
+struct time_lag time_lag_local;
 
 inline int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
@@ -841,9 +848,19 @@ int lfd_linker(void)
     if(srv) {
         // now read one single byte
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
-        read_n(fd1, (char *)(&chan_amt), sizeof(short));
-        chan_amt = ntohs(chan_amt);
-        
+
+        //todo #11 add sem_post and sem_wait for shm
+        //get and set pid
+		read_n(fd1, buf, sizeof(int));
+		chan_amt = ntohs(*((unsigned short *) buf));
+		sem_wait(&(shm_conn_info->stats_sem));
+		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((unsigned short *) (buf + sizeof(unsigned short))));
+		time_lag_local.pid_remote = shm_conn_info->stats[my_conn_num].pid_remote;
+		time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
+    	*((unsigned short *) buf) = htons(shm_conn_info->stats[my_conn_num].pid);
+		sem_post(&(shm_conn_info->stats_sem));
+		write_n(fd1, buf, sizeof(short));
+
         vtun_syslog(LOG_INFO,"Will create %d channels", chan_amt);
 
         // try to bind to portnum my_num+smth:
@@ -961,8 +978,20 @@ int lfd_linker(void)
 
     } else {
         chan_amt = lfd_host->TCP_CONN_AMOUNT;
-        tmp_s = htons(chan_amt);
-        write_n(fd1, (char *)&tmp_s, sizeof(short));
+        //todo #11 add sem_post and sem_wait for shm
+        //get and set pid
+    	*((unsigned short *) buf) = htons(chan_amt);
+    	sem_wait(&(shm_conn_info->stats_sem));
+    	*((unsigned short *) (buf + sizeof(unsigned short))) = htons(shm_conn_info->stats[my_conn_num].pid);
+    	time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
+    	sem_post(&(shm_conn_info->stats_sem));
+         write_n(fd1, buf, sizeof(int));
+
+ 		read_n(fd1, buf, sizeof(short));
+ 		sem_wait(&(shm_conn_info->stats_sem));
+ 		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((unsigned short *) buf));
+ 		time_lag_local.pid_remote = time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid_remote;
+ 		sem_post(&(shm_conn_info->stats_sem));
         chan_amt = 1;
     }
 
@@ -1067,6 +1096,44 @@ int lfd_linker(void)
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
+
+            	   //time_lag = old last written time - new written time
+            	   // calculate mean value and send time_lag to another side
+            	   //github.com - Issue #11
+				int time_lag_cnt = 0, time_lag_sum = 0;
+				for (int i = 0; i < MAX_TCP_CONN_AMOUNT; i++) {
+					if (time_lag_info_arr[i].time_lag_cnt != 0) {
+						time_lag_cnt++;
+						time_lag_sum += time_lag_info_arr[i].time_lag_sum / time_lag_info_arr[i].time_lag_cnt;
+
+					}
+				}
+				time_lag_local.time_lag = time_lag_sum / time_lag_cnt;
+				sem_wait(&(shm_conn_info->stats_sem));
+				shm_conn_info->stats[my_conn_num].time_lag_remote = time_lag_local.time_lag;
+				sem_post(&(shm_conn_info->stats_sem));
+
+
+				//todo send time_lag for all process(CONN's)
+				uint32_t time_lag_remote;
+				uint16_t pid_remote;
+				for (int i = 0; i < chan_amt; i++) {
+					sem_wait(&(shm_conn_info->stats_sem));
+					time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
+					pid_remote = shm_conn_info->stats[i].pid_remote;
+					sem_post(&(shm_conn_info->stats_sem));
+
+					*((uint32_t *) buf) = htonl(time_lag_remote);
+					*((unsigned short *) (buf + sizeof(uint32_t))) = htons(FRAME_TIME_LAG);
+					*((uint16_t *) (buf + sizeof(uint32_t) + sizeof(unsigned short))) = htons(pid_remote);
+					if (proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(flag_var) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+						vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit");//?????
+						linker_term = TERM_NONFATAL;//?????
+					}
+				}
+			}
+
+
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
                    vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm,  statb.bytes_rcvd_norm,  statb.bytes_sent_rx,  statb.pkts_dropped, statb.rxmit_req_rx,  statb.rxmits,  statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, chan_amt, std_dev(statb.bytes_sent_chan, chan_amt), std_dev(&statb.bytes_rcvd_chan[1], (chan_amt-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
@@ -1100,7 +1167,7 @@ int lfd_linker(void)
                            }
                       }
        
-               }
+
                // TODO:!!!!!!!!!!!!!!!!!!! move last_rxmit_drop to shm
                if(cur_time.tv_sec - last_rxmit_drop >= lfd_host->RXMIT_CNT_DROP_PERIOD) {
                    mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
@@ -1485,8 +1552,20 @@ int lfd_linker(void)
                             if( ntohl(*((unsigned long *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((unsigned long *)buf));
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
-							//TODO: Issue #11 get time_lag from net here
-						} else
+							// Issue #11 get time_lag from net here
+							time_lag_local.time_lag=ntohl(*((uint32_t *) buf));
+							time_lag_local.pid = ntohs(*((uint16_t *) (buf + sizeof(uint32_t) + sizeof(unsigned short))));
+							sem_wait(&(shm_conn_info->stats_sem));
+							for (int i = 0; i < chan_amt; i++) {
+								if(time_lag_local.pid ==  shm_conn_info->stats[i].pid){
+									shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
+									break;
+								}
+							}
+							time_lag_local.time_lag = shm_conn_info->stats[my_conn_num].time_lag;
+							time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
+							sem_post(&(shm_conn_info->stats_sem));
+						} else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int) flag_var);
 					}
 
@@ -1658,7 +1737,16 @@ int lfd_linker(void)
                     while(fprev > -1) {
                         if( shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1)
                                 || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
-                            if( (len = dev_write(fd2,
+                            //sum here time_lag Issue #11
+						if ((buf_len > 1) && (time_lag_info_arr[chan_num_virt].once_flag)) { //only first packet
+							time_lag_info_arr[chan_num_virt].once_flag = 0;
+							time_lag_info_arr[chan_num_virt].time_lag_sum = (shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec * 1000
+									+ shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec / 1000) - (cur_time.tv_sec * 1000 + cur_time.tv_sec / 1000);
+							time_lag_info_arr[chan_num_virt].time_lag_cnt++;
+
+						}
+
+                        	if( (len = dev_write(fd2,
                                                  shm_conn_info->frames_buf[fprev].out,
                                                  shm_conn_info->frames_buf[fprev].len)) < 0 ) {
                                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
@@ -1676,9 +1764,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num ,shm_conn_info->write_buf[chan_num_virt].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders, weight, shm_conn_info->frames_buf[fprev].len, chan_num_virt);
 #endif
-                            //TODO: time_lag = old last written time - new written time
-                            // and send time_lag to another side
-                            //github.com - Issue #11
+
                             shm_conn_info->write_buf[chan_num_virt].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
@@ -1694,6 +1780,9 @@ int lfd_linker(void)
                         if(assert_cnt(7)) break; // TODO: add #ifdef DEBUGG
 #endif
                     }
+
+				time_lag_info_arr[chan_num_virt].once_flag = 1;
+
                     // send lws(last written sequence number) to remote side
                     if(shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS)) {
 #ifdef DEBUGG
@@ -1705,7 +1794,7 @@ int lfd_linker(void)
 #else
                         sem_post(write_buf_sem);
 #endif
-                        //TODO: send here time_lag Issue #11
+
                         *((unsigned long *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
