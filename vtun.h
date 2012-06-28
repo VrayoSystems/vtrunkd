@@ -31,6 +31,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <stdio.h>
+#include <stdint.h>
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -257,6 +258,7 @@ struct vtun_host {
 #define FRAME_JUST_STARTED 2
 #define FRAME_PRIO_PORT_NOTIFY 3
 #define FRAME_LAST_WRITTEN_SEQ 4
+#define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
@@ -275,11 +277,41 @@ struct _write_buf {
     unsigned long last_lws_notified;
 };
 
+/**
+ * local structure
+ * per channel
+ */
+struct time_lag_info {
+	uint64_t time_lag_sum;
+	uint16_t time_lag_cnt;
+	uint8_t once_flag:1;
+};
+
+/**
+ * local structure
+ * for local pid
+ */
+struct time_lag {
+	uint32_t time_lag_remote; // calculater here
+	uint32_t time_lag; // get from another side
+	int pid_remote; // pid from another side
+	int pid; // our pid
+};
+
+/**
+ * global structure
+ */
 struct conn_stats {
     int pid; /* current pid */
+    int pid_remote; // pid from another side
     long int weight; /* bandwith-delay product */
     long int last_tick; // watch dog timer
+    // time_lag = old last written time - new written time (in millisecond)
+    // and get from another side
+    uint32_t time_lag_remote;// calculated here
+    uint32_t time_lag; // get from another side
 };
+
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
@@ -299,6 +331,7 @@ struct conn_info {
     short lock_pid;	// who has locked shm
     char normal_senders;
     int rxmt_mode_pid; // unused?
+    sem_t stats_sem;
     struct conn_stats stats[MAX_AG_CONN];
     //int broken_cnt;
     long int lock_time;

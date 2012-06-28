@@ -147,7 +147,7 @@ struct {
 struct time_lag_info time_lag_info_arr[MAX_TCP_CONN_AMOUNT];
 struct time_lag time_lag_local;
 
-inline int assert_cnt(int where) {
+int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
         vtun_syslog(LOG_ERR, "ASSERT FAILED! Infinite loop detected at %d. Emergency break.", where);
         return 1;
@@ -333,7 +333,7 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
     return len;
 }
 
-inline int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *flag_var) {
+int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *flag_var) {
     *seq_num = ntohl(*((unsigned long *)(&out[len-sizeof(unsigned long)-sizeof(unsigned short)])));
     *flag_var = ntohs(*((unsigned short *)(&out[len-sizeof(unsigned short)])));
     return len-sizeof(unsigned long)-sizeof(unsigned short);
@@ -407,7 +407,7 @@ void* get_info_frame(unsigned long payload, unsigned short flag, void *buf) {
 	return buf;
 }
 
-inline int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
+int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
     char *ptr;
     int mlen = 0;
 #ifdef DEBUGG
@@ -554,7 +554,7 @@ inline int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num
 
 
 #ifdef NOSEM
-inline int sem_trywait2(int sem) {  // used on;y for RD_SEM
+int sem_trywait2(int sem) {  // used on;y for RD_SEM
     if(shm_conn_info->fdb_sem) {
         (shm_conn_info->fdb_sem)--;
         return 0;
@@ -567,7 +567,7 @@ inline int sem_trywait2(int sem) {  // used on;y for RD_SEM
 // SYSV SEM is intended for embedded systems; the behaviour is 
 // identical to normal POSIX semaphore mode; debug that first!
 
-inline int sem_post2(int semnum)
+int sem_post2(int semnum)
 {
      if(semnum == FD_SEM) {
           if(shm_conn_info->fdb_sem == 0) (shm_conn_info->fdb_sem)++;
@@ -584,7 +584,7 @@ inline int sem_post2(int semnum)
      }
 }
 
-inline int sem_wait2(int semnum) { // used ONLY for WB/RB sems which are same for NOSE version
+int sem_wait2(int semnum) { // used ONLY for WB/RB sems which are same for NOSE version
         struct sembuf   op;
         op.sem_num = 0;
         op.sem_op = -1;
@@ -597,7 +597,7 @@ inline int sem_wait2(int semnum) { // used ONLY for WB/RB sems which are same fo
 #else
 
 
-inline int sem_wait2(int sem) {
+int sem_wait2(int sem) {
     int *semi;
     unsigned long cnt = 0;
     struct timeval tv;
@@ -630,7 +630,7 @@ inline int sem_wait2(int sem) {
 
 
 
-inline int sem_post2(int sem) {
+int sem_post2(int sem) {
     int *semi;
     if(sem) {
         // buf_sem
@@ -648,7 +648,7 @@ inline int sem_post2(int sem) {
 #endif
 
 #ifdef NOSEM
-inline void sem_post_if(int *dev_my, int rd_sem) {
+void sem_post_if(int *dev_my, int rd_sem) {
     if(*dev_my) sem_post2(rd_sem);
     else {
         // it is actually normal to try to post sem in idle-beg and in net-end blocks
@@ -657,7 +657,7 @@ inline void sem_post_if(int *dev_my, int rd_sem) {
     *dev_my = 0;
 }
 #else
-inline void sem_post_if(int *dev_my, sem_t *rd_sem) {
+void sem_post_if(int *dev_my, sem_t *rd_sem) {
     if(*dev_my) sem_post(rd_sem);
     else {
         // it is actually normal to try to post sem in idle-beg and in net-end blocks
@@ -669,7 +669,7 @@ inline void sem_post_if(int *dev_my, sem_t *rd_sem) {
 /**
  * не отправлен ли потерянный пакет уже на перезапрос
  */
-inline int check_sent (unsigned long seq_num, struct resent_chk sq_rq_buf[], int *sq_rq_pos, int chan_num) {
+int check_sent (unsigned long seq_num, struct resent_chk sq_rq_buf[], int *sq_rq_pos, int chan_num) {
     int i;
     for(i=(RESENT_MEM-1); i>=0; i--) {
         if( (sq_rq_buf[i].seq_num == seq_num) && (sq_rq_buf[i].chan_num == chan_num)) {
