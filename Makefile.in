@@ -119,8 +119,7 @@ install: vtrunkd install_config install_man install_scripts
 remove: remove_config remove_start_bin remove_docs
 
 remove_config:
-	rm -f $(DESTDIR)$(ETC_DIR)/
-vtrunkd*
+	rm -f $(DESTDIR)$(ETC_DIR)/vtrunkd*
 remove_start_bin:
 	rm -f $(DESTDIR)$(prefix)/srv.sh
 	rm -f $(DESTDIR)$(prefix)/cli.sh
