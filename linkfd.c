@@ -852,7 +852,7 @@ int lfd_linker(void)
         //todo #11 add sem_post and sem_wait for shm
         //get and set pid
 		read_n(fd1, buf, sizeof(uint16_t)+sizeof(uint16_t));
-		chan_amt = ntohs(*((unsigned short *) buf));
+		chan_amt = ntohs(*((uint16_t *) buf));
 		sem_wait(&(shm_conn_info->stats_sem));
 		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((uint16_t *) (buf + sizeof(uint16_t))));
 		time_lag_local.pid_remote = shm_conn_info->stats[my_conn_num].pid_remote;
@@ -860,7 +860,9 @@ int lfd_linker(void)
     	*((uint16_t *) buf) = htons(shm_conn_info->stats[my_conn_num].pid);
 		sem_post(&(shm_conn_info->stats_sem));
 		write_n(fd1, buf, sizeof(uint16_t));
-
+#ifdef DEBUGG
+ 		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
+#endif
         vtun_syslog(LOG_INFO,"Will create %d channels", chan_amt);
 
         // try to bind to portnum my_num+smth:
@@ -989,9 +991,12 @@ int lfd_linker(void)
 
  		read_n(fd1, buf, sizeof(uint16_t));
  		sem_wait(&(shm_conn_info->stats_sem));
- 		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((unsigned short *) buf));
+ 		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
+#ifdef DEBUGG
+ 		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
+#endif
         chan_amt = 1;
     }
 

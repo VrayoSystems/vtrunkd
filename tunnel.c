@@ -577,6 +577,7 @@ int tunnel(struct vtun_host *host, int srv)
                     sem_init(&shm_conn_info[connid].fd_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].write_buf_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].resend_buf_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].stats_sem, 1, 1);
 #endif               
                     for(i=0; i<MAX_TCP_CONN_AMOUNT;i++) {
                          shm_conn_info[connid].seq_counter[i] = SEQ_START_VAL; // start with 10!! 0-9 are reserved as flags
