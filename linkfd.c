@@ -992,7 +992,7 @@ int lfd_linker(void)
  		read_n(fd1, buf, sizeof(uint16_t));
  		sem_wait(&(shm_conn_info->stats_sem));
  		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((uint16_t *) buf));
- 		time_lag_local.pid_remote = time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid_remote;
+ 		time_lag_local.pid_remote = shm_conn_info->stats[my_conn_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
 #ifdef DEBUGG
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
@@ -1110,10 +1110,11 @@ int lfd_linker(void)
 					if (time_lag_info_arr[i].time_lag_cnt != 0) {
 						time_lag_cnt++;
 						time_lag_sum += time_lag_info_arr[i].time_lag_sum / time_lag_info_arr[i].time_lag_cnt;
-
+						time_lag_info_arr[i].time_lag_sum = 0;
+						time_lag_info_arr[i].time_lag_cnt = 0;
 					}
 				}
-				time_lag_local.time_lag = time_lag_sum / time_lag_cnt;
+				time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
 				sem_wait(&(shm_conn_info->stats_sem));
 				shm_conn_info->stats[my_conn_num].time_lag_remote = time_lag_local.time_lag;
 				sem_post(&(shm_conn_info->stats_sem));
