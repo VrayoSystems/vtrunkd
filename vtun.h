@@ -337,10 +337,6 @@ struct conn_info {
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
-#ifdef NOSEM
-    int fdb_sem;
-    int buf_sem;
-#endif
 };
 
 struct resent_chk {

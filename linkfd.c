@@ -50,12 +50,6 @@
 #include <semaphore.h>
 #include <stdint.h>
 
-#ifdef SYSVSEM
-     #include <sys/types.h>
-     #include <sys/ipc.h>
-     #include <sys/sem.h>
-#endif
-
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
 #endif
@@ -94,10 +88,6 @@ struct my_ip {
     u_int16_t	ip_sum;		/* checksum */
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
-
-#ifdef SYSVSEM
-int sem_semid;
-#endif
 
 // flags:
 uint8_t time_lag_ready;
@@ -551,112 +541,6 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
     return mlen;
 }
 
-
-
-#ifdef NOSEM
-int sem_trywait2(int sem) {  // used on;y for RD_SEM
-    if(shm_conn_info->fdb_sem) {
-        (shm_conn_info->fdb_sem)--;
-        return 0;
-    }
-    return -1;
-}
-#ifdef SYSVSEM
-
-// WARNING! no checks; relying on properly-programmed software
-// SYSV SEM is intended for embedded systems; the behaviour is 
-// identical to normal POSIX semaphore mode; debug that first!
-
-int sem_post2(int semnum)
-{
-     if(semnum == FD_SEM) {
-          if(shm_conn_info->fdb_sem == 0) (shm_conn_info->fdb_sem)++;
-          else vtun_syslog(LOG_ERR, "ASSERT FAILED! Tried to post more than once!: %d" , semnum);
-          return 0;
-     } else {
-          struct sembuf   op;
-          op.sem_num = 0;
-          op.sem_op = 1;
-          op.sem_flg = 0;
-          if (semop(sem_semid, &op, 1) < 0)
-             return(-1);
-          return(0);
-     }
-}
-
-int sem_wait2(int semnum) { // used ONLY for WB/RB sems which are same for NOSE version
-        struct sembuf   op;
-        op.sem_num = 0;
-        op.sem_op = -1;
-        op.sem_flg = 0;
-        if (semop(sem_semid, &op, 1) < 0)
-                return(-1);
-        return(0);
-}
-
-#else
-
-
-int sem_wait2(int sem) {
-    int *semi;
-    unsigned long cnt = 0;
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    long ts = tv.tv_sec;
-    if(sem) {
-        // buf_sem
-        semi = &(shm_conn_info->buf_sem);
-    } else {
-        // fdb_sem
-        semi = &(shm_conn_info->fdb_sem);
-    }
-
-    while((*semi) == 0) {
-        // we can assert here as no one is allowed to lock device write or any memory access for more that 1 sec
-        gettimeofday(&tv, NULL);
-        if(tv.tv_sec > (ts+1)) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! Semaphore lockup detected; fixing");
-            (*semi)++;
-            break;
-        }
-        cnt++;
-    }
-    if(*semi > 0) (*semi)--;
-    else vtun_syslog(LOG_ERR, "ASSERT FAILED! Tried to lock below zero after wait");
-
-    return 0;
-}
-
-
-
-
-int sem_post2(int sem) {
-    int *semi;
-    if(sem) {
-        // buf_sem
-        semi = &(shm_conn_info->buf_sem);
-    } else {
-        // fdb_sem
-        semi = &(shm_conn_info->fdb_sem);
-    }
-    if(*semi == 0) (*semi)++;
-    else vtun_syslog(LOG_ERR, "ASSERT FAILED! Tried to post more than once!: %d" , sem);
-
-    return 0;
-}
-#endif
-#endif
-
-#ifdef NOSEM
-void sem_post_if(int *dev_my, int rd_sem) {
-    if(*dev_my) sem_post2(rd_sem);
-    else {
-        // it is actually normal to try to post sem in idle-beg and in net-end blocks
-        // vtun_syslog(LOG_INFO, "ASSERT FAILED! posting posted rd_sem");
-    }
-    *dev_my = 0;
-}
-#else
 void sem_post_if(int *dev_my, sem_t *rd_sem) {
     if(*dev_my) sem_post(rd_sem);
     else {
@@ -665,7 +549,7 @@ void sem_post_if(int *dev_my, sem_t *rd_sem) {
     }
     *dev_my = 0;
 }
-#endif
+
 /**
  * не отправлен ли потерянный пакет уже на перезапрос
  */
@@ -735,22 +619,9 @@ int lfd_linker(void)
     unsigned short tmp_s;
     unsigned long tmp_l;
 
-#ifdef NOSEM
-    int rd_sem = FD_SEM;
-    int resend_buf_sem = WB_SEM; // okay to use one
-    int write_buf_sem = WB_SEM;
-#ifdef SYSVSEM
-    if(sem_semid = semget(SEM_KEY+atoi(shm_conn_info->devname+3), 1, 0666) == -1) {
-        vtun_syslog(LOG_ERR,"cannot get sem set: %s, %s errno %d", SEM_KEY+atoi(shm_conn_info->devname+3), strerror(errno), errno);
-        return -1;
-    }
- 
-#endif
-#else
     sem_t *rd_sem = &(shm_conn_info->fd_sem);
     sem_t *resend_buf_sem = &(shm_conn_info->resend_buf_sem);
     sem_t *write_buf_sem = &(shm_conn_info->write_buf_sem);
-#endif
 
     struct timeval cur_time; // current time source
     struct timeval send1; // calculate send delay
@@ -1056,11 +927,7 @@ int lfd_linker(void)
 
                 // now do weight "landing"
 
-#ifdef NOSEM
-                sem_wait2(write_buf_sem);
-#else
                 sem_wait_tw(write_buf_sem);
-#endif
 
 				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
 					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_conn_num);
@@ -1068,11 +935,7 @@ int lfd_linker(void)
 				// weight landing
 				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_conn_num);
 
-#ifdef NOSEM
-                sem_post2(write_buf_sem);
-#else
                 sem_post(write_buf_sem);
-#endif
 
 				if (weight >= lfd_host->MAX_WEIGHT_NORM) {
 					if (shm_conn_info->normal_senders > 1) {
@@ -1179,11 +1042,7 @@ int lfd_linker(void)
                    mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
                    last_rxmit_drop = cur_time.tv_sec;
        
-       #ifdef NOSEM
-                   sem_wait2(write_buf_sem);
-       #else
                    sem_wait_tw(write_buf_sem);
-       #endif
        
                    if( (shm_conn_info->stats[my_conn_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
                 	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_start(shm_conn_info->stats[my_conn_num].weight, lfd_host);
@@ -1194,11 +1053,8 @@ int lfd_linker(void)
 				// actually try to fix weights for suddenly closed connections...
 				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_conn_num);
        
-       #ifdef NOSEM
-                   sem_post2(write_buf_sem);
-       #else
                    sem_post(write_buf_sem);
-       #endif
+
                    shm_conn_info->stats[my_conn_num].last_tick = cur_time.tv_sec;
        
        
@@ -1210,17 +1066,13 @@ int lfd_linker(void)
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
                    
                    if( timercmp(&tv_tmp, &max_latency, >=) ) {
-   #ifdef NOSEM
-                       sem_wait2(write_buf_sem);
-   #else
+
                        sem_wait_tw(write_buf_sem);
-   #endif
+
                        incomplete_seq_len = missing_resend_buffer(i, incomplete_seq_buf, &buf_len);
-   #ifdef NOSEM
-                       sem_post2(write_buf_sem);
-   #else
+
                        sem_post(write_buf_sem);
-   #endif
+
                        //vtun_syslog(LOG_INFO, "missing_resend_buf ret %d %d ", incomplete_seq_len, buf_len);
    
                        if(incomplete_seq_len) {
@@ -1297,20 +1149,14 @@ int lfd_linker(void)
         } else {
 
             if(FD_ISSET(fd2, &fdset)) {
-#ifdef NOSEM
-                if(sem_trywait2(rd_sem) < 0)
-#else
-                if(sem_trywait(rd_sem) < 0)
-#endif
-                {
+
+                if(sem_trywait(rd_sem) < 0) {
                     dev_my = 0;
                     if( (cur_time.tv_sec - shm_conn_info->lock_time) > 10) { // 1s more just to be sure...
                         vtun_syslog(LOG_ERR, "ASSERT FAILED: RD_SEM lock freeze detected! Fixing.");
-#ifdef NOSEM
-                        sem_post2(rd_sem);
-#else
+
                         sem_post(rd_sem);
-#endif
+
                     }
                 } else {
                     shm_conn_info->lock_pid = mypid;
@@ -1345,11 +1191,9 @@ int lfd_linker(void)
                     if( kill(shm_conn_info->lock_pid, 0) < 0 ) {
                         vtun_syslog(LOG_ERR, "ASSERT FAILED! locking PID not running! FIXED. pid was %d", shm_conn_info->lock_pid);
                         shm_conn_info->lock_pid = mypid;
-#ifdef NOSEM
-                        sem_post2(rd_sem);
-#else
+
                         sem_post(rd_sem);
-#endif
+
                     }
                     // another assert ->
                     if(shm_conn_info->normal_senders < 1) {
@@ -1577,18 +1421,14 @@ int lfd_linker(void)
 					}
 
 //vtun_syslog(LOG_INFO, "sem_wait_tw 4");
-#ifdef NOSEM
-                        sem_wait2(resend_buf_sem);
-#else
+
                         sem_wait_tw(resend_buf_sem);
-#endif
+
 //vtun_syslog(LOG_INFO, "sem_wait_tw 4 fin");
                         len=get_resend_frame(chan_num, ntohl(*((unsigned long *)buf)), &out2, &sender_pid);
-#ifdef NOSEM
-                        sem_post2(resend_buf_sem);
-#else
+
                         sem_post(resend_buf_sem);
-#endif
+
 
 
                         if(len <= 0) {
@@ -1694,11 +1534,9 @@ int lfd_linker(void)
                          rxmt_mode_request = 1; // follow pessimistic...
                     }
                     */
-#ifdef NOSEM
-                    sem_wait2(write_buf_sem);
-#else
+
                     sem_wait_tw(write_buf_sem);
-#endif
+
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
 
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
@@ -1796,11 +1634,9 @@ int lfd_linker(void)
                         vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %lu chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
 #endif
                         sem_post_if(&dev_my, rd_sem);
-#ifdef NOSEM
-                        sem_post2(write_buf_sem);
-#else
+
                         sem_post(write_buf_sem);
-#endif
+
 
                         *((unsigned long *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
@@ -1818,11 +1654,9 @@ int lfd_linker(void)
                         //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
                     	sem_post_if(&dev_my, rd_sem); // we will do nothing more this time..??
                         incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
-#ifdef NOSEM
-                        sem_post2(write_buf_sem);
-#else
+
                         sem_post(write_buf_sem);
-#endif
+
                         if(incomplete_seq_len) {
                             for(imf=0; imf < incomplete_seq_len; imf++) {
                             	// TODO: use free channel to send packets that are late to fight the congestion
@@ -1852,11 +1686,9 @@ int lfd_linker(void)
                     }
 
                     lfd_host->stat.byte_in += len; // the counter became completely wrong
-#ifdef NOSEM
-                    sem_post2(write_buf_sem);
-#else
+
                     sem_post(write_buf_sem);
-#endif
+
                     if( (flag_var == FRAME_MODE_RXMIT) &&
                             ((succ_flag == 0) || ( (seq_num-shm_conn_info->write_buf[chan_num_virt].last_written_seq) < lfd_host->MAX_REORDER ))) {
                         sem_post_if(&dev_my, rd_sem); // starting blocking send ...
@@ -1916,18 +1748,13 @@ int lfd_linker(void)
                 weight_cnt = weight / lfd_host->WEIGHT_SCALE;
 
                 sem_post_if(&dev_my, rd_sem); // we're not reading anything from device (and assert dev_my == 0!)
-#ifdef NOSEM
-                sem_wait2(write_buf_sem);
-#else
+
                 sem_wait_tw(write_buf_sem);
-#endif
+
                 incomplete_seq_len = missing_resend_buffer(0, incomplete_seq_buf, &buf_len); // TODO 0
                 chan_num = 0; // TODO 0
-#ifdef NOSEM
-                sem_post2(write_buf_sem);
-#else
+
                 sem_post(write_buf_sem);
-#endif
 
                 if(incomplete_seq_len) {
                     // do the same as above, but resend from back! [just a hack!]
@@ -2027,19 +1854,12 @@ int lfd_linker(void)
                 }
                 chan_num = (hash % ((int)chan_amt-1)) + 1; // send thru 1-n channel
 
-
-#ifdef NOSEM
-                sem_wait2(resend_buf_sem);
-#else
                 sem_wait_tw(resend_buf_sem);
-#endif
+
                 (shm_conn_info->seq_counter[chan_num])++;
                 len = seqn_add_tail(chan_num, buf, &out2, len, shm_conn_info->seq_counter[chan_num], channel_mode, mypid);
-#ifdef NOSEM
-                sem_post2(resend_buf_sem);
-#else
+
                 sem_post(resend_buf_sem);
-#endif
 
                 statb.bytes_sent_norm+=len;
                 sem_post_if(&dev_my, rd_sem); // finished, now blocking send...
@@ -2100,11 +1920,9 @@ int lfd_linker(void)
     if(dev_my) {
         // ASSERT!! we have not removet lock
         vtun_syslog(LOG_INFO, "ASSERT FAILED! we've not removed lock!. FIXED.");
-#ifdef NOSEM
-        sem_post2(rd_sem);
-#else
+
         sem_post(rd_sem);
-#endif
+
     }
 
     vtun_syslog(LOG_INFO, "exiting linker loop");
