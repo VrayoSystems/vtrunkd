@@ -1571,6 +1571,7 @@ int lfd_linker(void)
 							time_lag_local.time_lag = shm_conn_info->stats[my_conn_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
+							continue;
 						} else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int) flag_var);
 					}
