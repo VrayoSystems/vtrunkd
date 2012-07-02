@@ -59,11 +59,7 @@
 #include <net/if.h>
 
 #include <semaphore.h>
-#ifdef SYSVSEM
-     #include <sys/types.h>
-     #include <sys/ipc.h>
-     #include <sys/sem.h>
-#endif
+
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -349,10 +345,6 @@ int tunnel(struct vtun_host *host, int srv)
      int connid = -1;
      struct conn_info *shm_conn_info;
      int my_conn_num = -1;
-#ifdef SYSVSEM
-     struct sembuf sbuf;
-     int sem_set;
-#endif
      int s, s2, t, len;
      
      char str[100];
@@ -547,38 +539,12 @@ int tunnel(struct vtun_host *host, int srv)
                     
                     // init all semaphores, etc...
                     vtun_syslog(LOG_INFO, "init vars sem %s", shm_conn_info[connid].devname);
-#ifdef NOSEM
-                    shm_conn_info[connid].fdb_sem = 1;
-                    shm_conn_info[connid].buf_sem = 1;
-#ifdef SYSVSEM
-                     if(sem_set = semget(SEM_KEY+atoi(dev+3), 1, IPC_CREAT | 0666) == -1) {
-                         vtun_syslog(LOG_ERR,"cannot create sem set: %d, %s errno %d", SEM_KEY+atoi(dev+3), strerror(errno), errno);
-                         return -1;
-                    }
-                    
-                    // now init
-		    // TODO: we are doing semaphore init in a linux-specific way
-		    //  for other systems the semaphore should be first initialized to 0
-                    vtun_syslog(LOG_INFO, "going to init SYSV semaphore ...");
-                    sbuf.sem_num = 0;
-                    sbuf.sem_op = 1;
-                    sbuf.sem_flg = 0;
-                    
-                    if (semop(sem_set, &sbuf, 1) == -1) {
-                         vtun_syslog(LOG_ERR,"cannot semop0 sem set: %d, %s errno %d", SEM_KEY+atoi(dev+3), strerror(errno), errno);
-                         return -1;
-                    }
-                    
-                    
-                    vtun_syslog(LOG_INFO, "... init success");
-                   
-#endif
-#else
+
                     sem_init(&shm_conn_info[connid].fd_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].write_buf_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].resend_buf_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].stats_sem, 1, 1);
-#endif               
+
                     for(i=0; i<MAX_TCP_CONN_AMOUNT;i++) {
                          shm_conn_info[connid].seq_counter[i] = SEQ_START_VAL; // start with 10!! 0-9 are reserved as flags
                          shm_conn_info[connid].write_buf[i].last_written_seq = SEQ_START_VAL;
