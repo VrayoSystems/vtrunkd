@@ -71,6 +71,7 @@
 #include "lib.h"
 #include "driver.h"
 #include "weight_calculation.h"
+#include "net_structs.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -992,10 +993,10 @@ int lfd_linker(void)
 					pid_remote = shm_conn_info->stats[i].pid_remote;
 					sem_post(&(shm_conn_info->stats_sem));
 
-					*((uint32_t *) buf) = htonl(time_lag_remote);
-					*((unsigned short *) (buf + sizeof(uint32_t))) = htons(FRAME_TIME_LAG);
-					*((uint16_t *) (buf + sizeof(uint32_t) + sizeof(unsigned short))) = htons(pid_remote);
-					if (proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(flag_var) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+					((struct time_lag_packet *) buf)->time_lag = htonl(time_lag_remote);
+					((struct time_lag_packet *) buf)->flag = htons(FRAME_TIME_LAG);
+					((struct time_lag_packet *) buf)->pid = htons(pid_remote);
+					if (proto_write(channels[0], buf, (sizeof(struct time_lag_packet) | VTUN_BAD_FRAME)) < 0) {
 						vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit");//?????
 						linker_term = TERM_NONFATAL;//?????
 					}
@@ -1403,8 +1404,9 @@ int lfd_linker(void)
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
 							// Issue #11 get time_lag from net here
-							time_lag_local.time_lag=ntohl(*((uint32_t *) buf));
-							time_lag_local.pid = ntohs(*((uint16_t *) (buf + sizeof(uint32_t) + sizeof(unsigned short))));
+							// get pid and time_lag
+							time_lag_local.time_lag=ntohl(((struct time_lag_packet *) buf)->time_lag);
+							time_lag_local.pid = ntohs(((struct time_lag_packet *) buf)->pid);
 							sem_wait(&(shm_conn_info->stats_sem));
 							for (int i = 0; i < chan_amt; i++) {
 								if(time_lag_local.pid ==  shm_conn_info->stats[i].pid){
@@ -1412,6 +1414,7 @@ int lfd_linker(void)
 									break;
 								}
 							}
+							//recover time_lag_local structure
 							time_lag_local.time_lag = shm_conn_info->stats[my_conn_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
