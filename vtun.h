@@ -310,6 +310,7 @@ struct conn_stats {
     // and get from another side
     uint32_t time_lag_remote;// calculated here
     uint32_t time_lag; // get from another side
+    uint32_t current_speed; // current physical channel's speed
 };
 
 
@@ -337,6 +338,8 @@ struct conn_info {
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
+    uint16_t AG_ready_flags; // contain flags for all physical channels 1 - retransmit mode, 0 - ready to aggregation
+    uint16_t channels_mask; // 1 - channel is working 0 - channel is dead
 };
 
 struct resent_chk {
