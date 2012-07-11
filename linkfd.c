@@ -131,11 +131,11 @@ struct {
     int rxm_ntf;
     int chok_not;
     int max_latency_drops; // new
-    int bytes_sent_chan[MAX_TCP_CONN_AMOUNT];
-    int bytes_rcvd_chan[MAX_TCP_CONN_AMOUNT];
+    int bytes_sent_chan[MAX_TCP_LOGICAL_CHANNELS];
+    int bytes_rcvd_chan[MAX_TCP_LOGICAL_CHANNELS];
 } statb;
 
-struct time_lag_info time_lag_info_arr[MAX_TCP_CONN_AMOUNT];
+struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 
 int assert_cnt(int where) {
@@ -673,7 +673,7 @@ int lfd_linker(void)
 
     int mypid = getpid(); // watchdog; really unnessesary
     int sender_pid; // tmp var for resend detect my own pid
-    unsigned long last_last_written_seq[MAX_TCP_CONN_AMOUNT]; // for LWS notification TODO: move this to write_buf!
+    unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
     int rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
@@ -698,7 +698,7 @@ int lfd_linker(void)
     unsigned int hash;
     int chan_num = 0, chan_num_virt = 0;
     chan_amt = 1; // def above
-    int channels[MAX_TCP_CONN_AMOUNT];
+    int channels[MAX_TCP_LOGICAL_CHANNELS];
     channels[0] = fd1;
     int i, j, fd0;
     int break_out = 0;
@@ -708,7 +708,7 @@ int lfd_linker(void)
         return 0;
     }
 
-    memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_CONN_AMOUNT);
+    memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
     maxfd = (fd1 > fd2 ? fd1 : fd2) + 1;
@@ -786,7 +786,7 @@ int lfd_linker(void)
 
         vtun_syslog(LOG_INFO,"Entering loop to create %d channels", chan_amt);
         // TODO: how many TCP CONN AMOUNT allowed for server??
-        for(i=1; (i<=chan_amt) && (i<MAX_TCP_CONN_AMOUNT); i++) {
+        for(i=1; (i<=chan_amt) && (i<MAX_TCP_LOGICAL_CHANNELS); i++) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO,"Chan %d", i);
 #endif
@@ -878,10 +878,10 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO, "normal sender added: now %d", shm_conn_info->normal_senders);
     }
 
-    for(i=0; i<MAX_TCP_CONN_AMOUNT; i++) {
+    for(i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         if(shm_conn_info->seq_counter[i] != SEQ_START_VAL) break;
     }
-    if(i == MAX_TCP_CONN_AMOUNT) {
+    if(i == MAX_TCP_LOGICAL_CHANNELS) {
         *((unsigned long *)buf) = htonl(shm_conn_info->seq_counter[0]);
         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_JUST_STARTED);
         if(proto_write(fd1, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
@@ -970,7 +970,7 @@ int lfd_linker(void)
             	   // calculate mean value and send time_lag to another side
             	   //github.com - Issue #11
 				int time_lag_cnt = 0, time_lag_sum = 0;
-				for (int i = 0; i < MAX_TCP_CONN_AMOUNT; i++) {
+				for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
 					if (time_lag_info_arr[i].time_lag_cnt != 0) {
 						time_lag_cnt++;
 						time_lag_sum += time_lag_info_arr[i].time_lag_sum / time_lag_info_arr[i].time_lag_cnt;

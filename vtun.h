@@ -113,9 +113,9 @@
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #define RESEND_BUF_SIZE 1200 // int
 // maximum compiled-in buffers for tcp channels per link
-#define MAX_TCP_CONN_AMOUNT 100 // int
+#define MAX_TCP_LOGICAL_CHANNELS 100 // int
 // max aggregated VPN-links compiled-in (+ some extras for racing)
-#define MAX_AG_CONN 7
+#define MAX_TCP_PHYSICAL_CHANNELS 7
 // 10 seconds to start accepting tcp channels; otherwise timeout
 #define CHAN_START_ACCEPT_TIMEOUT 10
 
@@ -321,19 +321,19 @@ struct conn_info {
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_CONN_AMOUNT]; // input
+    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem;
-    struct _write_buf resend_buf[MAX_TCP_CONN_AMOUNT]; // output
+    struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
     struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
     sem_t resend_buf_sem;
-    unsigned long seq_counter[MAX_TCP_CONN_AMOUNT];	// packet sequense counter
+    unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
-    struct conn_stats stats[MAX_AG_CONN];
+    struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS];
     //int broken_cnt;
     long int lock_time;
     long int alive;

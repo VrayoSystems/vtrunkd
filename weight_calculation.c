@@ -5,7 +5,7 @@
  *      Author: Kuznetsov Andrey
  */
 #include "weight_calculation.h"
-#include "vtun.h" // for MAX_AG_CONN, MIN_WEIGHT
+#include "vtun.h" // for MAX_TCP_PHYSICAL_CHANNELS, MIN_WEIGHT
 
 /**
  * Weight landing - lfd_host->WEIGHT_SAW_STEP_DN_DIV division subtract method
@@ -18,7 +18,7 @@
  */
 long int inline weight_landing_sub_div(struct conn_info *shm_conn_info, struct vtun_host *lfd_host, struct timeval cur_time, int my_conn_num) {
 	long int min_weight = MIN_WEIGHT;
-	for (int j = 0; j < MAX_AG_CONN; j++) {
+	for (int j = 0; j < MAX_TCP_PHYSICAL_CHANNELS; j++) {
 		if ((shm_conn_info->stats[j].pid != 0) && (shm_conn_info->stats[j].weight < min_weight)
 				&& ((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2)) {
 			min_weight = shm_conn_info->stats[j].weight;
@@ -28,7 +28,7 @@ long int inline weight_landing_sub_div(struct conn_info *shm_conn_info, struct v
 	if (min_weight == MIN_WEIGHT)
 		min_weight = shm_conn_info->stats[my_conn_num].weight;
 
-	for (int j = 0; j < MAX_AG_CONN; j++) {
+	for (int j = 0; j < MAX_TCP_PHYSICAL_CHANNELS; j++) {
 		if ((shm_conn_info->stats[j].pid != 0) && ((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2)) {
 			if (shm_conn_info->stats[j].weight == min_weight)
 				shm_conn_info->stats[j].weight = 0;
@@ -59,7 +59,7 @@ long int inline weight_landing_sub_div(struct conn_info *shm_conn_info, struct v
  */
 long int inline weight_landing_sub(struct conn_info *shm_conn_info, struct vtun_host *lfd_host, struct timeval cur_time, int my_conn_num) {
 	long int min_weight = MIN_WEIGHT;
-	for (int j = 0; j < MAX_AG_CONN; j++) {
+	for (int j = 0; j < MAX_TCP_PHYSICAL_CHANNELS; j++) {
 		// WARNING! may be problems here if MIN belongs to a dead process! TODO some watchdog
 		if ((shm_conn_info->stats[j].pid != 0) && (shm_conn_info->stats[j].weight < min_weight)
 				&& ((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2))
@@ -67,7 +67,7 @@ long int inline weight_landing_sub(struct conn_info *shm_conn_info, struct vtun_
 	}
 	if (min_weight == MIN_WEIGHT)
 		min_weight = shm_conn_info->stats[my_conn_num].weight;
-	for (int j = 0; j < MAX_AG_CONN; j++) {
+	for (int j = 0; j < MAX_TCP_PHYSICAL_CHANNELS; j++) {
 		if ((shm_conn_info->stats[j].pid != 0) && ((cur_time.tv_sec - shm_conn_info->stats[j].last_tick) < lfd_host->RXMIT_CNT_DROP_PERIOD + 2))
 			shm_conn_info->stats[j].weight -= min_weight;
 	}
