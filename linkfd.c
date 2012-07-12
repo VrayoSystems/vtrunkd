@@ -93,7 +93,7 @@ struct my_ip {
 // flags:
 uint8_t time_lag_ready;
 
-int my_conn_num = 0;
+int my_physical_channel_num = 0;
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
@@ -726,10 +726,10 @@ int lfd_linker(void)
 		read_n(fd1, buf, sizeof(uint16_t)+sizeof(uint16_t));
 		chan_amt = ntohs(*((uint16_t *) buf));
 		sem_wait(&(shm_conn_info->stats_sem));
-		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((uint16_t *) (buf + sizeof(uint16_t))));
-		time_lag_local.pid_remote = shm_conn_info->stats[my_conn_num].pid_remote;
-		time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
-    	*((uint16_t *) buf) = htons(shm_conn_info->stats[my_conn_num].pid);
+		shm_conn_info->stats[my_physical_channel_num].pid_remote = ntohs(*((uint16_t *) (buf + sizeof(uint16_t))));
+		time_lag_local.pid_remote = shm_conn_info->stats[my_physical_channel_num].pid_remote;
+		time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
+    	*((uint16_t *) buf) = htons(shm_conn_info->stats[my_physical_channel_num].pid);
 		sem_post(&(shm_conn_info->stats_sem));
 		write_n(fd1, buf, sizeof(uint16_t));
 #ifdef DEBUGG
@@ -856,15 +856,15 @@ int lfd_linker(void)
         //get and set pid
     	*((uint16_t *) buf) = htons(chan_amt);
     	sem_wait(&(shm_conn_info->stats_sem));
-    	*((uint16_t *) (buf + sizeof(uint16_t))) = htons(shm_conn_info->stats[my_conn_num].pid);
-    	time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
+    	*((uint16_t *) (buf + sizeof(uint16_t))) = htons(shm_conn_info->stats[my_physical_channel_num].pid);
+    	time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
     	sem_post(&(shm_conn_info->stats_sem));
         write_n(fd1, buf, sizeof(uint16_t) + sizeof(uint16_t));
 
  		read_n(fd1, buf, sizeof(uint16_t));
  		sem_wait(&(shm_conn_info->stats_sem));
- 		shm_conn_info->stats[my_conn_num].pid_remote = ntohs(*((uint16_t *) buf));
- 		time_lag_local.pid_remote = shm_conn_info->stats[my_conn_num].pid_remote;
+ 		shm_conn_info->stats[my_physical_channel_num].pid_remote = ntohs(*((uint16_t *) buf));
+ 		time_lag_local.pid_remote = shm_conn_info->stats[my_physical_channel_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
 #ifdef DEBUGG
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
@@ -890,7 +890,7 @@ int lfd_linker(void)
         }
     }
 
-    shm_conn_info->stats[my_conn_num].weight = lfd_host->START_WEIGHT;
+    shm_conn_info->stats[my_physical_channel_num].weight = lfd_host->START_WEIGHT;
     
     gettimeofday(&cur_time, NULL);
     last_action = cur_time.tv_sec;
@@ -931,10 +931,10 @@ int lfd_linker(void)
                 sem_wait_tw(write_buf_sem);
 
 				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
-					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_conn_num);
+					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_physical_channel_num);
 				}
 				// weight landing
-				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_conn_num);
+				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
 
                 sem_post(write_buf_sem);
 
@@ -980,7 +980,7 @@ int lfd_linker(void)
 				}
 				time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
 				sem_wait(&(shm_conn_info->stats_sem));
-				shm_conn_info->stats[my_conn_num].time_lag_remote = time_lag_local.time_lag;
+				shm_conn_info->stats[my_physical_channel_num].time_lag_remote = time_lag_local.time_lag;
 				sem_post(&(shm_conn_info->stats_sem));
 
 
@@ -1045,18 +1045,18 @@ int lfd_linker(void)
        
                    sem_wait_tw(write_buf_sem);
        
-                   if( (shm_conn_info->stats[my_conn_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
-                	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_start(shm_conn_info->stats[my_conn_num].weight, lfd_host);
-                	   shm_conn_info->stats[my_conn_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_conn_num].weight, lfd_host);
+                   if( (shm_conn_info->stats[my_physical_channel_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
+                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_start(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
+                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
                    }
        
                 // now do weight "landing"
 				// actually try to fix weights for suddenly closed connections...
-				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_conn_num);
+				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
        
                    sem_post(write_buf_sem);
 
-                   shm_conn_info->stats[my_conn_num].last_tick = cur_time.tv_sec;
+                   shm_conn_info->stats[my_physical_channel_num].last_tick = cur_time.tv_sec;
        
        
                }
@@ -1290,7 +1290,7 @@ int lfd_linker(void)
                                     vtun_syslog(LOG_INFO, "switching to mode_normal");
                                     statb.mode_switches++;
                                     channel_mode = MODE_NORMAL;
-                                    shm_conn_info->stats[my_conn_num].weight -= (lfd_host->WEIGHT_SMOOTH_DIV * (lfd_host->START_WEIGHT - shm_conn_info->stats[my_conn_num].weight)) / lfd_host->WEIGHT_SCALE;
+                                    shm_conn_info->stats[my_physical_channel_num].weight -= (lfd_host->WEIGHT_SMOOTH_DIV * (lfd_host->START_WEIGHT - shm_conn_info->stats[my_physical_channel_num].weight)) / lfd_host->WEIGHT_SCALE;
                                 }
                             } else {
                                 vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
@@ -1415,8 +1415,8 @@ int lfd_linker(void)
 								}
 							}
 							//recover time_lag_local structure
-							time_lag_local.time_lag = shm_conn_info->stats[my_conn_num].time_lag;
-							time_lag_local.pid = shm_conn_info->stats[my_conn_num].pid;
+							time_lag_local.time_lag = shm_conn_info->stats[my_physical_channel_num].time_lag;
+							time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
 							continue;
 						} else {
@@ -1955,8 +1955,8 @@ int lfd_linker(void)
         */
     }
 
-    shm_conn_info->stats[my_conn_num].pid = 0;
-    shm_conn_info->stats[my_conn_num].weight = 0;
+    shm_conn_info->stats[my_physical_channel_num].pid = 0;
+    shm_conn_info->stats[my_physical_channel_num].weight = 0;
 
     /* Notify other end about our close */
     proto_write(fd1, buf, VTUN_CONN_CLOSE);
@@ -1973,7 +1973,7 @@ int lfd_linker(void)
 }
 
 /* Link remote and local file descriptors */
-int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int conn_num)
+int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_channel_num)
 {
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup;
     int old_prio;
@@ -1981,7 +1981,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int conn_num)
     lfd_host = host;
     srv = ss;
     shm_conn_info = ci;
-    my_conn_num = conn_num;
+    my_physical_channel_num = physical_channel_num;
 
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
