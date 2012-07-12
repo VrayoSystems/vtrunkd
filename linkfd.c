@@ -583,13 +583,13 @@ int sem_wait_tw(sem_t *sem) {
 
 int lfd_linker(void)
 {
-    int fd1 = lfd_host->rmt_fd;
-    int fd2 = lfd_host->loc_fd;
+    int service_channel = lfd_host->rmt_fd; //aka channel 0
+    int tun_device = lfd_host->loc_fd; // virtual tun device
     register int len, fl;
     int err=0;
     struct timeval tv;
     char *out, *out2;
-    void *buf; // in common for info packet
+    char *buf; // in common for info packet
     unsigned long int seq_num;
     int buf_len;
     fd_set fdset;
@@ -684,7 +684,7 @@ int lfd_linker(void)
     int chan_num = 0, chan_num_virt = 0;
     chan_amt = 1; // def above
     int channels[MAX_TCP_LOGICAL_CHANNELS];
-    channels[0] = fd1;
+    channels[0] = service_channel;
     int i, j, fd0;
     int break_out = 0;
 
@@ -696,7 +696,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = (fd1 > fd2 ? fd1 : fd2) + 1;
+    maxfd = (service_channel > tun_device ? service_channel : tun_device) + 1;
 
     linker_term = 0;
 
@@ -708,7 +708,7 @@ int lfd_linker(void)
 
         //todo #11 add sem_post and sem_wait for shm
         //get and set pid
-		read_n(fd1, buf, sizeof(uint16_t)+sizeof(uint16_t));
+		read_n(service_channel, buf, sizeof(uint16_t)+sizeof(uint16_t));
 		chan_amt = ntohs(*((uint16_t *) buf));
 		sem_wait(&(shm_conn_info->stats_sem));
 		shm_conn_info->stats[my_physical_channel_num].pid_remote = ntohs(*((uint16_t *) (buf + sizeof(uint16_t))));
@@ -716,7 +716,7 @@ int lfd_linker(void)
 		time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
     	*((uint16_t *) buf) = htons(shm_conn_info->stats[my_physical_channel_num].pid);
 		sem_post(&(shm_conn_info->stats_sem));
-		write_n(fd1, buf, sizeof(uint16_t));
+		write_n(service_channel, buf, sizeof(uint16_t));
 #ifdef DEBUGG
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 #endif
@@ -760,7 +760,7 @@ int lfd_linker(void)
 
         *((unsigned long *)buf) = htonl((unsigned long)tmp_s); // already in htons format...
         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_PRIO_PORT_NOTIFY);
-        if(proto_write(fd1, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+        if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
             vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)",
                         strerror(errno), errno);
             close(prio_s);
@@ -815,7 +815,7 @@ int lfd_linker(void)
             }
             channels[i]=fd3;
         }
-        channels[0] = fd1;
+        channels[0] = service_channel;
         chan_amt++;
 
         if(break_out) {
@@ -844,9 +844,9 @@ int lfd_linker(void)
     	*((uint16_t *) (buf + sizeof(uint16_t))) = htons(shm_conn_info->stats[my_physical_channel_num].pid);
     	time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
     	sem_post(&(shm_conn_info->stats_sem));
-        write_n(fd1, buf, sizeof(uint16_t) + sizeof(uint16_t));
+        write_n(service_channel, buf, sizeof(uint16_t) + sizeof(uint16_t));
 
- 		read_n(fd1, buf, sizeof(uint16_t));
+ 		read_n(service_channel, buf, sizeof(uint16_t));
  		sem_wait(&(shm_conn_info->stats_sem));
  		shm_conn_info->stats[my_physical_channel_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = shm_conn_info->stats[my_physical_channel_num].pid_remote;
@@ -869,7 +869,7 @@ int lfd_linker(void)
     if(i == MAX_TCP_LOGICAL_CHANNELS) {
         *((unsigned long *)buf) = htonl(shm_conn_info->seq_counter[0]);
         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_JUST_STARTED);
-        if(proto_write(fd1, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+        if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
             vtun_syslog(LOG_ERR, "Could not send init pkt; exit");
             linker_term = TERM_NONFATAL;
         }
@@ -1099,7 +1099,7 @@ int lfd_linker(void)
 
         FD_ZERO(&fdset);
 
-        FD_SET(fd2, &fdset);
+        FD_SET(tun_device, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
@@ -1125,7 +1125,7 @@ int lfd_linker(void)
  * really read since select() will tell it there is still something to read. 
  */
 
-// here: if FD_ISSET(fd2) - try to acquire exclusive lock; on failure - block read (dev_my)
+// here: if FD_ISSET(tun_device) - try to acquire exclusive lock; on failure - block read (dev_my)
 
         if( (dev_my2_was == 1) || (len == 0) ||
            (chan_amt == 1)) { // prevent from sending data on uninitialized channels
@@ -1134,7 +1134,7 @@ int lfd_linker(void)
             shm_conn_info->lock_time = cur_time.tv_sec;
         } else {
 
-            if(FD_ISSET(fd2, &fdset)) {
+            if(FD_ISSET(tun_device, &fdset)) {
 
                 if(sem_trywait(rd_sem) < 0) {
                     dev_my = 0;
@@ -1216,8 +1216,8 @@ int lfd_linker(void)
              *
              *
              *
-             * Read frames from network(fd1), decode and pass them to
-             * the local device (fd2)
+             * Read frames from network(service_channel), decode and pass them to
+             * the local device (tun_device)
              *
              *
              *
@@ -1378,7 +1378,7 @@ int lfd_linker(void)
                                 break;
                             }
                             chan_amt = i;
-                            channels[0] = fd1;
+                            channels[0] = service_channel;
                             vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", chan_amt);
                             continue;
                         } else if(flag_var == FRAME_LAST_WRITTEN_SEQ) {
@@ -1579,7 +1579,7 @@ int lfd_linker(void)
 
 						}
 
-                        	if( (len = dev_write(fd2,
+                        	if( (len = dev_write(tun_device,
                                                  shm_conn_info->frames_buf[fprev].out,
                                                  shm_conn_info->frames_buf[fprev].len)) < 0 ) {
                                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
@@ -1704,13 +1704,13 @@ int lfd_linker(void)
                 //}
             } // if fd0>0
         } // for chans..
-        if( (!FD_ISSET(fd2, &fdset)) && (channel_mode != MODE_RETRANSMIT) ) {
-            //vtun_syslog(LOG_INFO, "sem_post! fd2 not set");
+        if( (!FD_ISSET(tun_device, &fdset)) && (channel_mode != MODE_RETRANSMIT) ) {
+            //vtun_syslog(LOG_INFO, "sem_post! tun_device not set");
             sem_post_if(&dev_my, rd_sem);
         }
 
-        /* Read data from the local device(fd2), encode and pass it to
-             * the network (fd1)
+        /* Read data from the local device(tun_device), encode and pass it to
+             * the network (service_channel)
              *
              *
              * ****************************************************************************************
@@ -1718,14 +1718,14 @@ int lfd_linker(void)
              *
              * */
 
-        if( (channel_mode == MODE_RETRANSMIT) || (FD_ISSET(fd2, &fdset) )) {
+        if( (channel_mode == MODE_RETRANSMIT) || (FD_ISSET(tun_device, &fdset) )) {
             //vtun_syslog(LOG_INFO, "data on device...");
 
             if(channel_mode == MODE_RETRANSMIT) {
                 // now see if anything needs to be rexmit
                 // TODO: retransmit mode has completely lost its meaningfulness;
                 //       1. it is very rare to reach
-                //       2. it still resends only the parent fd1's thingies, ignoring other channels
+                //       2. it still resends only the parent service_channel's thingies, ignoring other channels
                 //          this is currently left not done
                 if(weight_cnt > 0) {
                     sem_post_if(&dev_my, rd_sem);
@@ -1754,7 +1754,7 @@ int lfd_linker(void)
                     *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_MODE_RXMIT);
                     vtun_syslog(LOG_INFO,"Requesting bad frame RXMIT MODE seq_num %lu", incomplete_seq_buf[incomplete_seq_len-1]);
                     statb.rxmit_req_rx++;
-                    if(proto_write(fd1, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                    if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
                         vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                         continue;
                     }
@@ -1805,7 +1805,7 @@ int lfd_linker(void)
                 weight_cnt = weight / lfd_host->WEIGHT_SCALE;
 
                 if(!dev_my) continue; // ??!!!!
-                if( (len = dev_read(fd2, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
+                if( (len = dev_read(tun_device, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
                     if( errno != EAGAIN && errno != EINTR ) {
                         vtun_syslog(LOG_INFO, "sem_post! eagain dev read err");
                         sem_post_if(&dev_my, rd_sem);
@@ -1944,7 +1944,7 @@ int lfd_linker(void)
     shm_conn_info->stats[my_physical_channel_num].weight = 0;
 
     /* Notify other end about our close */
-    proto_write(fd1, buf, VTUN_CONN_CLOSE);
+    proto_write(service_channel, buf, VTUN_CONN_CLOSE);
     lfd_free(buf);
 
     for(i=0; i<chan_amt; i++) {
