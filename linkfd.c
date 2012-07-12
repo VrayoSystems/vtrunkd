@@ -187,22 +187,7 @@ static void sig_usr1(int sig)
     lfd_host->stat.byte_in = lfd_host->stat.byte_out = 0;
     lfd_host->stat.comp_in = lfd_host->stat.comp_out = 0;
 }
-/*
-static void sig_usr2(int sig)
-{
-     // on sigusr2 we detect that we're behaving badly
-     vtun_syslog(LOG_INFO, "rxmit notification received rct is %d", retransmit_count);
-     rxmt_mode_request = 1; // just set the flag...
 
-     if(shm_conn_info->normal_senders == 0) {
-          rxmt_mode_request = 0;
-          channel_mode = MODE_NORMAL;
-	  weight = shm_conn_info->stats[my_conn_num].weight = (shm_conn_info->stats[my_conn_num].weight * WEIGHT_SCALE) / WEIGHT_SMOOTH_DIV;
-	  shm_conn_info->normal_senders++;
-          vtun_syslog(LOG_INFO, "force switched to norm mode");
-     }
-     statb.rxm_ntf++;
-}*/
 /**
  * колличество отставших пакетов
  * buf[] - номера пакетов
