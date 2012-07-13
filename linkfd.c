@@ -606,7 +606,7 @@ int lfd_linker(void)
     unsigned short tmp_s;
     unsigned long tmp_l;
 
-    sem_t *rd_sem = &(shm_conn_info->fd_sem);
+    sem_t *tun_device_sem = &(shm_conn_info->fd_sem);
     sem_t *resend_buf_sem = &(shm_conn_info->resend_buf_sem);
     sem_t *write_buf_sem = &(shm_conn_info->write_buf_sem);
 
@@ -1137,12 +1137,12 @@ int lfd_linker(void)
 
             if(FD_ISSET(tun_device, &fdset)) {
 
-                if(sem_trywait(rd_sem) < 0) {
+                if(sem_trywait(tun_device_sem) < 0) {
                     dev_my = 0;
                     if( (cur_time.tv_sec - shm_conn_info->lock_time) > 10) { // 1s more just to be sure...
                         vtun_syslog(LOG_ERR, "ASSERT FAILED: RD_SEM lock freeze detected! Fixing.");
 
-                        sem_post(rd_sem);
+                        sem_post(tun_device_sem);
 
                     }
                 } else {
@@ -1165,7 +1165,7 @@ int lfd_linker(void)
 
             /* We are idle, lets check connection */
             //vtun_syslog(LOG_INFO, "idle...");
-            sem_post_if(&dev_my, rd_sem); // finished block
+            sem_post_if(&dev_my, tun_device_sem); // finished block
             if( lfd_host->flags & VTUN_KEEP_ALIVE ) {
 
 
@@ -1179,7 +1179,7 @@ int lfd_linker(void)
                         vtun_syslog(LOG_ERR, "ASSERT FAILED! locking PID not running! FIXED. pid was %d", shm_conn_info->lock_pid);
                         shm_conn_info->lock_pid = mypid;
 
-                        sem_post(rd_sem);
+                        sem_post(tun_device_sem);
 
                     }
                     // another assert ->
@@ -1239,14 +1239,14 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 #endif
                 if( (len=proto_read(fd0, buf)) <= 0 ) {
-                    sem_post_if(&dev_my, rd_sem);
+                    sem_post_if(&dev_my, tun_device_sem);
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
                          break;
                     }
                     if(proto_err_cnt > 5) { // TODO XXX whu do we need this?? why doesnt proto_read just return <0???
                              vtun_syslog(LOG_INFO, "MAX proto read len==0 reached; exit!");
-                             sem_post_if(&dev_my, rd_sem);
+                             sem_post_if(&dev_my, tun_device_sem);
                              linker_term = TERM_NONFATAL;
                              break;
                     }
@@ -1262,7 +1262,7 @@ int lfd_linker(void)
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
 
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
 
 
                         flag_var = ntohs(*((unsigned short *)(buf+(sizeof(unsigned long)))));
@@ -1460,7 +1460,7 @@ int lfd_linker(void)
                     if( fl==VTUN_ECHO_REQ ) {
                         /* Send ECHO reply */
                         last_net_read = cur_time.tv_sec;
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
@@ -1487,13 +1487,13 @@ int lfd_linker(void)
                         rtt = (   (( (cur_time.tv_sec ) * 1000) + (cur_time.tv_usec / 1000) - ping_req_ts) + rtt_old + rtt_old_old   ) / 3;
                         rtt_old_old = rtt_old;
                         rtt_old = rtt;
-                        sem_post_if(&dev_my, rd_sem); // added..???
+                        sem_post_if(&dev_my, tun_device_sem); // added..???
                         continue; 
                     }
                     if( fl==VTUN_CONN_CLOSE ) {
                         vtun_syslog(LOG_INFO,"Connection closed by other side");
                         vtun_syslog(LOG_INFO, "sem_post! conn closed other");
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
                         linker_term = TERM_NONFATAL;
                         break;
                     }
@@ -1510,7 +1510,7 @@ int lfd_linker(void)
                     if(chan_num == 0) { // reserved aux channel
                          if(flag_var == 0) { // this is a workaround for some bug... TODO!!
                               vtun_syslog(LOG_ERR,"BUG! flag_var == 0 received on chan 0! sqn %lu, len %d. DROPPING",seq_num, len);
-                              sem_post_if(&dev_my, rd_sem);
+                              sem_post_if(&dev_my, tun_device_sem);
                               continue;
                          } 
                          chan_num_virt = flag_var - FLAGS_RESERVED;
@@ -1622,7 +1622,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %lu chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
 #endif
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
 
                         sem_post(write_buf_sem);
 
@@ -1641,7 +1641,7 @@ int lfd_linker(void)
                     if(buf_len > lfd_host->MAX_REORDER) {
                         // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
                         //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
-                    	sem_post_if(&dev_my, rd_sem); // we will do nothing more this time..??
+                    	sem_post_if(&dev_my, tun_device_sem); // we will do nothing more this time..??
                         incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
 
                         sem_post(write_buf_sem);
@@ -1680,7 +1680,7 @@ int lfd_linker(void)
 
                     if( (flag_var == FRAME_MODE_RXMIT) &&
                             ((succ_flag == 0) || ( (seq_num-shm_conn_info->write_buf[chan_num_virt].last_written_seq) < lfd_host->MAX_REORDER ))) {
-                        sem_post_if(&dev_my, rd_sem); // starting blocking send ...
+                        sem_post_if(&dev_my, tun_device_sem); // starting blocking send ...
 
                         vtun_syslog(LOG_INFO, "sending FRAME_MODE_NORM to notify THIS channel is now OK");
                         tmp_l = htonl(incomplete_seq_buf[0]);
@@ -1707,7 +1707,7 @@ int lfd_linker(void)
         } // for chans..
         if( (!FD_ISSET(tun_device, &fdset)) && (channel_mode != MODE_RETRANSMIT) ) {
             //vtun_syslog(LOG_INFO, "sem_post! tun_device not set");
-            sem_post_if(&dev_my, rd_sem);
+            sem_post_if(&dev_my, tun_device_sem);
         }
 
         /* Read data from the local device(tun_device), encode and pass it to
@@ -1725,7 +1725,7 @@ int lfd_linker(void)
         // check for mode
         if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE) we jump here if all channels ready for aggregation
 
-            sem_post_if(&dev_my, rd_sem); // we're not reading anything from device (and assert dev_my == 0!)
+            sem_post_if(&dev_my, tun_device_sem); // we're not reading anything from device (and assert dev_my == 0!)
 
             sem_wait(shm_conn_info->resend_buf_sem);
             struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
@@ -1750,14 +1750,14 @@ int lfd_linker(void)
                 if( (len = dev_read(tun_device, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
                     if( errno != EAGAIN && errno != EINTR ) {
                         vtun_syslog(LOG_INFO, "sem_post! eagain dev read err");
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
                         break;
                     }
                     else {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
 #endif
-                        sem_post_if(&dev_my, rd_sem);
+                        sem_post_if(&dev_my, tun_device_sem);
                         continue;
                     }
                 }
@@ -1765,7 +1765,7 @@ int lfd_linker(void)
 
                 if( !len ) {
                     vtun_syslog(LOG_INFO, "sem_post! not len" );
-                    sem_post_if(&dev_my, rd_sem);
+                    sem_post_if(&dev_my, tun_device_sem);
                     continue;
                 }
 
@@ -1792,7 +1792,7 @@ int lfd_linker(void)
                 sem_post(resend_buf_sem);
 
                 statb.bytes_sent_norm+=len;
-                sem_post_if(&dev_my, rd_sem); // finished, now blocking send...
+                sem_post_if(&dev_my, tun_device_sem); // finished, now blocking send...
 
             }
             lfd_host->stat.byte_out += len;
@@ -1851,7 +1851,7 @@ int lfd_linker(void)
         // ASSERT!! we have not removet lock
         vtun_syslog(LOG_INFO, "ASSERT FAILED! we've not removed lock!. FIXED.");
 
-        sem_post(rd_sem);
+        sem_post(tun_device_sem);
 
     }
 
