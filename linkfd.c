@@ -103,6 +103,7 @@ short int chan_amt = 0; // ns pollution
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
+uint16_t tmp_flags;
 
 int proto_err_cnt = 0;
 
@@ -300,7 +301,7 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
                 (shm_conn_info->resend_frames_buf[i].chan_num == conn_num)) {
 
             len = shm_conn_info->resend_frames_buf[i].len;
-            *((unsigned short *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len-sizeof(unsigned short)))) = htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!!
+            *((unsigned short *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len-sizeof(unsigned short)))) = htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
             *out = shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV;
             *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
             break;
@@ -656,7 +657,7 @@ int lfd_linker(void)
     }
     
 
-    int mypid = getpid(); // watchdog; really unnessesary
+    int mypid = getpid(); // watchdog; current pid
     int sender_pid; // tmp var for resend detect my own pid
     unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
@@ -1718,92 +1719,33 @@ int lfd_linker(void)
              *
              * */
 
-        if( (channel_mode == MODE_RETRANSMIT) || (FD_ISSET(tun_device, &fdset) )) {
-            //vtun_syslog(LOG_INFO, "data on device...");
+        sem_wait(shm_conn_info->AG_flags_sem);
+        tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
+        sem_post(shm_conn_info->AG_flags_sem);
+        // check for mode
+        if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE) we jump here if all channels ready for aggregation
 
-            if(channel_mode == MODE_RETRANSMIT) {
-                // now see if anything needs to be rexmit
-                // TODO: retransmit mode has completely lost its meaningfulness;
-                //       1. it is very rare to reach
-                //       2. it still resends only the parent service_channel's thingies, ignoring other channels
-                //          this is currently left not done
-                if(weight_cnt > 0) {
-                    sem_post_if(&dev_my, rd_sem);
-                    weight_cnt--;
-                    usleep(lfd_host->WEIGHT_MSEC_DELAY);
+            sem_post_if(&dev_my, rd_sem); // we're not reading anything from device (and assert dev_my == 0!)
+
+            sem_wait(shm_conn_info->resend_buf_sem);
+            struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
+            sem_post(shm_conn_info->resend_buf_sem);
+            if (end_sent_frame.sender_pid != mypid) { // if this physical channel didn't send last packet
+                sem_wait(shm_conn_info->resend_buf_sem);
+                len = get_resend_frame(chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
+                sem_post(shm_conn_info->resend_buf_sem);
+                vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
+                statb.bytes_sent_rx += len;
+                if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
+                    vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
                     continue;
                 }
-                weight_cnt = weight / lfd_host->WEIGHT_SCALE;
+            } else if (FD_ISSET(tun_device, &fdset)) {
+                vtun_syslog(LOG_DEBUG, "debug: R_MODE we have data on tun device...");
 
-                sem_post_if(&dev_my, rd_sem); // we're not reading anything from device (and assert dev_my == 0!)
-
-                sem_wait_tw(write_buf_sem);
-
-                incomplete_seq_len = missing_resend_buffer(0, incomplete_seq_buf, &buf_len); // TODO 0
-                chan_num = 0; // TODO 0
-
-                sem_post(write_buf_sem);
-
-                if(incomplete_seq_len) {
-                    // do the same as above, but resend from back! [just a hack!]
-                    tmp_l = htonl(incomplete_seq_buf[(incomplete_seq_len-1)]);
-                    if( memcpy(buf, &tmp_l, sizeof(unsigned long)) < 0) {
-                        vtun_syslog(LOG_ERR, "memcpy imf 2uj");
-                        continue;
-                    }
-                    *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_MODE_RXMIT);
-                    vtun_syslog(LOG_INFO,"Requesting bad frame RXMIT MODE seq_num %lu", incomplete_seq_buf[incomplete_seq_len-1]);
-                    statb.rxmit_req_rx++;
-                    if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-                        vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
-                        continue;
-                    }
-                }
-
-                // first, check if we're not resending too much same frame...
-                fprev = shm_conn_info->resend_buf[0].frames.rel_tail;
-                top_seq = shm_conn_info->resend_frames_buf[fprev].seq_num;
-                if(top_seq == stop_seq) {
-                    if(top_seq_rx > 1) {
-                        //vtun_syslog(LOG_INFO, "MODE_NORMAL may be triggered on path2!");
-                        top_seq_rx++;
-                        if(top_seq_rx > 3) {
-                            vtun_syslog(LOG_INFO, "Changing mode to NORMAL due to inactivity");
-                            top_seq_rx = 0;
-                            channel_mode = MODE_NORMAL;
-                            shm_conn_info->normal_senders++;
-                        }
-                        continue; // don't resend same more than twice
-                    } else {
-                        top_seq_rx++;
-                    }
-                } else {
-                    stop_seq = top_seq;
-                    top_seq_rx = 0;
-                }
-                // now, we are resending frame 1-2 time -- get it from resend buf rather than dev
-                // TODO: error detect here???
-
-
-                //len=_h_get_resend_frame(chan_num, top_seq, &out2, &sender_pid, fprev);
-
-                // TODO HERE DISABLE RXMIT MODE!!! this does not work!
-                len=get_resend_frame(chan_num, shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].seq_num, &out2, &sender_pid);
-
-//               vtun_syslog(LOG_INFO, "getting resend mode frame from top... seq %lu len %d", top_seq, len);
-                statb.bytes_sent_rx+=len;
-                // assert that we're not the sender of this frame?
-
-            } else {
-                // we are MODE_NORMAL ...
-                if(weight_cnt > 0) {
-                    sem_post_if(&dev_my, rd_sem);
-                    weight_cnt--;
-                    usleep(lfd_host->WEIGHT_MSEC_DELAY);
-                    continue;
-                }
-                weight_cnt = weight / lfd_host->WEIGHT_SCALE;
-
+            }
+        } else if (FD_ISSET(tun_device, &fdset)) { // this is AGGREGATION MODE(AG_MODE). It very similar to the old MODE_NORMAL ...
+            vtun_syslog(LOG_DEBUG, "debug: AG_MODE we have data on tun device...");
                 if(!dev_my) continue; // ??!!!!
                 if( (len = dev_read(tun_device, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
                     if( errno != EAGAIN && errno != EINTR ) {
@@ -1896,7 +1838,7 @@ int lfd_linker(void)
             gettimeofday(&cur_time, NULL);
             last_action = cur_time.tv_sec;
             lfd_host->stat.comp_out += len;
-        }
+
 
 
 
