@@ -139,6 +139,9 @@ struct {
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 
+fd_set fdset;
+int tun_device;
+
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
         vtun_syslog(LOG_ERR, "ASSERT FAILED! Infinite loop detected at %d. Emergency break.", where);
@@ -368,20 +371,94 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
 	return shm_conn_info->resend_frames_buf[newf].len;
 }
 
-/**
- * Return new info packet in network format
+/** TODO delete code that contain this procedure from "Read data from the local device" section
+ * Procedure select all file descriptors and if data available read from tun device, pack and write to net
  *
- *  @param
- *  @param
- *  @param
- *  @return
+ *  @return - number of error or sent len
+ *      -1 - continue error (CONTINUE_ERROR)
+ *      -2 - break error (BREAK_ERROR)
  *
- *  TODO: Issue #12
+ *
  */
-void* get_info_frame(unsigned long payload, unsigned short flag, void *buf) {
-	*((unsigned long *) buf) = htonl(payload);
-	*((unsigned short *) (buf + sizeof(unsigned long))) = htons(flag);
-	return buf;
+int select_devread_send(char *buf, char *out2, int mypid) {
+    int len;
+    int chan_num;
+    struct my_ip *ip;
+    struct tcphdr *tcp;
+    struct timeval *tv;
+    tv->tv_sec = 0;
+    tv->tv_usec = 0;
+    FD_ZERO(&fdset);
+    FD_SET(tun_device, &fdset);
+    sem_trywait(shm_conn_info->tun_device_sem);
+    if (errno == EAGAIN) {
+        return TRYWAIT_NOTIFY;
+    }
+    len = select(tun_device + 1, &fdset, NULL, NULL, tv);
+    if (len < 0) {
+        if (errno != EAGAIN && errno != EINTR) {
+            sem_post(shm_conn_info->tun_device_sem);
+            vtun_syslog(LOG_INFO, "select error; exit");
+            return BREAK_ERROR;
+        } else {
+            sem_post(shm_conn_info->tun_device_sem);
+            vtun_syslog(LOG_INFO, "select error; continue norm");
+            return CONTINUE_ERROR;
+        }
+    } else if (len == 0) {
+        sem_post(shm_conn_info->tun_device_sem);
+#ifdef DEBUGG
+        vtun_syslog(LOG_DEBUG, "debug: R_MODE we don't have data on tun device; continue norm.");
+#endif
+        return CONTINUE_ERROR; // Nothing to read, continue.
+    }
+#ifdef DEBUGG
+    vtun_syslog(LOG_DEBUG, "debug: R_MODE we have data on tun device...");
+#endif
+    // we aren't checking FD_ISSET because we did select one descriptor
+    len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
+    sem_post(shm_conn_info->tun_device_sem);
+    if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
+        if (errno != EAGAIN && errno != EINTR) {
+            vtun_syslog(LOG_INFO, "sem_post! dev read err");
+            return BREAK_ERROR;
+        } else {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
+#endif
+            sem_post(shm_conn_info->tun_device_sem);
+            return CONTINUE_ERROR;
+        }
+    } else if (len == 0) {
+        vtun_syslog(LOG_INFO, "sem_post! not len");
+        return CONTINUE_ERROR;
+    }
+#ifdef DEBUGG
+    vtun_syslog(LOG_DEBUG, "debug: R_MODE we have read data from tun device and going to send it through net");
+#endif
+    // now determine packet IP..
+    ip = (struct my_ip*) (buf);
+    // TODO: handle frag?
+    //vtun_syslog(LOG_INFO, "got IP src %s", inet_ntoa(ip->ip_src));
+    unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
+    hash += (unsigned int) (ip->ip_dst.s_addr);
+    hash += ip->ip_p;
+    if (ip->ip_p == 6) { // TCP...
+        tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
+        //vtun_syslog(LOG_INFO, "TCP port s %d d %d", ntohs(tcp->source), ntohs(tcp->dest));
+        hash += tcp->source;
+        hash += tcp->dest;
+    }
+    chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
+
+    (shm_conn_info->seq_counter[chan_num])++;
+    len = seqn_add_tail(chan_num, buf, &out2, len, shm_conn_info->seq_counter[chan_num], channel_mode, mypid);
+
+    sem_post(shm_conn_info->resend_buf_sem);
+
+    statb.bytes_sent_norm += len;
+    sem_post(shm_conn_info->tun_device_sem); // finished, now blocking send...
+    return 0;
 }
 
 int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
@@ -585,7 +662,7 @@ int sem_wait_tw(sem_t *sem) {
 int lfd_linker(void)
 {
     int service_channel = lfd_host->rmt_fd; //aka channel 0
-    int tun_device = lfd_host->loc_fd; // virtual tun device
+    tun_device = lfd_host->loc_fd; // virtual tun device
     register int len, fl;
     int err=0;
     struct timeval tv;
@@ -593,7 +670,6 @@ int lfd_linker(void)
     char *buf; // in common for info packet
     unsigned long int seq_num;
     int buf_len;
-    fd_set fdset;
     int maxfd;
     int imf;
     int fprev = -1;
@@ -606,7 +682,7 @@ int lfd_linker(void)
     unsigned short tmp_s;
     unsigned long tmp_l;
 
-    sem_t *tun_device_sem = &(shm_conn_info->fd_sem);
+    sem_t *tun_device_sem = &(shm_conn_info->tun_device_sem);
     sem_t *resend_buf_sem = &(shm_conn_info->resend_buf_sem);
     sem_t *write_buf_sem = &(shm_conn_info->write_buf_sem);
 
@@ -1140,7 +1216,7 @@ int lfd_linker(void)
                 if(sem_trywait(tun_device_sem) < 0) {
                     dev_my = 0;
                     if( (cur_time.tv_sec - shm_conn_info->lock_time) > 10) { // 1s more just to be sure...
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED: RD_SEM lock freeze detected! Fixing.");
+                        vtun_syslog(LOG_ERR, "ASSERT FAILED: tun_device_sem lock freeze detected! Fixing.");
 
                         sem_post(tun_device_sem);
 
@@ -1730,24 +1806,94 @@ int lfd_linker(void)
             sem_wait(shm_conn_info->resend_buf_sem);
             struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
             sem_post(shm_conn_info->resend_buf_sem);
-            if (end_sent_frame.sender_pid != mypid) { // if this physical channel didn't send last packet
+            if (end_sent_frame.sender_pid != mypid) { // if this physical channel hasn't send last packet
+#ifdef DEBUGG
+                vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
+#endif
                 sem_wait(shm_conn_info->resend_buf_sem);
                 len = get_resend_frame(chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
                 sem_post(shm_conn_info->resend_buf_sem);
-                vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
                 statb.bytes_sent_rx += len;
                 if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
                     vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
                     continue;
                 }
-            } else if (FD_ISSET(tun_device, &fdset)) {
+            } else { // if this physical channel has sent last packet
+#ifdef DEBUGG
+                vtun_syslog(LOG_DEBUG, "debug: R_MODE main send");
+#endif
+                FD_ZERO(&fdset);
+                FD_SET(tun_device, &fdset);
+                sem_wait(tun_device_sem); // TODO can change to sem_trywait because select and read can be long
+                len = select(tun_device+1, &fdset, NULL, NULL, &timer_resolution);
+                if (len < 0) {
+                    if (errno != EAGAIN && errno != EINTR) {
+                        sem_post(tun_device_sem);
+                        vtun_syslog(LOG_INFO, "eagain select err; exit");
+                        break;
+                    } else {
+                        sem_post(tun_device_sem);
+                        vtun_syslog(LOG_INFO, "else select err; continue norm");
+                        continue;
+                    }
+                } else if (len == 0) {
+                    sem_post(tun_device_sem);
+                    continue; // Nothing to read, continue.
+                }
+#ifdef DEBUGG
                 vtun_syslog(LOG_DEBUG, "debug: R_MODE we have data on tun device...");
+#endif
+                // we aren't checking FD_ISSET because we did select one descriptor
+                len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
+                sem_post(tun_device_sem);
+                if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
+                    if (errno != EAGAIN && errno != EINTR) {
+                        vtun_syslog(LOG_INFO, "sem_post! dev read err");
+                        break;
+                    } else {
+#ifdef DEBUGG
+                        vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
+#endif
+                        sem_post_if(&dev_my, tun_device_sem);
+                        continue;
+                    }
+                } else if (len == 0) {
+                    vtun_syslog(LOG_INFO, "sem_post! not len");
+                    continue;
+                }
+#ifdef DEBUGG
+                vtun_syslog(LOG_DEBUG, "debug: R_MODE we have read data from tun device and going to send it through net");
+#endif
+                // now determine packet IP..
+                ip = (struct my_ip*)(buf);
+                // TODO: handle frag?
+                //vtun_syslog(LOG_INFO, "got IP src %s", inet_ntoa(ip->ip_src));
+                hash = (unsigned int)(ip->ip_src.s_addr);
+                hash += (unsigned int)(ip->ip_dst.s_addr);
+                hash += ip->ip_p;
+                if(ip->ip_p == 6) { // TCP...
+                    tcp = (struct tcphdr*)(buf+sizeof(struct my_ip));
+                    //vtun_syslog(LOG_INFO, "TCP port s %d d %d", ntohs(tcp->source), ntohs(tcp->dest));
+                    hash += tcp->source;
+                    hash += tcp->dest;
+                }
+                chan_num = (hash % ((int)chan_amt-1)) + 1; // send thru 1-n channel
 
+
+
+                (shm_conn_info->seq_counter[chan_num])++;
+                len = seqn_add_tail(chan_num, buf, &out2, len, shm_conn_info->seq_counter[chan_num], channel_mode, mypid);
+
+                sem_post(resend_buf_sem);
+
+                statb.bytes_sent_norm+=len;
+                sem_post_if(&dev_my, tun_device_sem); // finished, now blocking send...
             }
         } else if (FD_ISSET(tun_device, &fdset)) { // this is AGGREGATION MODE(AG_MODE). It very similar to the old MODE_NORMAL ...
             vtun_syslog(LOG_DEBUG, "debug: AG_MODE we have data on tun device...");
-                if(!dev_my) continue; // ??!!!!
-                if( (len = dev_read(tun_device, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
+                sem_wait(tun_device_sem);
+
+                if( len < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
                     if( errno != EAGAIN && errno != EINTR ) {
                         vtun_syslog(LOG_INFO, "sem_post! eagain dev read err");
                         sem_post_if(&dev_my, tun_device_sem);
@@ -1909,6 +2055,9 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     srv = ss;
     shm_conn_info = ci;
     my_physical_channel_num = physical_channel_num;
+    sem_wait(shm_conn_info->AG_flags_sem);
+    shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
+    sem_post(shm_conn_info->AG_flags_sem);
 
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
