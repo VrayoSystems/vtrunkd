@@ -27,6 +27,7 @@
 #define BREAK_ERROR -2
 #define CONTINUE_ERROR -1
 #define TRYWAIT_NOTIFY -3
+#define LASTPACKETMY_NOTFY -4
 
 /* Priority of the process in the link_fd function */
 /* Never set the priority to -19 without stating a good reason.

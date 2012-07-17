@@ -374,6 +374,30 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
 	return shm_conn_info->resend_frames_buf[newf].len;
 }
 
+/**
+ * Function for trying resend
+ */
+int retransmit_send(char *out2, int mypid) {
+    sem_wait(shm_conn_info->resend_buf_sem);
+    struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
+    sem_post(shm_conn_info->resend_buf_sem);
+    if (end_sent_frame.sender_pid != mypid) { // if this physical channel hasn't send last packet ??? TODO: but we can resent this packet, if can generate much duplicate trafic
+        return LASTPACKETMY_NOTFY;
+    }
+#ifdef DEBUGG
+    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
+#endif
+    sem_wait(shm_conn_info->resend_buf_sem);
+    int len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
+    sem_post(shm_conn_info->resend_buf_sem);
+    statb.bytes_sent_rx += len;
+    if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
+        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", end_sent_frame.chan_num, strerror(errno), errno);
+        return CONTINUE_ERROR;
+    }
+    return len;
+}
+
 /** TODO delete code that contain this procedure from "Read data from the local device" section
  * Procedure select all(only tun_device now) file descriptors and if data available read from tun device, pack and write to net
  *
@@ -1819,26 +1843,11 @@ int lfd_linker(void)
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
         sem_post(shm_conn_info->AG_flags_sem);
         // check for mode
-        if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE) we jump here if all channels ready for aggregation
-
-            sem_post_if(&dev_my, tun_device_sem); // we're not reading anything from device (and assert dev_my == 0!)
-
-            sem_wait(shm_conn_info->resend_buf_sem);
-            struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
-            sem_post(shm_conn_info->resend_buf_sem);
-            if (end_sent_frame.sender_pid != mypid) { // if this physical channel hasn't send last packet
-#ifdef DEBUGG
-                vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
-#endif
-                sem_wait(shm_conn_info->resend_buf_sem);
-                len = get_resend_frame(chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
-                sem_post(shm_conn_info->resend_buf_sem);
-                statb.bytes_sent_rx += len;
-                if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
-                    vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
-                    continue;
-                }
-            } else { // if this physical channel has sent last packet
+        if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE)
+            len = retransmit_send(out2, mypid);
+            if (len == CONTINUE_ERROR) {
+                continue;
+            } else if (len == LASTPACKETMY_NOTFY) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: R_MODE main send");
 #endif
@@ -1848,10 +1857,10 @@ int lfd_linker(void)
                 } else if (len == CONTINUE_ERROR) {
                     continue;
                 } else if (len == TRYWAIT_NOTIFY) {
-                    continue; //todo need to check resend_buf for new packet
+                    continue; //todo need to check resend_buf for new packet again
                 }
             }
-        } else { // this is AGGREGATION MODE(AG_MODE). It very similar to the old MODE_NORMAL ...
+        } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
             vtun_syslog(LOG_DEBUG, "debug: AG_MODE");
             len = select_devread_send(buf, out2, mypid);
             if (len == BREAK_ERROR) {
