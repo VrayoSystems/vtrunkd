@@ -138,6 +138,7 @@ struct {
 
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
+struct timeval cur_time; // current time source
 
 fd_set fdset;
 int tun_device;
@@ -378,18 +379,18 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    sem_wait(shm_conn_info->resend_buf_sem);
+    sem_wait(&(shm_conn_info->resend_buf_sem));
     struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
-    sem_post(shm_conn_info->resend_buf_sem);
+    sem_post(&(shm_conn_info->resend_buf_sem));
     if (end_sent_frame.sender_pid != mypid) { // if this physical channel hasn't send last packet ??? TODO: but we can resent this packet, if can generate much duplicate trafic
         return LASTPACKETMY_NOTFY;
     }
 #ifdef DEBUGG
     vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
 #endif
-    sem_wait(shm_conn_info->resend_buf_sem);
+    sem_wait(&(shm_conn_info->resend_buf_sem));
     int len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
-    sem_post(shm_conn_info->resend_buf_sem);
+    sem_post(&(shm_conn_info->resend_buf_sem));
     statb.bytes_sent_rx += len;
     if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", end_sent_frame.chan_num, strerror(errno), errno);
@@ -417,23 +418,24 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     tv.tv_usec = 0;
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
-    sem_trywait(shm_conn_info->tun_device_sem);
+    sem_trywait(&(shm_conn_info->tun_device_sem));
     if (errno == EAGAIN) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
+    shm_conn_info->lock_time =
     len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
-            sem_post(shm_conn_info->tun_device_sem);
+            sem_post(&(shm_conn_info->tun_device_sem));
             vtun_syslog(LOG_INFO, "select error; exit");
             return BREAK_ERROR;
         } else {
-            sem_post(shm_conn_info->tun_device_sem);
+            sem_post(&(shm_conn_info->tun_device_sem));
             vtun_syslog(LOG_INFO, "select error; continue norm");
             return CONTINUE_ERROR;
         }
     } else if (len == 0) {
-        sem_post(shm_conn_info->tun_device_sem);
+        sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
         vtun_syslog(LOG_DEBUG, "debug: R_MODE we don't have data on tun device; continue norm.");
 #endif
@@ -444,7 +446,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #endif
     // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
-    sem_post(shm_conn_info->tun_device_sem);
+    sem_post(&(shm_conn_info->tun_device_sem));
     if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
         if (errno != EAGAIN && errno != EINTR) {
             vtun_syslog(LOG_INFO, "sem_post! dev read err");
@@ -474,13 +476,13 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         hash += tcp->dest;
     }
     chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
-    sem_wait(shm_conn_info->common_sem);
+    sem_wait(&(shm_conn_info->common_sem));
     (shm_conn_info->seq_counter[chan_num])++;
     unsigned long tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-    sem_post(shm_conn_info->common_sem);
-    sem_wait(shm_conn_info->resend_buf_sem);
+    sem_post(&(shm_conn_info->common_sem));
+    sem_wait(&(shm_conn_info->resend_buf_sem));
     len = seqn_add_tail(chan_num, buf, &out2, len, tmp_seq_counter, channel_mode, mypid);
-    sem_post(shm_conn_info->resend_buf_sem);
+    sem_post(&(shm_conn_info->resend_buf_sem));
 
     statb.bytes_sent_norm += len;
 
@@ -731,7 +733,6 @@ int lfd_linker(void)
     sem_t *resend_buf_sem = &(shm_conn_info->resend_buf_sem);
     sem_t *write_buf_sem = &(shm_conn_info->write_buf_sem);
 
-    struct timeval cur_time; // current time source
     struct timeval send1; // calculate send delay
     struct timeval send2;
 
@@ -817,7 +818,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = service_channel;//(service_channel > tun_device ? service_channel : tun_device) + 1;
+    maxfd = service_channel;
 
     linker_term = 0;
 
@@ -1220,7 +1221,6 @@ int lfd_linker(void)
 
         FD_ZERO(&fdset);
 
-        FD_SET(tun_device, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
@@ -1236,48 +1236,6 @@ int lfd_linker(void)
             } else {
                 //vtun_syslog(LOG_INFO, "else select err; continue norm");
                 continue;
-            }
-        }
-
-
-/*
- * TODO: quite a waste of resources here: if data is on device - the processes start to compete for it
- * when one of the processes win, the other continues to try to acquire lock in a loop until the data is
- * really read since select() will tell it there is still something to read. 
- */
-
-// here: if FD_ISSET(tun_device) - try to acquire exclusive lock; on failure - block read (dev_my)
-
-        if( (dev_my2_was == 1) || (len == 0) ||
-           (chan_amt == 1)) { // prevent from sending data on uninitialized channels
-            dev_my2_was = 0;
-            dev_my = 0;
-            shm_conn_info->lock_time = cur_time.tv_sec;
-        } else {
-
-            if(FD_ISSET(tun_device, &fdset)) {
-
-                if(sem_trywait(tun_device_sem) < 0) {
-                    dev_my = 0;
-                    if( (cur_time.tv_sec - shm_conn_info->lock_time) > 10) { // 1s more just to be sure...
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED: tun_device_sem lock freeze detected! Fixing.");
-
-                        sem_post(tun_device_sem);
-
-                    }
-                } else {
-                    shm_conn_info->lock_pid = mypid;
-                    shm_conn_info->lock_time = cur_time.tv_sec;
-                    dev_my_cnt++;
-                    dev_my2_was = 1;
-                    dev_my = 1;
-#ifdef DEBUGG
-                    //vtun_syslog(LOG_INFO, "data on dev & dev_my=1"); // extreme debug
-#endif
-                }
-            } else {
-               dev_my = 0;
-               shm_conn_info->lock_time = cur_time.tv_sec;
             }
         }
 
@@ -1838,10 +1796,10 @@ int lfd_linker(void)
              *
              *
              * */
-
-        sem_wait(shm_conn_info->AG_flags_sem);
+        usleep(500);
+        sem_wait(&(shm_conn_info->AG_flags_sem));
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
-        sem_post(shm_conn_info->AG_flags_sem);
+        sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
         if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE)
             len = retransmit_send(out2, mypid);
@@ -1965,9 +1923,9 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     srv = ss;
     shm_conn_info = ci;
     my_physical_channel_num = physical_channel_num;
-    sem_wait(shm_conn_info->AG_flags_sem);
+    sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
-    sem_post(shm_conn_info->AG_flags_sem);
+    sem_post(&(shm_conn_info->AG_flags_sem));
 
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
