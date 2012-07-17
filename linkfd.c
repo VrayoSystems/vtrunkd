@@ -141,6 +141,9 @@ struct time_lag time_lag_local;
 
 fd_set fdset;
 int tun_device;
+int channels[MAX_TCP_LOGICAL_CHANNELS];
+int delay_acc; // accumulated send delay
+int delay_cnt;
 
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
@@ -385,16 +388,16 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     int chan_num;
     struct my_ip *ip;
     struct tcphdr *tcp;
-    struct timeval *tv;
-    tv->tv_sec = 0;
-    tv->tv_usec = 0;
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
     sem_trywait(shm_conn_info->tun_device_sem);
     if (errno == EAGAIN) {
         return TRYWAIT_NOTIFY;
     }
-    len = select(tun_device + 1, &fdset, NULL, NULL, tv);
+    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
             sem_post(shm_conn_info->tun_device_sem);
@@ -415,7 +418,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
     vtun_syslog(LOG_DEBUG, "debug: R_MODE we have data on tun device...");
 #endif
-    // we aren't checking FD_ISSET because we did select one descriptor
+    // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
     sem_post(shm_conn_info->tun_device_sem);
     if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
@@ -426,7 +429,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
 #endif
-            sem_post(shm_conn_info->tun_device_sem);
             return CONTINUE_ERROR;
         }
     } else if (len == 0) {
@@ -438,8 +440,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #endif
     // now determine packet IP..
     ip = (struct my_ip*) (buf);
-    // TODO: handle frag?
-    //vtun_syslog(LOG_INFO, "got IP src %s", inet_ntoa(ip->ip_src));
     unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
     hash += (unsigned int) (ip->ip_dst.s_addr);
     hash += ip->ip_p;
@@ -457,7 +457,27 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     sem_post(shm_conn_info->resend_buf_sem);
 
     statb.bytes_sent_norm += len;
-    sem_post(shm_conn_info->tun_device_sem); // finished, now blocking send...
+
+
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
+#endif
+
+    struct timeval send1;
+    struct timeval send2;
+    gettimeofday(&send1, NULL );
+    if (len && proto_write(channels[chan_num], out2, len) < 0) {
+        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+        break;
+    }
+    gettimeofday(&send2, NULL );
+
+#ifdef DEBUGG
+    if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
+#endif
+    delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec));
+    delay_cnt++;
+
     return 0;
 }
 
@@ -746,8 +766,8 @@ int lfd_linker(void)
     //int weight = 1; // defined at top!!!???
 
     // weight processing in delay algo
-    int delay_acc = 0; // accumulated send delay
-    int delay_cnt = 0; //
+    delay_acc = 0; // accumulated send delay
+    delay_cnt = 0; //
     int mean_delay = 0; // mean_delay = delay_acc/delay_cnt (arithmetic(al) mean)
 
     // TCP sepconn vars
@@ -760,7 +780,6 @@ int lfd_linker(void)
     unsigned int hash;
     int chan_num = 0, chan_num_virt = 0;
     chan_amt = 1; // def above
-    int channels[MAX_TCP_LOGICAL_CHANNELS];
     channels[0] = service_channel;
     int i, j, fd0;
     int break_out = 0;
