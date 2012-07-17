@@ -375,7 +375,7 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
 }
 
 /** TODO delete code that contain this procedure from "Read data from the local device" section
- * Procedure select all file descriptors and if data available read from tun device, pack and write to net
+ * Procedure select all(only tun_device now) file descriptors and if data available read from tun device, pack and write to net
  *
  *  @return - number of error or sent len
  *      -1 - continue error (CONTINUE_ERROR)
@@ -394,7 +394,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
     sem_trywait(shm_conn_info->tun_device_sem);
-    if (errno == EAGAIN) {
+    if (errno == EAGAIN) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
     len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
@@ -425,14 +425,14 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         if (errno != EAGAIN && errno != EINTR) {
             vtun_syslog(LOG_INFO, "sem_post! dev read err");
             return BREAK_ERROR;
-        } else {
+        } else { // non fatal error
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
 #endif
             return CONTINUE_ERROR;
         }
     } else if (len == 0) {
-        vtun_syslog(LOG_INFO, "sem_post! not len");
+        vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
         return CONTINUE_ERROR;
     }
 #ifdef DEBUGG
@@ -450,35 +450,36 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         hash += tcp->dest;
     }
     chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
-
+    sem_wait(shm_conn_info->common_sem);
     (shm_conn_info->seq_counter[chan_num])++;
-    len = seqn_add_tail(chan_num, buf, &out2, len, shm_conn_info->seq_counter[chan_num], channel_mode, mypid);
-
+    unsigned long tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
+    sem_post(shm_conn_info->common_sem);
+    sem_wait(shm_conn_info->resend_buf_sem);
+    len = seqn_add_tail(chan_num, buf, &out2, len, tmp_seq_counter, channel_mode, mypid);
     sem_post(shm_conn_info->resend_buf_sem);
 
     statb.bytes_sent_norm += len;
-
 
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
 #endif
 
-    struct timeval send1;
-    struct timeval send2;
+    struct timeval send1; // need for mean_delay calculation (legacy)
+    struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
     if (len && proto_write(channels[chan_num], out2, len) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
-        break;
+        return BREAK_ERROR;
     }
     gettimeofday(&send2, NULL );
 
 #ifdef DEBUGG
     if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
 #endif
-    delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec));
-    delay_cnt++;
+    delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
+    delay_cnt++; // need for mean_delay calculation (legacy)
 
-    return 0;
+    return len;
 }
 
 int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
@@ -792,7 +793,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = (service_channel > tun_device ? service_channel : tun_device) + 1;
+    maxfd = service_channel;//(service_channel > tun_device ? service_channel : tun_device) + 1;
 
     linker_term = 0;
 

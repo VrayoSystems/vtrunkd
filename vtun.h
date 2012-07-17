@@ -327,6 +327,7 @@ struct conn_info {
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
     struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
     sem_t resend_buf_sem;
+    sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     short usecount;
     short lock_pid;	// who has locked shm
