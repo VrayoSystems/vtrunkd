@@ -772,7 +772,7 @@ int lfd_linker(void)
 
     // TCP sepconn vars
     struct sockaddr_in my_addr, cl_addr, localaddr, rmaddr;
-    int prio_s=-1, fd3=-1, prio_opt=1, laddrlen, rmaddrlen;
+    int prio_s=-1, fd_tmp=-1, prio_opt=1, laddrlen, rmaddrlen;
 
     char ipstr[INET6_ADDRSTRLEN];
     struct my_ip *ip;
@@ -873,7 +873,7 @@ int lfd_linker(void)
 #endif
             prio_opt = sizeof(cl_addr);
             alarm(CHAN_START_ACCEPT_TIMEOUT);
-            if( (fd3=accept(prio_s,(struct sockaddr *)&cl_addr,&prio_opt)) < 0 ) {
+            if( (fd_tmp=accept(prio_s,(struct sockaddr *)&cl_addr,&prio_opt)) < 0 ) {
                 vtun_syslog(LOG_ERR,"Channels socket accept error %s(%d)",
                             strerror(errno), errno);
                 break_out = 1;
@@ -882,21 +882,21 @@ int lfd_linker(void)
             alarm(0);
 
             prio_opt=1;
-            setsockopt(fd3,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
+            setsockopt(fd_tmp,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
 
             prio_opt=1;
-            setsockopt(fd3,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
+            setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
             
             rmaddrlen = sizeof(rmaddr);
 
-            if(getsockname(fd3, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
+            if(getsockname(fd_tmp, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR,"Channels socket getsockname error; retry %s(%d)",
                             strerror(errno), errno );
 
                 break_out = 1;
                 break;
             }
-            if(getpeername(fd3, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
+            if(getpeername(fd_tmp, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR,"Channels socket getpeername error; retry %s(%d)",
                             strerror(errno), errno );
                 break_out = 1;
@@ -909,7 +909,7 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-            channels[i]=fd3;
+            channels[i]=fd_tmp;
         }
         channels[0] = service_channel;
         chan_amt++;
@@ -1408,7 +1408,7 @@ int lfd_linker(void)
                             for(i=1; i<=lfd_host->TCP_CONN_AMOUNT; i++) {
                                 errno = 0;
                                 for(j=0; j<30; j++) {
-                                    if( (fd3 = socket(AF_INET,SOCK_STREAM,0))==-1 ) {
+                                    if( (fd_tmp = socket(AF_INET,SOCK_STREAM,0))==-1 ) {
                                         vtun_syslog(LOG_ERR,"Can't create CHAN socket. %s(%d) chan %d try %d",
                                                     strerror(errno), errno, i, j);
                                         linker_term = TERM_FATAL;
@@ -1417,7 +1417,7 @@ int lfd_linker(void)
 
 #ifndef W_O_SO_MARK
                                     if(lfd_host->RT_MARK != -1) {
-                                        if (setsockopt(fd3, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
+                                        if (setsockopt(fd_tmp, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
                                             vtun_syslog(LOG_ERR,"Client CHAN socket rt mark error %s(%d)",
                                                         strerror(errno), errno);
                                             break_out = 1;
@@ -1442,10 +1442,10 @@ int lfd_linker(void)
                                     //  TODO: not sure doubling is required here
 			            rmaddr.sin_port = htons(tmp_s);
 				    */
-                                    if( connect_t(fd3,(struct sockaddr *) &rmaddr, SUP_TCP_CONN_TIMEOUT_SECS) ) {
+                                    if( connect_t(fd_tmp,(struct sockaddr *) &rmaddr, SUP_TCP_CONN_TIMEOUT_SECS) ) {
                                         vtun_syslog(LOG_INFO,"Connect CHAN failed. %s(%d) chan %d try %d",
                                                     strerror(errno), errno, i, j);
-                                        close(fd3);
+                                        close(fd_tmp);
                                         usleep(500000);
                                         continue;
                                     }
@@ -1457,13 +1457,13 @@ int lfd_linker(void)
                                 }
 
                                 prio_opt=1;
-                                setsockopt(fd3,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
+                                setsockopt(fd_tmp,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
 
                                 prio_opt=1;
-                                setsockopt(fd3,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
+                                setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
 
-                                maxfd = (fd3 >= maxfd ? (fd3+1) : maxfd);
-                                channels[i] = fd3;
+                                maxfd = (fd_tmp >= maxfd ? (fd_tmp+1) : maxfd);
+                                channels[i] = fd_tmp;
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
