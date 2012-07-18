@@ -438,12 +438,12 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     } else if (len == 0) {
         sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
-        vtun_syslog(LOG_DEBUG, "debug: R_MODE we don't have data on tun device; continue norm.");
+        vtun_syslog(LOG_DEBUG, "debug: we don't have data on tun device; continue norm.");
 #endif
         return CONTINUE_ERROR; // Nothing to read, continue.
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_DEBUG, "debug: R_MODE we have data on tun device...");
+    vtun_syslog(LOG_DEBUG, "debug: we have data on tun device...");
 #endif
     // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
@@ -1802,7 +1802,13 @@ int lfd_linker(void)
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
+#ifdef DEBUGG
+            vtun_syslog(LOG_DEBUG, "debug: send time, AG_ready_flags %xx0", tmp_flags);
+#endif
         if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE)
+#ifdef DEBUGG
+            vtun_syslog(LOG_DEBUG, "debug: R_MODE");
+#endif
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
                 continue;
@@ -1926,8 +1932,10 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
+#ifdef DEBUGG
+            vtun_syslog(LOG_DEBUG, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
+#endif
     sem_post(&(shm_conn_info->AG_flags_sem));
-
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
 
