@@ -423,7 +423,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if (errno == EAGAIN) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
-    shm_conn_info->lock_time =
     len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
@@ -445,6 +444,11 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
     vtun_syslog(LOG_DEBUG, "debug: we have data on tun device...");
 #endif
+    if (FD_ISSET(tun_device, &fdset)) {
+    } else {
+        sem_post(&(shm_conn_info->tun_device_sem));
+        return CONTINUE_ERROR;
+    }
     // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
     sem_post(&(shm_conn_info->tun_device_sem));
@@ -709,6 +713,10 @@ int sem_wait_tw(sem_t *sem) {
 
 int lfd_linker(void)
 {
+#ifdef DEBUGG
+    struct timeval work_loop1;
+    struct timeval work_loop2;
+#endif
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     tun_device = lfd_host->loc_fd; // virtual tun device
     register int len, fl;
@@ -1011,6 +1019,9 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
+#ifdef DEBUGG
+        gettimeofday(&work_loop1, NULL );
+#endif
         errno = 0;
         gettimeofday(&cur_time, NULL);
 
@@ -1797,6 +1808,11 @@ int lfd_linker(void)
              *
              *
              * */
+#ifdef DEBUGG
+        gettimeofday(&work_loop2, NULL );
+        vtun_syslog(LOG_INFO, "WORK LOOP: %lu ms", (long int)(((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec))/1000));
+#endif
+
         usleep(500);
         sem_wait(&(shm_conn_info->AG_flags_sem));
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
