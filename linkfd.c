@@ -1932,6 +1932,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
+    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif
