@@ -1043,7 +1043,7 @@ int lfd_linker(void)
                  rxmt_mode_request = 1;
                  vtun_syslog(LOG_INFO, "unconditional shitch to rxmit mode - no rcv, many rtss");
             } else */
-            {
+/*            {
 
                 // now do weight "landing"
 
@@ -1067,7 +1067,7 @@ int lfd_linker(void)
 						vtun_syslog(LOG_ERR, "WARNING! overweight hit on an only normal sender left");
 					}
 				}
-			}
+			}*/
             if(rxmt_mode_request) {
                 channel_mode = MODE_RETRANSMIT;
                 shm_conn_info->normal_senders--;
@@ -1162,18 +1162,18 @@ int lfd_linker(void)
                    mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
                    last_rxmit_drop = cur_time.tv_sec;
        
-                   sem_wait_tw(write_buf_sem);
-       
+//                   sem_wait_tw(write_buf_sem);
+/*
                    if( (shm_conn_info->stats[my_physical_channel_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
                 	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_start(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
                 	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
                    }
-       
+*/
                 // now do weight "landing"
 				// actually try to fix weights for suddenly closed connections...
-				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
+//				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
        
-                   sem_post(write_buf_sem);
+//                   sem_post(write_buf_sem);
 
                    shm_conn_info->stats[my_physical_channel_num].last_tick = cur_time.tv_sec;
        
@@ -1315,7 +1315,10 @@ int lfd_linker(void)
              *
              * */
         //check all chans for being set..
-
+#ifdef DEBUGG
+        gettimeofday(&work_loop2, NULL );
+        vtun_syslog(LOG_INFO, "WORK LOOP read time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
+#endif
         for(chan_num=0; chan_num<chan_amt; chan_num++) {
             fd0 = -1;
             if(FD_ISSET(channels[chan_num], &fdset)) {
@@ -1810,7 +1813,7 @@ int lfd_linker(void)
              * */
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "WORK LOOP: %lu ms", (long int)(((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec))/1000));
+        vtun_syslog(LOG_INFO, "WORK LOOP write time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
 #endif
 
         usleep(500);
@@ -1875,7 +1878,10 @@ int lfd_linker(void)
             gettimeofday(&cur_time, NULL);
             last_action = cur_time.tv_sec;
             lfd_host->stat.comp_out += len;
-
+#ifdef DEBUGG
+        gettimeofday(&work_loop2, NULL );
+        vtun_syslog(LOG_INFO, "WORK LOOP full loop: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
+#endif
 
 
 
