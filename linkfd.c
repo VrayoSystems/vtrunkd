@@ -379,6 +379,7 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
+    int len;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -389,7 +390,7 @@ int retransmit_send(char *out2, int mypid) {
     vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
 #endif
     sem_wait(&(shm_conn_info->resend_buf_sem));
-    int len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
+    len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
     statb.bytes_sent_rx += len;
     if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
@@ -818,7 +819,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = service_channel;
+    maxfd = service_channel + 1;
 
     linker_term = 0;
 
