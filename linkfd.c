@@ -1733,91 +1733,8 @@ int lfd_linker(void)
              *
              * */
 
-        if( (channel_mode == MODE_RETRANSMIT) || (FD_ISSET(fd2, &fdset) )) {
+        if( FD_ISSET(fd2, &fdset )) {
             //vtun_syslog(LOG_INFO, "data on device...");
-
-            if(channel_mode == MODE_RETRANSMIT) {
-                // now see if anything needs to be rexmit
-                // TODO: retransmit mode has completely lost its meaningfulness;
-                //       1. it is very rare to reach
-                //       2. it still resends only the parent fd1's thingies, ignoring other channels
-                //          this is currently left not done
-                if(weight_cnt > 0) {
-                    sem_post_if(&dev_my, rd_sem);
-                    weight_cnt--;
-                    usleep(lfd_host->WEIGHT_MSEC_DELAY);
-                    continue;
-                }
-                weight_cnt = weight / lfd_host->WEIGHT_SCALE;
-
-                sem_post_if(&dev_my, rd_sem); // we're not reading anything from device (and assert dev_my == 0!)
-
-                sem_wait_tw(write_buf_sem);
-
-                incomplete_seq_len = missing_resend_buffer(0, incomplete_seq_buf, &buf_len); // TODO 0
-                chan_num = 0; // TODO 0
-
-                sem_post(write_buf_sem);
-
-                if(incomplete_seq_len) {
-                    // do the same as above, but resend from back! [just a hack!]
-                    tmp_l = htonl(incomplete_seq_buf[(incomplete_seq_len-1)]);
-                    if( memcpy(buf, &tmp_l, sizeof(unsigned long)) < 0) {
-                        vtun_syslog(LOG_ERR, "memcpy imf 2uj");
-                        continue;
-                    }
-                    *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_MODE_RXMIT);
-                    vtun_syslog(LOG_INFO,"Requesting bad frame RXMIT MODE seq_num %lu", incomplete_seq_buf[incomplete_seq_len-1]);
-                    statb.rxmit_req_rx++;
-                    if(proto_write(fd1, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-                        vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
-                        continue;
-                    }
-                }
-
-                // first, check if we're not resending too much same frame...
-                fprev = shm_conn_info->resend_buf[0].frames.rel_tail;
-                top_seq = shm_conn_info->resend_frames_buf[fprev].seq_num;
-                if(top_seq == stop_seq) {
-                    if(top_seq_rx > 1) {
-                        //vtun_syslog(LOG_INFO, "MODE_NORMAL may be triggered on path2!");
-                        top_seq_rx++;
-                        if(top_seq_rx > 3) {
-                            vtun_syslog(LOG_INFO, "Changing mode to NORMAL due to inactivity");
-                            top_seq_rx = 0;
-                            channel_mode = MODE_NORMAL;
-                            shm_conn_info->normal_senders++;
-                        }
-                        continue; // don't resend same more than twice
-                    } else {
-                        top_seq_rx++;
-                    }
-                } else {
-                    stop_seq = top_seq;
-                    top_seq_rx = 0;
-                }
-                // now, we are resending frame 1-2 time -- get it from resend buf rather than dev
-                // TODO: error detect here???
-
-
-                //len=_h_get_resend_frame(chan_num, top_seq, &out2, &sender_pid, fprev);
-
-                // TODO HERE DISABLE RXMIT MODE!!! this does not work!
-                len=get_resend_frame(chan_num, shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].seq_num, &out2, &sender_pid);
-
-//               vtun_syslog(LOG_INFO, "getting resend mode frame from top... seq %lu len %d", top_seq, len);
-                statb.bytes_sent_rx+=len;
-                // assert that we're not the sender of this frame?
-
-            } else {
-                // we are MODE_NORMAL ...
-                if(weight_cnt > 0) {
-                    sem_post_if(&dev_my, rd_sem);
-                    weight_cnt--;
-                    usleep(lfd_host->WEIGHT_MSEC_DELAY);
-                    continue;
-                }
-                weight_cnt = weight / lfd_host->WEIGHT_SCALE;
 
                 if(!dev_my) continue; // ??!!!!
                 if( (len = dev_read(fd2, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
@@ -1867,7 +1784,7 @@ int lfd_linker(void)
                 statb.bytes_sent_norm+=len;
                 sem_post_if(&dev_my, rd_sem); // finished, now blocking send...
 
-            }
+
             lfd_host->stat.byte_out += len;
             statb.bytes_sent_chan[chan_num] += len;
 
