@@ -109,6 +109,7 @@ install_scripts:
 
 
 install: vtrunkd install_config install_man install_scripts
+	mkdir /var/lock/vtrunkd
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(VAR_DIR)/run
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(STAT_DIR)
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(LOCK_DIR)

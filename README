@@ -13,6 +13,8 @@ Compilation and Installation:
 In order to compile VTun you need several software packages.
 Required packages: 
   - Good C compiler (gcc, egcs, etc)
+  - GNU Make (make)
+  - GNU libtool (libtool)
   - Lexical Analyzer (flex, lex)
   - YACC (yacc, bison, byacc)
   - Universal TUN/TAP driver 	http://vtun.sourceforge.net/tun
