@@ -383,7 +383,7 @@ int retransmit_send(char *out2, int mypid) {
     sem_wait(&(shm_conn_info->resend_buf_sem));
     struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
     sem_post(&(shm_conn_info->resend_buf_sem));
-    if (end_sent_frame.sender_pid != mypid) { // if this physical channel hasn't send last packet ??? TODO: but we can resent this packet, if can generate much duplicate trafic
+    if ((end_sent_frame.sender_pid == mypid) | (end_sent_frame.seq_num == 0)) { // if this physical channel hasn't send last packet ??? TODO: but we can resent this packet, if can generate much duplicate trafic
         return LASTPACKETMY_NOTFY;
     }
 #ifdef DEBUGG
@@ -500,11 +500,11 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     }
     gettimeofday(&send2, NULL );
 
-#ifdef DEBUGG
-    if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
-#endif
     delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
     delay_cnt++; // need for mean_delay calculation (legacy)
+#ifdef DEBUGG
+    if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u ms", (delay_acc/delay_cnt));
+#endif
 
     return len;
 }
