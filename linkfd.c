@@ -711,7 +711,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = (fd1 > fd2 ? fd1 : fd2) + 1;
+    maxfd = fd1 +1;//(fd1 > fd2 ? fd1 : fd2) + 1;
 
     linker_term = 0;
 
@@ -1114,13 +1114,13 @@ int lfd_linker(void)
 
         FD_ZERO(&fdset);
 
-        FD_SET(fd2, &fdset);
+//        FD_SET(fd2, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
 
-        tv.tv_sec  = timer_resolution.tv_sec;
-        tv.tv_usec = timer_resolution.tv_usec;
+        tv.tv_sec  = 0;//timer_resolution.tv_sec;
+        tv.tv_usec = 0;//timer_resolution.tv_usec;
 
         if( (len = select(maxfd, &fdset, NULL, NULL, &tv)) < 0 ) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
@@ -1732,11 +1732,32 @@ int lfd_linker(void)
              *
              *
              * */
-
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        FD_ZERO(&fdset);
+        FD_SET(fd2, &fdset);
+        len = select(fd2 + 1, &fdset, NULL, NULL, &tv);
+        if (len < 0) {
+                if (errno != EAGAIN && errno != EINTR) {
+           //         sem_post(&(shm_conn_info->tun_device_sem));
+                    vtun_syslog(LOG_INFO, "select error; exit");
+                    break;
+                } else {
+          //          sem_post(&(shm_conn_info->tun_device_sem));
+                    vtun_syslog(LOG_INFO, "select error; continue norm");
+                    continue;
+                }
+            } else if (len == 0) {
+   //             sem_post(&(shm_conn_info->tun_device_sem));
+        #ifdef DEBUGG
+                vtun_syslog(LOG_DEBUG, "debug: we don't have data on tun device; continue norm.");
+        #endif
+                continue; // Nothing to read, continue.
+            }
         if( FD_ISSET(fd2, &fdset )) {
             //vtun_syslog(LOG_INFO, "data on device...");
 
-                if(!dev_my) continue; // ??!!!!
+             //   if(!dev_my) continue; // ??!!!!
                 if( (len = dev_read(fd2, buf, VTUN_FRAME_SIZE-11)) < 0 ) { // 10 bytes for seq number (long? = 4 bytes)
                     if( errno != EAGAIN && errno != EINTR ) {
                         vtun_syslog(LOG_INFO, "sem_post! eagain dev read err");
