@@ -394,7 +394,9 @@ int retransmit_send(char *out2, int mypid) {
     sem_post(&(shm_conn_info->resend_buf_sem));
     statb.bytes_sent_rx += len;
     if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", end_sent_frame.chan_num, strerror(errno), errno);
+#endif
         return CONTINUE_ERROR;
     }
     return len;
@@ -437,7 +439,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             return BREAK_ERROR;
         } else {
             sem_post(&(shm_conn_info->tun_device_sem));
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "select error; continue norm");
+#endif
             return CONTINUE_ERROR;
         }
     } else if (len == 0) {
@@ -469,7 +473,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             return CONTINUE_ERROR;
         }
     } else if (len == 0) {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
+#endif
         return CONTINUE_ERROR;
     }
 #ifdef DEBUGG
@@ -1025,6 +1031,7 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
+        usleep(100); // todo need to tune
 #ifdef DEBUGG
         gettimeofday(&work_loop1, NULL );
 #endif
@@ -1818,7 +1825,6 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO, "WORK LOOP write time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
 #endif
 
-        usleep(500);
         sem_wait(&(shm_conn_info->AG_flags_sem));
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1847,7 +1853,9 @@ int lfd_linker(void)
                 }
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
+#ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: AG_MODE");
+#endif
             len = select_devread_send(buf, out2, mypid);
             if (len == BREAK_ERROR) {
                 break;
