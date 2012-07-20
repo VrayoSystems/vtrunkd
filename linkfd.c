@@ -417,6 +417,12 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
+    if (!FD_ISSET(tun_device, &fdset)) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: Nothing to read");
+#endif
+        return TRYWAIT_NOTIFY;
+    }
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
     sem_trywait(&(shm_conn_info->tun_device_sem));
@@ -437,7 +443,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     } else if (len == 0) {
         sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
-        vtun_syslog(LOG_DEBUG, "debug: we don't have data on tun device; continue norm.");
+        vtun_syslog(LOG_INFO, "debug: we don't have data on tun device; continue norm.");
 #endif
         return CONTINUE_ERROR; // Nothing to read, continue.
     }
@@ -467,7 +473,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         return CONTINUE_ERROR;
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_DEBUG, "debug: R_MODE we have read data from tun device and going to send it through net");
+    vtun_syslog(LOG_INFO, "debug: R_MODE we have read data from tun device and going to send it through net");
 #endif
     // now determine packet IP..
     ip = (struct my_ip*) (buf);
@@ -827,7 +833,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = service_channel;
+    maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
     linker_term = 0;
 
@@ -1232,7 +1238,7 @@ int lfd_linker(void)
 
 
         FD_ZERO(&fdset);
-
+        FD_SET(tun_device, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
@@ -1460,7 +1466,7 @@ int lfd_linker(void)
                                 prio_opt=1;
                                 setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
 
-                                maxfd = (fd_tmp >= maxfd ? (fd_tmp) : maxfd);
+                                maxfd = (fd_tmp > maxfd ? (fd_tmp) : maxfd);
                                 channels[i] = fd_tmp;
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
@@ -1798,10 +1804,6 @@ int lfd_linker(void)
                 //}
             } // if fd0>0
         } // for chans..
-        if( (!FD_ISSET(tun_device, &fdset)) && (channel_mode != MODE_RETRANSMIT) ) {
-            //vtun_syslog(LOG_INFO, "sem_post! tun_device not set");
-            sem_post_if(&dev_my, tun_device_sem);
-        }
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
