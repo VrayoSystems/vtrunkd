@@ -421,7 +421,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Nothing to read");
 #endif
-        return TRYWAIT_NOTIFY;
+        return CONTINUE_ERROR;
     }
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
@@ -429,7 +429,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if (errno == EAGAIN) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
-    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
+/*    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
             sem_post(&(shm_conn_info->tun_device_sem));
@@ -454,7 +454,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     } else {
         sem_post(&(shm_conn_info->tun_device_sem));
         return CONTINUE_ERROR;
-    }
+    }*/
     // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
     sem_post(&(shm_conn_info->tun_device_sem));
