@@ -827,7 +827,7 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
 
-    maxfd = service_channel + 1;
+    maxfd = service_channel;
 
     linker_term = 0;
 
@@ -961,7 +961,7 @@ int lfd_linker(void)
         for(; i>=0; i--) {
             if(maxfd<channels[i]) maxfd = channels[i];
         }
-        maxfd++;
+        //maxfd++;
 
         // TODO: now close prio_s ???
 
@@ -1240,7 +1240,7 @@ int lfd_linker(void)
         tv.tv_sec  = timer_resolution.tv_sec;
         tv.tv_usec = timer_resolution.tv_usec;
 
-        if( (len = select(maxfd, &fdset, NULL, NULL, &tv)) < 0 ) { // selecting from multiple processes does actually work...
+        if( (len = select(maxfd+1, &fdset, NULL, NULL, &tv)) < 0 ) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
             if( errno != EAGAIN && errno != EINTR ) {
                 vtun_syslog(LOG_INFO, "eagain select err; exit");
@@ -1460,7 +1460,7 @@ int lfd_linker(void)
                                 prio_opt=1;
                                 setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
 
-                                maxfd = (fd_tmp >= maxfd ? (fd_tmp+1) : maxfd);
+                                maxfd = (fd_tmp >= maxfd ? (fd_tmp) : maxfd);
                                 channels[i] = fd_tmp;
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
