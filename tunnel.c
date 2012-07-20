@@ -540,10 +540,12 @@ int tunnel(struct vtun_host *host, int srv)
                     // init all semaphores, etc...
                     vtun_syslog(LOG_INFO, "init vars sem %s", shm_conn_info[connid].devname);
 
-                    sem_init(&shm_conn_info[connid].fd_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].tun_device_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].write_buf_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].resend_buf_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].stats_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].AG_flags_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].common_sem, 1, 1);
 
                     for(i=0; i<MAX_TCP_LOGICAL_CHANNELS;i++) {
                          shm_conn_info[connid].seq_counter[i] = SEQ_START_VAL; // start with 10!! 0-9 are reserved as flags
@@ -724,10 +726,10 @@ int tunnel(struct vtun_host *host, int srv)
           if(shm_conn_info[connid].usecount <= 0) { // AND we're going to quit the process...?
                // if we do "free" here, we need to kill fd server, free the local fd tun device - otherwise it will try shm_find+fd_read and fail
                // now check the lock.. if left locked - release!
-               if(sem_trywait(&(shm_conn_info[connid].fd_sem)) == -1) {
+               if(sem_trywait(&(shm_conn_info[connid].tun_device_sem)) == -1) {
                     vtun_syslog(LOG_ERR,"ASSERT: usecount == 0 && sem left unclosed!");
                } else {
-                    sem_post(&(shm_conn_info[connid].fd_sem));
+                    sem_post(&(shm_conn_info[connid].tun_device_sem));
                }
           }
           if (shm_conn_info[connid].usecount < 0) {

@@ -317,7 +317,7 @@ struct conn_stats {
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
-    sem_t fd_sem;
+    sem_t tun_device_sem;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
@@ -327,17 +327,19 @@ struct conn_info {
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
     struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
     sem_t resend_buf_sem;
+    sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
-    struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS];
+    struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     //int broken_cnt;
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
+    sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
     uint16_t AG_ready_flags; // contain flags for all physical channels 1 - retransmit mode, 0 - ready to aggregation
     uint16_t channels_mask; // 1 - channel is working 0 - channel is dead
 };
