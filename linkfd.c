@@ -1038,59 +1038,6 @@ int lfd_linker(void)
         errno = 0;
         gettimeofday(&cur_time, NULL);
 
-        if((channel_mode == MODE_NORMAL) && (rxmt_mode_request > 0) && (  ((cur_time.tv_sec - last_pen_sec) > 1) || ((cur_time.tv_usec - last_pen_usec) > lfd_host->PEN_USEC_IMMUNE) )) {
-            rxmt_mode_request = 0;
-            last_pen_usec = cur_time.tv_usec;
-            last_pen_sec = cur_time.tv_sec;
-            //if(retransmit_count == 0) last_rx_rq = cur_time.tv_sec;
-            /*
-            if(net_counter == net_stat) retransmit_count++;
-            else {
-                 retransmit_count = 0;
-                 net_stat = net_counter;
-            }
-
-            if(retransmit_count >= 5 && (cur_time.tv_sec > (last_rx_rq+1))) {
-                 // just change mode unconditionally
-                 retransmit_count = 0;
-                 rxmt_mode_request = 1;
-                 vtun_syslog(LOG_INFO, "unconditional shitch to rxmit mode - no rcv, many rtss");
-            } else */
-/*            {
-
-                // now do weight "landing"
-
-                sem_wait_tw(write_buf_sem);
-
-				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
-					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_physical_channel_num);
-				}
-				// weight landing
-				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
-
-                sem_post(write_buf_sem);
-
-				if (weight >= lfd_host->MAX_WEIGHT_NORM) {
-					if (shm_conn_info->normal_senders > 1) {
-						//rxmt_mode_request = 1;
-						//vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight");
-						vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight (but RXM MODE disabled)");
-						shm_conn_info->rxmt_mode_pid = getpid();
-					} else {
-						vtun_syslog(LOG_ERR, "WARNING! overweight hit on an only normal sender left");
-					}
-				}
-			}*/
-            if(rxmt_mode_request) {
-                channel_mode = MODE_RETRANSMIT;
-                shm_conn_info->normal_senders--;
-            }
-        } else if ( (channel_mode == MODE_RETRANSMIT) && (rxmt_mode_request == -1)) { // is this ever used?
-            shm_conn_info->normal_senders++;
-            channel_mode = MODE_NORMAL;
-        }
-        rxmt_mode_request = 0;
-
           // do an expensive thing
           timersub(&cur_time, &last_timing, &tv_tmp);
 
@@ -1145,7 +1092,6 @@ int lfd_linker(void)
                    dev_my_cnt = 0;
                    last_tick = cur_time.tv_sec;
                    shm_conn_info->alive = cur_time.tv_sec;
-                   rxmt_mode_request = 1; // ??? TODO: do the WTF here instead of just requesting
                    delay_acc = 0;
                    delay_cnt = 0;
        
