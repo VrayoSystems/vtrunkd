@@ -349,6 +349,13 @@ struct resent_chk {
     int chan_num;
 };
 
+#define MAX_NUM_RESEND 1 //max number of resend in retransmit mode
+
+struct last_sent_packet {
+    unsigned long seq_num;
+    unsigned long num_resend; //how many time resend
+};
+
 #define SEM_KEY 567000
 #define FD_SEM 0
 #define WB_SEM 1

@@ -140,6 +140,8 @@ struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval cur_time; // current time source
 
+struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
+
 fd_set fdset;
 int tun_device;
 int channels[MAX_TCP_LOGICAL_CHANNELS];
@@ -383,12 +385,22 @@ int retransmit_send(char *out2, int mypid) {
     sem_wait(&(shm_conn_info->resend_buf_sem));
     struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
     sem_post(&(shm_conn_info->resend_buf_sem));
-    if ((end_sent_frame.sender_pid == mypid) | (end_sent_frame.seq_num == 0)) { // if this physical channel hasn't send last packet ??? TODO: but we can resent this packet, if can generate much duplicate trafic
-        return LASTPACKETMY_NOTFY;
+    if ((end_sent_frame.sender_pid == mypid) | (end_sent_frame.seq_num == 0)) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: last packet my notify");
+#endif
+        return LASTPACKETMY_NOTIFY;
+    } else if (end_sent_frame.seq_num == last_sent_packet_num[end_sent_frame.chan_num].seq_num) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: resend limit notify");
+#endif
+        return LASTPACKETMY_NOTIFY;
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d", end_sent_frame.chan_num, end_sent_frame.seq_num, len);
+    last_sent_packet_num[end_sent_frame.chan_num].num_resend++;
+    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d number of resend - %lu", end_sent_frame.chan_num, end_sent_frame.seq_num, len, last_sent_packet_num[end_sent_frame.chan_num].num_resend);
 #endif
+    last_sent_packet_num[end_sent_frame.chan_num].seq_num = end_sent_frame.seq_num;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -402,7 +414,7 @@ int retransmit_send(char *out2, int mypid) {
     return len;
 }
 
-/** TODO delete code that contain this procedure from "Read data from the local device" section
+/**
  * Procedure select all(only tun_device now) file descriptors and if data available read from tun device, pack and write to net
  *
  *  @return - number of error or sent len
@@ -838,7 +850,7 @@ int lfd_linker(void)
 
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
-
+    memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
     linker_term = 0;
@@ -1785,7 +1797,7 @@ int lfd_linker(void)
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
                 continue;
-            } else if (len == LASTPACKETMY_NOTFY) { // if this physical channel had sent last packet
+            } else if (len == LASTPACKETMY_NOTIFY) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: R_MODE main send");
 #endif
