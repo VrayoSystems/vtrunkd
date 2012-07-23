@@ -55,14 +55,32 @@
 #include "vtun.h"
 #include "lib.h"
 
+void ggg()
+{
+    int d = 1 + 1;
+}
 int tcp_write(int fd, char *buf, int len)
 {
      register char *ptr;
+
+     if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
+         unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
+         if (flag_var == 16390) {
+             ggg();
+         }
+     }
 
      ptr = buf - sizeof(short);
 
      *((unsigned short *)ptr) = htons(len); 
      len  = (len & VTUN_FSIZE_MASK) + sizeof(short);
+
+    if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
+        unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
+        if (flag_var == 16390) {
+            ggg();
+        }
+    }
 
      return write_n(fd, ptr, len);
 }
@@ -72,7 +90,7 @@ int tcp_read(int fd, char *buf)
      unsigned short len, flen;
      register int rlen;     
 
-     /* Read frame size */
+     /* Rad frame size */
      if( (rlen = read_n(fd, (char *)&len, sizeof(short)) ) <= 0) {
           vtun_syslog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove!
           return rlen;
