@@ -98,7 +98,7 @@ char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
 int acnt = 0; // assert variable
-short int chan_amt = 0; // ns pollution
+short int chan_amt = 0; // Number of logical channels already established(created)
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -1823,6 +1823,12 @@ int lfd_linker(void)
                 //}
             } // if fd0>0
         } // for chans..
+
+        // if we could not create logical channels yet. We can't send data from tun to net. Hope to create later...
+        if (chan_amt <= 1) { // only service channel available
+            vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
+            continue;
+        }
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
