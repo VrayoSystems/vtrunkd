@@ -1046,6 +1046,7 @@ int lfd_linker(void)
         usleep(100); // todo need to tune
 #ifdef DEBUGG
         gettimeofday(&work_loop1, NULL );
+        vtun_syslog(LOG_INFO, "WORK LOOP start");
 #endif
         errno = 0;
         gettimeofday(&cur_time, NULL);
