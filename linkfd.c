@@ -471,7 +471,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         sem_post(&(shm_conn_info->tun_device_sem));
         return CONTINUE_ERROR;
     }
-    // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
+    // we aren't checking FD_ISSET because we did select one descriptor
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
     sem_post(&(shm_conn_info->tun_device_sem));
     if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
@@ -1043,7 +1043,7 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
-        usleep(100); // todo need to tune
+        usleep(100); // todo need to tune; Is it necessary? I don't know
 #ifdef DEBUGG
         gettimeofday(&work_loop1, NULL );
         vtun_syslog(LOG_INFO, "WORK LOOP start");
@@ -1128,31 +1128,6 @@ int lfd_linker(void)
                            }
                       }
        
-
-               // TODO:!!!!!!!!!!!!!!!!!!! move last_rxmit_drop to shm
-               if(cur_time.tv_sec - last_rxmit_drop >= lfd_host->RXMIT_CNT_DROP_PERIOD) {
-                   mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
-                   last_rxmit_drop = cur_time.tv_sec;
-       
-//                   sem_wait_tw(write_buf_sem);
-/*
-                   if( (shm_conn_info->stats[my_physical_channel_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
-                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_start(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
-                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
-                   }
-*/
-                // now do weight "landing"
-				// actually try to fix weights for suddenly closed connections...
-//				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
-       
-//                   sem_post(write_buf_sem);
-
-                   shm_conn_info->stats[my_physical_channel_num].last_tick = cur_time.tv_sec;
-       
-       
-               }
-               
-               
                // now check ALL connections
                for(i=0; i<chan_amt; i++) {
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
