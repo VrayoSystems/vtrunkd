@@ -1063,10 +1063,8 @@ int lfd_linker(void)
             shm_conn_info->stats[my_physical_channel_num].down_current_speed = shm_conn_info->stats[my_physical_channel_num].down_data_len_amt
                     / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
             shm_conn_info->stats[my_physical_channel_num].down_data_len_amt = 0;
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "upload speed %lu kb/s", shm_conn_info->stats[my_physical_channel_num].up_current_speed);
-            vtun_syslog(LOG_INFO, "download speed %lu kb/s", shm_conn_info->stats[my_physical_channel_num].down_current_speed);
-#endif
+            vtun_syslog(LOG_INFO, "upload speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].up_current_speed, my_physical_channel_num);
+            vtun_syslog(LOG_INFO, "download speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].down_current_speed, my_physical_channel_num);
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
