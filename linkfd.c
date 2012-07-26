@@ -145,6 +145,7 @@ struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initi
 fd_set fdset;
 int tun_device;
 int channels[MAX_TCP_LOGICAL_CHANNELS];
+int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
 int delay_cnt;
 
@@ -961,7 +962,7 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-
+            channel_ports[i] = rmaddr.sin_port;
             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
             if(inet_addr(lfd_host->sopt.raddr) != rmaddr.sin_addr.s_addr) {
                 vtun_syslog(LOG_ERR,"Socket IP addresses do not match: %s != %s", lfd_host->sopt.raddr, ipstr);
@@ -1427,6 +1428,13 @@ int lfd_linker(void)
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
+                                if (getsockname(fd_tmp, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
+                                channel_ports[i] = rmaddr.sin_port;
+                                vtun_syslog(LOG_INFO," client logical channel - %i port - %i", i, channel_ports[i]);
                             }
                             if(i<lfd_host->TCP_CONN_AMOUNT) {
                                 vtun_syslog(LOG_ERR,"Could not connect all requested tuns; exit");
