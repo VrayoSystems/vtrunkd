@@ -962,7 +962,8 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-            channel_ports[i] = rmaddr.sin_port;
+            channel_ports[i] = ntohs(rmaddr.sin_port);
+            vtun_syslog(LOG_ERR, "Socket peer IP port: %i", channel_ports[i]);
             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
             if(inet_addr(lfd_host->sopt.raddr) != rmaddr.sin_addr.s_addr) {
                 vtun_syslog(LOG_ERR,"Socket IP addresses do not match: %s != %s", lfd_host->sopt.raddr, ipstr);
