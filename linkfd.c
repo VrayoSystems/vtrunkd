@@ -1429,12 +1429,12 @@ int lfd_linker(void)
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
-                                if (getsockname(fd_tmp, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+                                if (getsockname(fd_tmp, (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
-                                channel_ports[i] = rmaddr.sin_port;
+                                channel_ports[i] = ntohs(localaddr.sin_port);
                                 vtun_syslog(LOG_INFO," client logical channel - %i port - %i", i, channel_ports[i]);
                             }
                             if(i<lfd_host->TCP_CONN_AMOUNT) {
