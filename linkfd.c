@@ -962,8 +962,6 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-            channel_ports[i] = ntohs(rmaddr.sin_port);
-            vtun_syslog(LOG_ERR, "Socket peer IP port: %i", channel_ports[i]);
             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
             if(inet_addr(lfd_host->sopt.raddr) != rmaddr.sin_addr.s_addr) {
                 vtun_syslog(LOG_ERR,"Socket IP addresses do not match: %s != %s", lfd_host->sopt.raddr, ipstr);
@@ -974,7 +972,15 @@ int lfd_linker(void)
         }
         channels[0] = service_channel;
         chan_amt++;
-
+        for (i = 0; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
+            if (getpeername(channels[i], (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                linker_term = TERM_NONFATAL;
+                break;
+            }
+            channel_ports[i] = ntohs(rmaddr.sin_port);
+            vtun_syslog(LOG_ERR, "Socket peer IP channel - %i port - %i", i, channel_ports[i]);
+        }
         if(break_out) {
             close(prio_s);
             for(; i>=0; i--) {
@@ -1429,13 +1435,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
-                                if (getsockname(fd_tmp, (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
-                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
-                                    linker_term = TERM_NONFATAL;
-                                    break;
-                                }
-                                channel_ports[i] = ntohs(localaddr.sin_port);
-                                vtun_syslog(LOG_INFO," client logical channel - %i port - %i", i, channel_ports[i]);
+
                             }
                             if(i<lfd_host->TCP_CONN_AMOUNT) {
                                 vtun_syslog(LOG_ERR,"Could not connect all requested tuns; exit");
@@ -1444,6 +1444,21 @@ int lfd_linker(void)
                             }
                             chan_amt = i;
                             channels[0] = service_channel;
+                            //double call for getcockname beacause frst call returned ZERO in addr
+                            if (getsockname(channels[i], (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
+                                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                linker_term = TERM_NONFATAL;
+                                break;
+                            }
+                            for (i = 0; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
+                                if (getsockname(channels[i], (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
+                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
+                                channel_ports[i] = ntohs(localaddr.sin_port);
+                                vtun_syslog(LOG_INFO, " client logical channel - %i port - %i", i, channel_ports[i]);
+                            }
                             vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", chan_amt);
                             continue;
                         } else if(flag_var == FRAME_LAST_WRITTEN_SEQ) {
