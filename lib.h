@@ -70,12 +70,19 @@ void vtun_syslog (int priority, char *format, ...);
 /* Read exactly len bytes (Signal safe)*/
 static inline int read_n(int fd, char *buf, int len)
 {
-	register int t=0, w;
+    register int t = 0, w, ecount = 0;
 
 	while (!__io_canceled && len > 0) {
 	  if( (w = read(fd, buf, len)) < 0 ){
-	     if( errno == EINTR || errno == EAGAIN )
- 	        continue;
+            if (errno == EAGAIN) {
+                continue;
+            } else if (errno == EINTR) {
+                ecount++;
+                if (ecount >= 2) {
+                    return -1;
+                }
+                continue;
+            }
 	     return -1;
 	  }
 	  if( !w )
