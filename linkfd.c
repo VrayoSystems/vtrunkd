@@ -972,7 +972,7 @@ int lfd_linker(void)
         }
         channels[0] = service_channel;
         chan_amt++;
-        for (i = 0; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
+        for (i = 0; i <= chan_amt; i++) {
             if (getpeername(channels[i], (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                 linker_term = TERM_NONFATAL;
@@ -1450,7 +1450,7 @@ int lfd_linker(void)
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
-                            for (i = 0; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
+                            for (i = 0; i <= chan_amt; i++) {
                                 if (getsockname(channels[i], (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
