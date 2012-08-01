@@ -19,7 +19,7 @@
 #   Makefile.in,v 1.6.2.4.2.1 2006/11/16 04:03:44 mtbishop Exp
 #  
 CC = @CC@
-CFLAGS = @CFLAGS@ @CPPFLAGS@ 
+CFLAGS = @CFLAGS@ @CPPFLAGS@ -Wall
 LDFLAGS = @LIBS@
 
 YACC = @YACC@
