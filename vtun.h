@@ -298,6 +298,13 @@ struct time_lag {
 	int pid; // our pid
 };
 
+struct speed_chan_data_struct {
+    uint32_t up_current_speed; // current physical channel's speed(kbyte/s) = up_data_len_amt / time
+    uint32_t up_data_len_amt; // in byte
+    uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
+    uint32_t down_data_len_amt; // in byte
+};
+
 /**
  * global structure
  */
@@ -310,11 +317,9 @@ struct conn_stats {
     // and get from another side
     uint32_t time_lag_remote;// calculated here
     uint32_t time_lag; // get from another side
-    uint32_t up_current_speed; // current physical channel's speed(kbyte/s) = up_data_len_amt / time
-    uint32_t up_data_len_amt; // in byte
-    uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
-    uint32_t down_data_len_amt; // in byte
+    struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
 };
+
 
 
 struct conn_info {

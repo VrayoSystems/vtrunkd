@@ -1065,14 +1065,18 @@ int lfd_linker(void)
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
             // todo test for correct speed calculation
-            shm_conn_info->stats[my_physical_channel_num].up_current_speed = shm_conn_info->stats[my_physical_channel_num].up_data_len_amt
-                    / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
-            shm_conn_info->stats[my_physical_channel_num].up_data_len_amt = 0;
-            shm_conn_info->stats[my_physical_channel_num].down_current_speed = shm_conn_info->stats[my_physical_channel_num].down_data_len_amt
-                    / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
-            shm_conn_info->stats[my_physical_channel_num].down_data_len_amt = 0;
-            vtun_syslog(LOG_INFO, "upload speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].up_current_speed, my_physical_channel_num);
-            vtun_syslog(LOG_INFO, "download speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].down_current_speed, my_physical_channel_num);
+            for (int i = 0; i < chan_amt; i++) {
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt
+                        / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt = 0;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt = 0;
+                vtun_syslog(LOG_INFO, "upload speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed,
+                        my_physical_channel_num);
+                vtun_syslog(LOG_INFO, "download speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed,
+                        my_physical_channel_num);
+            }
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -1109,7 +1113,7 @@ int lfd_linker(void)
 						vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit");//?????
 						linker_term = TERM_NONFATAL;//?????
 					}
-					shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += sizeof(struct time_lag_packet) + sizeof(short);
+					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += sizeof(struct time_lag_packet) + sizeof(short);
 				}
 			}
 
@@ -1144,7 +1148,7 @@ int lfd_linker(void)
                                    vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                                    linker_term = TERM_NONFATAL;
                                }
-                               shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
+                               shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
                            }
                       }
        
@@ -1178,7 +1182,7 @@ int lfd_linker(void)
                                    err=1;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
                                }
-                               shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
+                               shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
                            }
                            if(err) {
                                err = 0;
@@ -1262,7 +1266,7 @@ int lfd_linker(void)
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  break;
                              }
-                             shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += sizeof(short);
+                             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += sizeof(short);
                          }
                          last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
                     }
@@ -1315,7 +1319,7 @@ int lfd_linker(void)
                     proto_err_cnt++;
                     continue;
                 }
-                shm_conn_info->stats[my_physical_channel_num].down_data_len_amt += len;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 proto_err_cnt = 0;
 
                 /* Handle frame flags */
@@ -1527,7 +1531,7 @@ int lfd_linker(void)
                             vtun_syslog(LOG_ERR, "ERROR: cannot resend frame: write to chan %d", 0);
                         }
                         gettimeofday(&send2, NULL);
-                        shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (len + sizeof(short));
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (len + sizeof(short));
 #ifdef DEBUGG
                         if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
 #endif
@@ -1549,7 +1553,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL;
                             break;
                         }
-                        shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(short));
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(short));
                         continue;
                     }
                     if( fl==VTUN_ECHO_REP ) {
@@ -1716,7 +1720,7 @@ int lfd_linker(void)
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
                         }
-                        shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
                     }
@@ -1747,7 +1751,7 @@ int lfd_linker(void)
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
-                                shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
+                                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
                             }
                         } else {
                             if(buf_len > lfd_host->MAX_REORDER) {
@@ -1779,7 +1783,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL;
                             break;
                         }
-                        shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (sizeof(unsigned long) + sizeof(flag_var) + sizeof(short));
                         succ_flag = -100; // drop flag??
                         continue;
                     }
@@ -1835,10 +1839,10 @@ int lfd_linker(void)
                 } else if (len == TRYWAIT_NOTIFY) {
                     continue; //todo need to check resend_buf for new packet again ????
                 } else {
-                    shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (len + sizeof(short)); // for speed calculation
+                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (len + sizeof(short)); // for speed calculation
                 }
             } else {
-                shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (len + sizeof(short)); // for speed calculation
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (len + sizeof(short)); // for speed calculation
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
 #ifdef DEBUGG
@@ -1852,7 +1856,7 @@ int lfd_linker(void)
             } else if (len == TRYWAIT_NOTIFY) {
                 continue; //todo need to check resend_buf for new packet
             } else {
-                shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += (len + sizeof(short)); // for speed calculation
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += (len + sizeof(short)); // for speed calculation
             }
         }
             //Check time interval and ping if need.
@@ -1872,7 +1876,7 @@ int lfd_linker(void)
 						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
 						break;
 					}
-					shm_conn_info->stats[my_physical_channel_num].up_data_len_amt += sizeof(short);
+					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += sizeof(short);
 				}
 			}
 
