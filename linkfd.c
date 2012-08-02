@@ -1072,10 +1072,10 @@ int lfd_linker(void)
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt = 0;
-                vtun_syslog(LOG_INFO, "upload speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed,
-                        my_physical_channel_num);
-                vtun_syslog(LOG_INFO, "download speed %lu kb/s channel %d", shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed,
-                        my_physical_channel_num);
+                vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
+                vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
             }
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
@@ -1319,13 +1319,13 @@ int lfd_linker(void)
                     proto_err_cnt++;
                     continue;
                 }
-                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 proto_err_cnt = 0;
 
                 /* Handle frame flags */
 
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
 
