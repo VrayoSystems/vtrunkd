@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <errno.h>
+#include <unistd.h>
 
 #ifdef HAVE_LIBUTIL_H
 #include <libutil.h>
