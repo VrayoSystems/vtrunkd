@@ -413,6 +413,7 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         return CONTINUE_ERROR;
     }
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[end_sent_frame.chan_num].up_data_len_amt += len;
     return len;
 }
 
@@ -536,6 +537,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u ms", (delay_acc/delay_cnt));
 #endif
 
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].up_data_len_amt += len;
     return len;
 }
 
@@ -1836,11 +1838,7 @@ int lfd_linker(void)
                     continue;
                 } else if (len == TRYWAIT_NOTIFY) {
                     continue; //todo need to check resend_buf for new packet again ????
-                } else {
-                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len; // for speed calculation
                 }
-            } else {
-                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len; // for speed calculation
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
 #ifdef DEBUGG
@@ -1853,8 +1851,6 @@ int lfd_linker(void)
                 continue;
             } else if (len == TRYWAIT_NOTIFY) {
                 continue; //todo need to check resend_buf for new packet
-            } else {
-                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len; // for speed calculation
             }
         }
             //Check time interval and ping if need.
