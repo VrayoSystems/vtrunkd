@@ -777,28 +777,17 @@ int lfd_linker(void)
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
     long int last_net_read = 0; // for timeout;
 
-    // rxmit mode vars
-    char top_seq_rx = 0; // rxmit mode
-    unsigned long top_seq = 0, stop_seq = 0; // rxmit mode
-    int mode_norm = 0; // rxmit mode
-    //unsigned int net_counter = 1, net_stat = 0;
-    //long int last_rx_rq = 0;
-
     struct resent_chk sq_rq_buf[RESENT_MEM]; // for check_sent
     int sq_rq_pos = 0; // for check_sent
-
 
     unsigned short flag_var; // packet struct part
 
     char succ_flag; // return flag
 
-
-    int dev_my2_was = 0; // fair device lock shuffling variable
     int dev_my_cnt = 0; // statistic and watchdog
     
     // timing
     long int last_tick = 0; // important ticking
-    long int last_rxmit_drop = 0; // used for weight time-based processing
     struct timeval last_timing = {0, 0};
     struct timeval timer_resolution = {0, 0};
     struct timeval max_latency = {0, 0};
@@ -1334,21 +1323,8 @@ int lfd_linker(void)
 
                         flag_var = ntohs(*((unsigned short *)(buf+(sizeof(unsigned long)))));
                         if(flag_var == FRAME_MODE_NORM) {
-                            if(channel_mode == MODE_RETRANSMIT) {
-                                vtun_syslog(LOG_INFO, "FRAME_MODE_NORM rcvd: we are ok mode_norm cnt: %d", mode_norm);
-                                mode_norm++;
-                                if(mode_norm >= MAX_RETRANSMIT_RMODE) {
-                                    mode_norm = 0;
-                                    shm_conn_info->normal_senders++;
-                                    vtun_syslog(LOG_INFO, "switching to mode_normal");
-                                    statb.mode_switches++;
-                                    channel_mode = MODE_NORMAL;
-                                    shm_conn_info->stats[my_physical_channel_num].weight -= (lfd_host->WEIGHT_SMOOTH_DIV * (lfd_host->START_WEIGHT - shm_conn_info->stats[my_physical_channel_num].weight)) / lfd_host->WEIGHT_SCALE;
-                                }
-                            } else {
-                                vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
-                                continue;
-                            }
+                            vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
+                            continue;
                         } else if (flag_var == FRAME_MODE_RXMIT) {
                             // okay
                         } else if (flag_var == FRAME_JUST_STARTED) {
@@ -1884,6 +1860,10 @@ int lfd_linker(void)
 
     }
 
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    shm_conn_info->channels_mask &= ~(1 << my_physical_channel_num); // del channel num from binary mask
+    sem_post(&(shm_conn_info->AG_flags_sem));
+
     if(dev_my) {
         // ASSERT!! we have not removet lock
         vtun_syslog(LOG_INFO, "ASSERT FAILED! we've not removed lock!. FIXED.");
@@ -1948,7 +1928,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
-    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
+    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num); // start with disable AG mode
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif
