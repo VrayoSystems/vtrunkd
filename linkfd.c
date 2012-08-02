@@ -838,6 +838,7 @@ int lfd_linker(void)
         return 0;
     }
 
+    memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
@@ -1053,7 +1054,7 @@ int lfd_linker(void)
 
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
-            // todo test for correct speed calculation
+            // todo test for correct speed(kb/s) calculation
             for (int i = 0; i < chan_amt; i++) {
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt
                         / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
