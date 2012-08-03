@@ -1074,7 +1074,7 @@ int lfd_linker(void)
                         - shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq) / tv_tmp.tv_sec;
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq = shm_conn_info->write_buf[i].last_written_seq;
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i);
             }
 
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
