@@ -303,6 +303,9 @@ struct speed_chan_data_struct {
     uint32_t up_data_len_amt; // in byte
     uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
     uint32_t down_data_len_amt; // in byte
+    uint32_t previous_last_written_seq; // for last tick. need for speed calculation
+    uint32_t up_packet_speed; // current speed in packet per second
+    uint32_t down_packet_speed;
 };
 
 /**
@@ -329,7 +332,7 @@ struct conn_info {
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input
+    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem;
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
