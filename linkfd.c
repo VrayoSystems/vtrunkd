@@ -49,6 +49,7 @@
 #include <time.h>
 #include <semaphore.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -824,7 +825,8 @@ int lfd_linker(void)
 
     // TCP sepconn vars
     struct sockaddr_in my_addr, cl_addr, localaddr, rmaddr;
-    int prio_s=-1, fd_tmp=-1, prio_opt=1, laddrlen, rmaddrlen;
+    socklen_t prio_opt=1, laddrlen, rmaddrlen;
+    int prio_s=-1, fd_tmp=-1;
 
     char ipstr[INET6_ADDRSTRLEN];
     int chan_num = 0, chan_num_virt = 0;
@@ -1054,8 +1056,8 @@ int lfd_linker(void)
 
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
-            // todo test for correct speed(kb/s) calculation
             for (int i = 0; i < chan_amt; i++) {
+                // speed(kb/s) calculation
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt
                         / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt = 0;
@@ -1066,7 +1068,15 @@ int lfd_linker(void)
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
                 vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
+
+                // speed in packets/sec calculation
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed = (shm_conn_info->write_buf[i].last_written_seq
+                        - shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq) / tv_tmp.tv_sec;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq = shm_conn_info->write_buf[i].last_written_seq;
+                vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
             }
+
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -1639,6 +1649,8 @@ int lfd_linker(void)
 							time_lag_info_arr[chan_num_virt].time_lag_sum = (shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec * 1000
 									+ shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec / 1000) - (cur_time.tv_sec * 1000 + cur_time.tv_sec / 1000);
 							time_lag_info_arr[chan_num_virt].time_lag_cnt++;
+
+						} else {
 
 						}
 
