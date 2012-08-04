@@ -1070,9 +1070,9 @@ int lfd_linker(void)
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
 
                 // speed in packets/sec calculation
-                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed = (shm_conn_info->write_buf[i].last_written_seq
-                        - shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq) / tv_tmp.tv_sec;
-                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].previous_last_written_seq = shm_conn_info->write_buf[i].last_written_seq;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed =
+                        (shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets = 0;
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i);
             }
@@ -1570,6 +1570,7 @@ int lfd_linker(void)
                         break;
                     }
                 } else {
+                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
                     last_net_read = cur_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;

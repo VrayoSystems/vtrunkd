@@ -303,8 +303,8 @@ struct speed_chan_data_struct {
     uint32_t up_data_len_amt; // in byte
     uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
     uint32_t down_data_len_amt; // in byte
-    uint32_t previous_last_written_seq; // for last tick. need for speed calculation
-    uint32_t up_packet_speed; // current speed in packet per second
+
+    uint32_t down_packets; // per last_tick. need for speed calculation
     uint32_t down_packet_speed;
 };
 
