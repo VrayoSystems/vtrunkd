@@ -757,11 +757,14 @@ int ag_switcher() {
         return 0;
     }
     if (srv) {
+        vtun_syslog(LOG_INFO, "Server %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(0, channel_ports[max_speed_chan]);
     } else {
+        vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    if ((max_speed / 2 < chan_info->send) & (max_speed * 2 < chan_info->send)) {
+    vtun_syslog(LOG_INFO, "channel speed %i", chan_info->send);
+    if ((max_speed / 2 < chan_info->send) & (max_speed * 2 > chan_info->send)) {
         return 1;
     }
     return 0;
@@ -1111,7 +1114,7 @@ int lfd_linker(void)
                 shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
             }
             sem_post(&(shm_conn_info->AG_flags_sem));
-
+            vtun_syslog(LOG_INFO, "Mode %i", tmp_flags);
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
