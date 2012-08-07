@@ -33,7 +33,7 @@ To compile and install run:
   make install
 
 If you have any suggestions, ideas, wishes send them to 
-realgrandrew@gmail.com
+Andrew Gryaznov realgrandrew@gmail.com, Andrey Kuznetsov <andreykyz@gmail.com>
  
 vtrunkd and vtrunkd algorithm (C) Andrew Gryaznov
 Vtun (c) Maxim Krasnyansky

@@ -2,6 +2,7 @@
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network.
 
    Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky.
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
@@ -74,6 +75,7 @@
 #include "weight_calculation.h"
 #include "net_structs.h"
 #include "netlib.h"
+#include "../fss/include/ss.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -736,6 +738,31 @@ int sem_wait_tw(sem_t *sem) {
     if( sem_timedwait(sem, &ts) < 0 ) {
         vtun_syslog(LOG_ERR, "ASSERT FAILED! Emergrency quit semaphore waiting");
         sem_post(sem);
+    }
+    return 0;
+}
+
+
+int ag_switcher() {
+    struct channel_info* chan_info;
+    int max_speed_chan = 0;
+    uint32_t max_speed = 0;
+    for (int i = 1; i < chan_amt; i++) {
+        if (max_speed < shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed) {
+            max_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed;
+            max_speed_chan = i;
+        }
+    }
+    if (max_speed_chan == 0) {
+        return 0;
+    }
+    if (srv) {
+        chan_info = get_format_tcp_info(0, channel_ports[max_speed_chan]);
+    } else {
+        chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
+    }
+    if ((max_speed / 2 < chan_info->send) & (max_speed * 2 < chan_info->send)) {
+        return 1;
     }
     return 0;
 }

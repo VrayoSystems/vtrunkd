@@ -20,7 +20,7 @@
 #  
 CC = @CC@
 CFLAGS = @CFLAGS@ @CPPFLAGS@ -Wall
-LDFLAGS = @LIBS@
+LDFLAGS = @LIBS@ -lutil -lrt -lresolv -L../fss/lib -lnetlink
 
 YACC = @YACC@
 YACCFLAGS = -d
@@ -54,6 +54,8 @@ OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        tcp_proto.o udp_proto.o \
        linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o weight_calculation.o
 
+FSSOBJS = ssfilter.o ss.o
+
 CONFIGURE_FILES = Makefile config.status config.cache config.h config.log 
 
 %.o: %.c vtun.h lib.h
@@ -61,8 +63,11 @@ CONFIGURE_FILES = Makefile config.status config.cache config.h config.log
 
 all: vtrunkd
 
-vtrunkd: $(OBJS)
-	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(LFD_OBJS) $(LDFLAGS)
+vtrunkd: $(OBJS) fss
+	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(FSSOBJS) $(LFD_OBJS) $(LDFLAGS)
+
+fss: 
+	cp ../fss/src/ssfilter.o ../fss/src/ss.o ./
 
 cfg_file.tab.c: cfg_file.y cfg_kwords.h config.h
 	$(YACC) $(YACCFLAGS) -b cfg_file cfg_file.y

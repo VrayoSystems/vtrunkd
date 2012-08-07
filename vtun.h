@@ -1,7 +1,8 @@
 /*  
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
 
-   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>,
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
