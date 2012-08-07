@@ -1103,6 +1103,14 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i);
             }
+            tmp_flags = ag_switcher();
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            if (tmp_flags == 1) {
+                shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
+            } else {
+                shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
+            }
+            sem_post(&(shm_conn_info->AG_flags_sem));
 
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
