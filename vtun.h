@@ -103,6 +103,8 @@
 #define P_MAX_TUNNELS_NUM 20
 // amount of tcp channels per process (vpn link) requested by CLIENT mode
 #define P_TCP_CONN_AMOUNT 5 // int
+// big jitter
+#define ABSOLUTE_MAX_JITTER 2500 // in ms
 
 
 /* Compiled-in values */
@@ -285,6 +287,8 @@ struct _write_buf {
 struct time_lag_info {
 	uint64_t time_lag_sum;
 	uint16_t time_lag_cnt;
+	uint16_t packet_lag_sum; // lag in packets
+	uint16_t packet_lag_cnt;
 	uint8_t once_flag:1;
 };
 

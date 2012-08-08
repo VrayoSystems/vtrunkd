@@ -583,7 +583,7 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "drop dup pkt seq_num %lu lws %lu", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
 #endif
-        *succ_flag = -2;
+        *succ_flag = -3;
         return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
     // now check if we can find it in write buf current .. inline!
@@ -591,7 +591,7 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
     while( i > -1 ) {
         if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
             vtun_syslog(LOG_INFO, "drop exist pkt");
-            //return -3;
+            *succ_flag = -3;
             return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         }
         i = shm_conn_info->frames_buf[i].rel_next;
@@ -763,7 +763,7 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    vtun_syslog(LOG_INFO, "channel speed %i", chan_info->send);
+    vtun_syslog(LOG_INFO, "Channel %i measure speed %i kb/s predicted speed %i kb/s", max_speed_chan, max_speed, chan_info->send);
     if ((max_speed / 2 < chan_info->send) & (max_speed * 2 > chan_info->send)) {
         return 1;
     }
@@ -1639,7 +1639,17 @@ int lfd_linker(void)
 
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
 
-                    if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
+                    if (succ_flag == -2) { // drop broken packet
+                        statb.pkts_dropped++;
+                    }
+                    if (succ_flag == -3) { // drop dup packet
+                        statb.pkts_dropped++;
+                        int packet_lag_sum_tmp = shm_conn_info->resend_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head] - seq_num;
+                        if (packet_lag_sum_tmp > 0) {
+                            time_lag_info_arr[chan_num_virt].packet_lag_sum += packet_lag_sum_tmp;
+                            time_lag_info_arr[chan_num_virt].packet_lag_cnt++;
+                        }
+                    }
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
@@ -1689,10 +1699,7 @@ int lfd_linker(void)
 									+ shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec / 1000) - (cur_time.tv_sec * 1000 + cur_time.tv_sec / 1000);
 							time_lag_info_arr[chan_num_virt].time_lag_cnt++;
 
-						} else {
-
 						}
-
                         	if( (len = dev_write(tun_device,
                                                  shm_conn_info->frames_buf[fprev].out,
                                                  shm_conn_info->frames_buf[fprev].len)) < 0 ) {
