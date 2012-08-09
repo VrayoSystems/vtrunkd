@@ -1121,6 +1121,7 @@ int lfd_linker(void)
             	   // calculate mean value and send time_lag to another side
             	   //github.com - Issue #11
 				int time_lag_cnt = 0, time_lag_sum = 0;
+                int packet_lag_cnt = 0, packet_lag_sum = 0;
 				for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
 					if (time_lag_info_arr[i].time_lag_cnt != 0) {
 						time_lag_cnt++;
@@ -1128,7 +1129,13 @@ int lfd_linker(void)
 						time_lag_info_arr[i].time_lag_sum = 0;
 						time_lag_info_arr[i].time_lag_cnt = 0;
 					}
-				}
+                    if (time_lag_info_arr[i].packet_lag_cnt == 0) {
+                        packet_lag_cnt++;
+                        packet_lag_sum += (1000 * time_lag_info_arr[i].packet_lag_sum) / time_lag_info_arr[i].packet_lag_cnt; // because speed in packet/sec but need ms
+                        time_lag_info_arr[i].packet_lag_sum = 0;
+                        time_lag_info_arr[i].packet_lag_cnt = 0;
+                    }
+                }
 				time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
 				sem_wait(&(shm_conn_info->stats_sem));
 				shm_conn_info->stats[my_physical_channel_num].time_lag_remote = time_lag_local.time_lag;

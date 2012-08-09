@@ -287,7 +287,7 @@ struct _write_buf {
 struct time_lag_info {
 	uint64_t time_lag_sum;
 	uint16_t time_lag_cnt;
-	uint16_t packet_lag_sum; // lag in packets
+	uint32_t packet_lag_sum; // lag in packets
 	uint16_t packet_lag_cnt;
 	uint8_t once_flag:1;
 };
