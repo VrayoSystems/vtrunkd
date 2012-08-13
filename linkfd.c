@@ -2,6 +2,7 @@
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network.
 
    Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky.
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
@@ -49,6 +50,7 @@
 #include <time.h>
 #include <semaphore.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -72,6 +74,8 @@
 #include "driver.h"
 #include "weight_calculation.h"
 #include "net_structs.h"
+#include "netlib.h"
+#include "../fss/include/ss.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -98,7 +102,7 @@ char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
 int acnt = 0; // assert variable
-short int chan_amt = 0; // ns pollution
+short int chan_amt = 0; // Number of logical channels already established(created)
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -145,6 +149,7 @@ struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initi
 fd_set fdset;
 int tun_device;
 int channels[MAX_TCP_LOGICAL_CHANNELS];
+int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
 int delay_cnt;
 
@@ -411,6 +416,7 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         return CONTINUE_ERROR;
     }
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[end_sent_frame.chan_num].up_data_len_amt += len;
     return len;
 }
 
@@ -435,7 +441,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Nothing to read");
 #endif
-        return CONTINUE_ERROR;
+        return TRYWAIT_NOTIFY;
     }
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
@@ -443,7 +449,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if (errno == EAGAIN) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
-/*    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
+    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
             sem_post(&(shm_conn_info->tun_device_sem));
@@ -470,8 +476,8 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     } else {
         sem_post(&(shm_conn_info->tun_device_sem));
         return CONTINUE_ERROR;
-    }*/
-    // we aren't checking FD_ISSET because we did select one descriptor TODO we need to check all descriptor here
+    }
+    // we aren't checking FD_ISSET because we did select one descriptor
     len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
     sem_post(&(shm_conn_info->tun_device_sem));
     if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
@@ -534,6 +540,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u ms", (delay_acc/delay_cnt));
 #endif
 
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].up_data_len_amt += len;
     return len;
 }
 
@@ -735,6 +742,34 @@ int sem_wait_tw(sem_t *sem) {
     return 0;
 }
 
+
+int ag_switcher() {
+    struct channel_info* chan_info;
+    int max_speed_chan = 0;
+    uint32_t max_speed = 0;
+    for (int i = 1; i < chan_amt; i++) {
+        if (max_speed < shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed) {
+            max_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed;
+            max_speed_chan = i;
+        }
+    }
+    if (max_speed_chan == 0) {
+        return 0;
+    }
+    if (srv) {
+        vtun_syslog(LOG_INFO, "Server %i is calling get_format_tcp_info()", my_physical_channel_num);
+        chan_info = get_format_tcp_info(0, channel_ports[max_speed_chan]);
+    } else {
+        vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
+        chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
+    }
+    vtun_syslog(LOG_INFO, "channel speed %i", chan_info->send);
+    if ((max_speed / 2 < chan_info->send) & (max_speed * 2 > chan_info->send)) {
+        return 1;
+    }
+    return 0;
+}
+
 int lfd_linker(void)
 {
 #ifdef DEBUGG
@@ -743,7 +778,7 @@ int lfd_linker(void)
 #endif
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     tun_device = lfd_host->loc_fd; // virtual tun device
-    register int len, fl;
+    int len, len1, fl;
     int err=0;
     struct timeval tv;
     char *out, *out2;
@@ -773,28 +808,17 @@ int lfd_linker(void)
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
     long int last_net_read = 0; // for timeout;
 
-    // rxmit mode vars
-    char top_seq_rx = 0; // rxmit mode
-    unsigned long top_seq = 0, stop_seq = 0; // rxmit mode
-    int mode_norm = 0; // rxmit mode
-    //unsigned int net_counter = 1, net_stat = 0;
-    //long int last_rx_rq = 0;
-
     struct resent_chk sq_rq_buf[RESENT_MEM]; // for check_sent
     int sq_rq_pos = 0; // for check_sent
-
 
     unsigned short flag_var; // packet struct part
 
     char succ_flag; // return flag
 
-
-    int dev_my2_was = 0; // fair device lock shuffling variable
     int dev_my_cnt = 0; // statistic and watchdog
     
     // timing
     long int last_tick = 0; // important ticking
-    long int last_rxmit_drop = 0; // used for weight time-based processing
     struct timeval last_timing = {0, 0};
     struct timeval timer_resolution = {0, 0};
     struct timeval max_latency = {0, 0};
@@ -831,12 +855,10 @@ int lfd_linker(void)
 
     // TCP sepconn vars
     struct sockaddr_in my_addr, cl_addr, localaddr, rmaddr;
-    int prio_s=-1, fd_tmp=-1, prio_opt=1, laddrlen, rmaddrlen;
+    socklen_t prio_opt=1, laddrlen, rmaddrlen;
+    int prio_s=-1, fd_tmp=-1;
 
     char ipstr[INET6_ADDRSTRLEN];
-    struct my_ip *ip;
-    struct tcphdr *tcp;
-    unsigned int hash;
     int chan_num = 0, chan_num_virt = 0;
     chan_amt = 1; // def above
     channels[0] = service_channel;
@@ -848,6 +870,7 @@ int lfd_linker(void)
         return 0;
     }
 
+    memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
@@ -961,7 +984,6 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-
             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
             if(inet_addr(lfd_host->sopt.raddr) != rmaddr.sin_addr.s_addr) {
                 vtun_syslog(LOG_ERR,"Socket IP addresses do not match: %s != %s", lfd_host->sopt.raddr, ipstr);
@@ -972,7 +994,15 @@ int lfd_linker(void)
         }
         channels[0] = service_channel;
         chan_amt++;
-
+        for (i = 0; i < chan_amt; i++) {
+            if (getpeername(channels[i], (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                linker_term = TERM_NONFATAL;
+                break;
+            }
+            channel_ports[i] = ntohs(rmaddr.sin_port);
+            vtun_syslog(LOG_ERR, "Socket peer IP channel - %i port - %i", i, channel_ports[i]);
+        }
         if(break_out) {
             close(prio_s);
             for(; i>=0; i--) {
@@ -1043,71 +1073,48 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
-        usleep(100); // todo need to tune
+        usleep(100); // todo need to tune; Is it necessary? I don't know
 #ifdef DEBUGG
         gettimeofday(&work_loop1, NULL );
+        vtun_syslog(LOG_INFO, "WORK LOOP start");
 #endif
         errno = 0;
         gettimeofday(&cur_time, NULL);
-
-        if((channel_mode == MODE_NORMAL) && (rxmt_mode_request > 0) && (  ((cur_time.tv_sec - last_pen_sec) > 1) || ((cur_time.tv_usec - last_pen_usec) > lfd_host->PEN_USEC_IMMUNE) )) {
-            rxmt_mode_request = 0;
-            last_pen_usec = cur_time.tv_usec;
-            last_pen_sec = cur_time.tv_sec;
-            //if(retransmit_count == 0) last_rx_rq = cur_time.tv_sec;
-            /*
-            if(net_counter == net_stat) retransmit_count++;
-            else {
-                 retransmit_count = 0;
-                 net_stat = net_counter;
-            }
-
-            if(retransmit_count >= 5 && (cur_time.tv_sec > (last_rx_rq+1))) {
-                 // just change mode unconditionally
-                 retransmit_count = 0;
-                 rxmt_mode_request = 1;
-                 vtun_syslog(LOG_INFO, "unconditional shitch to rxmit mode - no rcv, many rtss");
-            } else */
-/*            {
-
-                // now do weight "landing"
-
-                sem_wait_tw(write_buf_sem);
-
-				if (weight <= lfd_host->MAX_WEIGHT_NORM) { // do not allow to peak to infinity.. it is useless
-					weight = weight_add_delay(shm_conn_info, lfd_host, mean_delay, my_physical_channel_num);
-				}
-				// weight landing
-				weight = weight_landing_sub_div(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
-
-                sem_post(write_buf_sem);
-
-				if (weight >= lfd_host->MAX_WEIGHT_NORM) {
-					if (shm_conn_info->normal_senders > 1) {
-						//rxmt_mode_request = 1;
-						//vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight");
-						vtun_syslog(LOG_INFO, "switched to rxmit mode - request by over-weight (but RXM MODE disabled)");
-						shm_conn_info->rxmt_mode_pid = getpid();
-					} else {
-						vtun_syslog(LOG_ERR, "WARNING! overweight hit on an only normal sender left");
-					}
-				}
-			}*/
-            if(rxmt_mode_request) {
-                channel_mode = MODE_RETRANSMIT;
-                shm_conn_info->normal_senders--;
-            }
-        } else if ( (channel_mode == MODE_RETRANSMIT) && (rxmt_mode_request == -1)) { // is this ever used?
-            shm_conn_info->normal_senders++;
-            channel_mode = MODE_NORMAL;
-        }
-        rxmt_mode_request = 0;
 
           // do an expensive thing
           timersub(&cur_time, &last_timing, &tv_tmp);
 
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
+            for (int i = 0; i < chan_amt; i++) {
+                // speed(kb/s) calculation
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt
+                        / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt = 0;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt = 0;
+                vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
+                vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
+
+                // speed in packets/sec calculation
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed =
+                        (shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets = 0;
+                vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i);
+            }
+            tmp_flags = ag_switcher();
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            if (tmp_flags == 1) {
+                shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
+            } else {
+                shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
+            }
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            vtun_syslog(LOG_INFO, "Mode %i", tmp_flags);
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -1140,12 +1147,14 @@ int lfd_linker(void)
 					((struct time_lag_packet *) buf)->time_lag = htonl(time_lag_remote);
 					((struct time_lag_packet *) buf)->flag = htons(FRAME_TIME_LAG);
 					((struct time_lag_packet *) buf)->pid = htons(pid_remote);
-					if (proto_write(channels[0], buf, (sizeof(struct time_lag_packet) | VTUN_BAD_FRAME)) < 0) {
+					if ((len1 = proto_write(channels[0], buf, (sizeof(struct time_lag_packet) | VTUN_BAD_FRAME))) < 0) {
 						vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit");//?????
 						linker_term = TERM_NONFATAL;//?????
 					}
+					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
 				}
 			}
+
 
 
                    if(delay_cnt == 0) delay_cnt = 1;
@@ -1157,7 +1166,6 @@ int lfd_linker(void)
                    dev_my_cnt = 0;
                    last_tick = cur_time.tv_sec;
                    shm_conn_info->alive = cur_time.tv_sec;
-                   rxmt_mode_request = 1; // ??? TODO: do the WTF here instead of just requesting
                    delay_acc = 0;
                    delay_cnt = 0;
        
@@ -1174,38 +1182,14 @@ int lfd_linker(void)
                                last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
                                shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
                                *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                               if(proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                               if((len1 = proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                                    vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                                    linker_term = TERM_NONFATAL;
                                }
+                               shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                            }
                       }
        
-
-               // TODO:!!!!!!!!!!!!!!!!!!! move last_rxmit_drop to shm
-               if(cur_time.tv_sec - last_rxmit_drop >= lfd_host->RXMIT_CNT_DROP_PERIOD) {
-                   mode_norm = 0; // TODO: is it OK not to have this tuned as separate period??
-                   last_rxmit_drop = cur_time.tv_sec;
-       
-//                   sem_wait_tw(write_buf_sem);
-/*
-                   if( (shm_conn_info->stats[my_physical_channel_num].weight > 0) && (channel_mode == MODE_NORMAL) ) {
-                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_start(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
-                	   shm_conn_info->stats[my_physical_channel_num].weight = weight_trend_to_zero(shm_conn_info->stats[my_physical_channel_num].weight, lfd_host);
-                   }
-*/
-                // now do weight "landing"
-				// actually try to fix weights for suddenly closed connections...
-//				weight = weight_landing_sub(shm_conn_info, lfd_host, cur_time, my_physical_channel_num);
-       
-//                   sem_post(write_buf_sem);
-
-                   shm_conn_info->stats[my_physical_channel_num].last_tick = cur_time.tv_sec;
-       
-       
-               }
-               
-               
                // now check ALL connections
                for(i=0; i<chan_amt; i++) {
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
@@ -1232,10 +1216,11 @@ int lfd_linker(void)
                                vtun_syslog(LOG_INFO,"Requesting bad frame (MAX_LATENCY) id %lu chan %d", incomplete_seq_buf[imf], i); // TODO HERE: remove this (2 places) verbosity later!!
                                //statb.rxmit_req++;
                                statb.max_latency_hit++;
-                               if(proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                               if((len1 = proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                                    err=1;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
                                }
+                               shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                            }
                            if(err) {
                                err = 0;
@@ -1315,10 +1300,11 @@ int lfd_linker(void)
 #endif
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                          for(i=0; i<chan_amt; i++) { // TODO: remove ping DUP code
-                             if( proto_write(channels[i], buf, VTUN_ECHO_REQ) < 0 ) {
+                             if( (len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0 ) {
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  break;
                              }
+                             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                          }
                          last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
                     }
@@ -1377,6 +1363,7 @@ int lfd_linker(void)
 
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
+                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
 
@@ -1385,21 +1372,8 @@ int lfd_linker(void)
 
                         flag_var = ntohs(*((unsigned short *)(buf+(sizeof(unsigned long)))));
                         if(flag_var == FRAME_MODE_NORM) {
-                            if(channel_mode == MODE_RETRANSMIT) {
-                                vtun_syslog(LOG_INFO, "FRAME_MODE_NORM rcvd: we are ok mode_norm cnt: %d", mode_norm);
-                                mode_norm++;
-                                if(mode_norm >= MAX_RETRANSMIT_RMODE) {
-                                    mode_norm = 0;
-                                    shm_conn_info->normal_senders++;
-                                    vtun_syslog(LOG_INFO, "switching to mode_normal");
-                                    statb.mode_switches++;
-                                    channel_mode = MODE_NORMAL;
-                                    shm_conn_info->stats[my_physical_channel_num].weight -= (lfd_host->WEIGHT_SMOOTH_DIV * (lfd_host->START_WEIGHT - shm_conn_info->stats[my_physical_channel_num].weight)) / lfd_host->WEIGHT_SCALE;
-                                }
-                            } else {
-                                vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
-                                continue;
-                            }
+                            vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
+                            continue;
                         } else if (flag_var == FRAME_MODE_RXMIT) {
                             // okay
                         } else if (flag_var == FRAME_JUST_STARTED) {
@@ -1490,6 +1464,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
+
                             }
                             if(i<lfd_host->TCP_CONN_AMOUNT) {
                                 vtun_syslog(LOG_ERR,"Could not connect all requested tuns; exit");
@@ -1498,6 +1473,21 @@ int lfd_linker(void)
                             }
                             chan_amt = i;
                             channels[0] = service_channel;
+                            //double call for getcockname beacause frst call returned ZERO in addr
+                            if (getsockname(channels[0], (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
+                                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                linker_term = TERM_NONFATAL;
+                                break;
+                            }
+                            for (i = 0; i < chan_amt; i++) {
+                                if (getsockname(channels[i], (struct sockaddr *) (&localaddr), &rmaddrlen) < 0) {
+                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
+                                channel_ports[i] = ntohs(localaddr.sin_port);
+                                vtun_syslog(LOG_INFO, " client logical channel - %i port - %i", i, channel_ports[i]);
+                            }
                             vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", chan_amt);
                             continue;
                         } else if(flag_var == FRAME_LAST_WRITTEN_SEQ) {
@@ -1562,10 +1552,11 @@ int lfd_linker(void)
                         // this does not work; done in get_resend_frame
 
                         gettimeofday(&send1, NULL);
-                        if(proto_write(channels[0], out2, len) < 0) {
+                        if ((len1 = proto_write(channels[0], out2, len)) < 0) {
                             vtun_syslog(LOG_ERR, "ERROR: cannot resend frame: write to chan %d", 0);
                         }
                         gettimeofday(&send2, NULL);
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
 #ifdef DEBUGG
                         if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
 #endif
@@ -1582,11 +1573,12 @@ int lfd_linker(void)
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
-                        if( proto_write(channels[chan_num], buf, VTUN_ECHO_REP) < 0 ) {
+                        if ((len1 = proto_write(channels[chan_num], buf, VTUN_ECHO_REP)) < 0) {
                             vtun_syslog(LOG_ERR, "Could not send echo reply");
                             linker_term = TERM_NONFATAL;
                             break;
                         }
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                         continue;
                     }
                     if( fl==VTUN_ECHO_REP ) {
@@ -1616,6 +1608,7 @@ int lfd_linker(void)
                         break;
                     }
                 } else {
+                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
                     last_net_read = cur_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
@@ -1696,6 +1689,8 @@ int lfd_linker(void)
 									+ shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec / 1000) - (cur_time.tv_sec * 1000 + cur_time.tv_sec / 1000);
 							time_lag_info_arr[chan_num_virt].time_lag_cnt++;
 
+						} else {
+
 						}
 
                         	if( (len = dev_write(tun_device,
@@ -1749,10 +1744,11 @@ int lfd_linker(void)
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
                         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                        if(proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                        if ((len1 = proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
                         }
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
                     }
@@ -1778,11 +1774,12 @@ int lfd_linker(void)
                                 vtun_syslog(LOG_INFO,"Requesting bad frame MAX_REORDER incomplete_seq_len %d blen %d seq_num %lu chan %d",incomplete_seq_len, buf_len, incomplete_seq_buf[imf], chan_num_virt);
                                 //statb.rxmit_req++;
                                 statb.max_reorder_hit++;
-                                if(proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                                if ((len1 = proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                                     vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
+                                shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                             }
                         } else {
                             if(buf_len > lfd_host->MAX_REORDER) {
@@ -1809,11 +1806,12 @@ int lfd_linker(void)
                         }
                         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_MODE_NORM);
                         statb.chok_not++;
-                        if(proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+                        if ((len1 = proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                             vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                             linker_term = TERM_NONFATAL;
                             break;
                         }
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                         succ_flag = -100; // drop flag??
                         continue;
                     }
@@ -1823,6 +1821,12 @@ int lfd_linker(void)
                 //}
             } // if fd0>0
         } // for chans..
+
+        // if we could not create logical channels yet. We can't send data from tun to net. Hope to create later...
+        if (chan_amt <= 1) { // only service channel available
+            vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
+            continue;
+        }
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
@@ -1861,7 +1865,7 @@ int lfd_linker(void)
                 } else if (len == CONTINUE_ERROR) {
                     continue;
                 } else if (len == TRYWAIT_NOTIFY) {
-                    continue; //todo need to check resend_buf for new packet again
+                    continue; //todo need to check resend_buf for new packet again ????
                 }
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
@@ -1890,10 +1894,11 @@ int lfd_linker(void)
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
 				for (i = 0; i < chan_amt; i++) { // TODO: remove ping DUP code
-					if (proto_write(channels[i], buf, VTUN_ECHO_REQ) < 0) {
+					if ((len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0) {
 						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
 						break;
 					}
+					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
 				}
 			}
 
@@ -1905,12 +1910,11 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO, "WORK LOOP full loop: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
 #endif
 
-
-
-
-
-
     }
+
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    shm_conn_info->channels_mask &= ~(1 << my_physical_channel_num); // del channel num from binary mask
+    sem_post(&(shm_conn_info->AG_flags_sem));
 
     if(dev_my) {
         // ASSERT!! we have not removet lock
@@ -1976,7 +1980,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
-    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
+    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num); // start with disable AG mode
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif

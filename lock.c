@@ -33,6 +33,8 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
+#include <sys/stat.h>
 
 #include "vtun.h"
 #include "linkfd.h"
@@ -47,6 +49,15 @@ int create_lock(char * file)
   pid = getpid();  
   ret = 0;
 
+    /* Create lock directory*/
+    if (mkdir(VTUN_LOCK_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
+        if (errno == EEXIST) {
+            vtun_syslog(LOG_INFO, "%s already  exists", VTUN_LOCK_DIR);
+        } else {
+            vtun_syslog(LOG_INFO, "Can't create lock directory %s: %s (%d)", VTUN_LOCK_DIR, strerror(errno), errno);
+        }
+
+    }
   /* Create temp file */
   sprintf(tmp_file, "%s_%d_tmp\n", file, pid);
   if( (fd = open(tmp_file, O_WRONLY|O_CREAT|O_TRUNC, 0644)) < 0 ){

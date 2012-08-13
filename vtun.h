@@ -1,7 +1,8 @@
 /*  
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
 
-   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>,
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
@@ -102,6 +103,8 @@
 #define P_MAX_TUNNELS_NUM 20
 // amount of tcp channels per process (vpn link) requested by CLIENT mode
 #define P_TCP_CONN_AMOUNT 5 // int
+// big jitter
+#define ABSOLUTE_MAX_JITTER 2500 // in ms
 
 
 /* Compiled-in values */
@@ -284,6 +287,8 @@ struct _write_buf {
 struct time_lag_info {
 	uint64_t time_lag_sum;
 	uint16_t time_lag_cnt;
+	uint32_t packet_lag_sum; // lag in packets
+	uint16_t packet_lag_cnt;
 	uint8_t once_flag:1;
 };
 
@@ -298,6 +303,16 @@ struct time_lag {
 	int pid; // our pid
 };
 
+struct speed_chan_data_struct {
+    uint32_t up_current_speed; // current physical channel's speed(kbyte/s) = up_data_len_amt / time
+    uint32_t up_data_len_amt; // in byte
+    uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
+    uint32_t down_data_len_amt; // in byte
+
+    uint32_t down_packets; // per last_tick. need for speed calculation
+    uint32_t down_packet_speed;
+};
+
 /**
  * global structure
  */
@@ -310,8 +325,9 @@ struct conn_stats {
     // and get from another side
     uint32_t time_lag_remote;// calculated here
     uint32_t time_lag; // get from another side
-    uint32_t current_speed; // current physical channel's speed
+    struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
 };
+
 
 
 struct conn_info {
@@ -321,7 +337,7 @@ struct conn_info {
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input
+    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem;
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
