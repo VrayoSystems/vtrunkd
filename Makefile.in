@@ -66,7 +66,7 @@ all: vtrunkd
 vtrunkd: $(OBJS) fss
 	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(FSSOBJS) $(LFD_OBJS) $(LDFLAGS)
 
-fss: $(FSSOBJS)
+fss:
 	cp ../fss/src/ssfilter.o ../fss/src/ss.o ./
 
 cfg_file.tab.c: cfg_file.y cfg_kwords.h config.h
