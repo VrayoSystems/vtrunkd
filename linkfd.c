@@ -1261,6 +1261,7 @@ int lfd_linker(void)
             /* We are idle, lets check connection */
             vtun_syslog(LOG_INFO, "idle...");
                 /* Send ECHO request */
+            // TODO: maybe need only for net read idle
                 if((cur_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
                          ping_rcvd = 0;
@@ -1269,7 +1270,7 @@ int lfd_linker(void)
                          last_ping = cur_time.tv_sec;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
-                         for(i=0; i<chan_amt; i++) { // TODO: remove ping DUP code
+                         for(i=0; i<chan_amt; i++) {
                              if( (len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0 ) {
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  break;
@@ -1459,17 +1460,22 @@ int lfd_linker(void)
                             if( ntohl(*((unsigned long *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((unsigned long *)buf));
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
+                            int recv_lag = 0;
 							// Issue #11 get time_lag from net here
 							// get pid and time_lag
 							time_lag_local.time_lag=ntohl(((struct time_lag_packet *) buf)->time_lag);
 							time_lag_local.pid = ntohs(((struct time_lag_packet *) buf)->pid);
 							sem_wait(&(shm_conn_info->stats_sem));
-							for (int i = 0; i < chan_amt; i++) {
+							for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
 								if(time_lag_local.pid ==  shm_conn_info->stats[i].pid){
 									shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
+                                    recv_lag = 1;
 									break;
 								}
 							}
+                            if (recv_lag) {
+                                vtun_syslog(LOG_INFO, "Time lag for pid: %i is %i", time_lag_local.pid, time_lag_local.time_lag);
+                            }
 							//recover time_lag_local structure
 							time_lag_local.time_lag = shm_conn_info->stats[my_physical_channel_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
@@ -1834,26 +1840,6 @@ int lfd_linker(void)
                 continue; //todo need to check resend_buf for new packet
             }
         }
-            //Check time interval and ping if need.
-			if (((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && ping_rcvd) {
-				ping_rcvd = 0;
-				gettimeofday(&cur_time, NULL);
-
-				ping_req_ts = ((cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
-
-				last_ping = cur_time.tv_sec;
-#ifdef DEBUGG
-				vtun_syslog(LOG_INFO, "PING2");
-#endif
-				// ping ALL channels! this is required due to 120-sec limitation on some NATs
-				for (i = 0; i < chan_amt; i++) { // TODO: remove ping DUP code
-					if ((len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0) {
-						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
-						break;
-					}
-					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
-				}
-			}
 
             gettimeofday(&cur_time, NULL);
             last_action = cur_time.tv_sec;
