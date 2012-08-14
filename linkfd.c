@@ -789,22 +789,18 @@ int lfd_linker(void)
     int imf;
     int fprev = -1;
     int fold = -1;
-    int last_pen_usec = 0;
-    long int last_pen_sec = 0;
     unsigned long incomplete_seq_buf[FRAME_BUF_SIZE];
     int incomplete_seq_len = 0;
     
     unsigned short tmp_s;
     unsigned long tmp_l;
 
-    sem_t *tun_device_sem = &(shm_conn_info->tun_device_sem);
     sem_t *resend_buf_sem = &(shm_conn_info->resend_buf_sem);
     sem_t *write_buf_sem = &(shm_conn_info->write_buf_sem);
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
 
-    int dev_my = 0;
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
     long int last_net_read = 0; // for timeout;
 
@@ -1262,42 +1258,16 @@ int lfd_linker(void)
         }
 
         if( !len ) {
-
             /* We are idle, lets check connection */
-            //vtun_syslog(LOG_INFO, "idle...");
-            sem_post_if(&dev_my, tun_device_sem); // finished block
-            if( lfd_host->flags & VTUN_KEEP_ALIVE ) {
-
-
-                // now check write buffer for resend timeouts
-
-
+            vtun_syslog(LOG_INFO, "idle...");
                 /* Send ECHO request */
-
-                if(dev_my || ((cur_time.tv_sec - last_action) > lfd_host->PING_INTERVAL)    ) {
-                    if( kill(shm_conn_info->lock_pid, 0) < 0 ) {
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED! locking PID not running! FIXED. pid was %d", shm_conn_info->lock_pid);
-                        shm_conn_info->lock_pid = mypid;
-
-                        sem_post(tun_device_sem);
-
-                    }
-                    // another assert ->
-                    if(shm_conn_info->normal_senders < 1) {
-                        vtun_syslog(LOG_INFO, "ASSERT FAILED! no active senders, waking up!");
-                        channel_mode = MODE_NORMAL;
-                        shm_conn_info->normal_senders++;
-                    }
-
+                if((cur_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
                          ping_rcvd = 0;
                          gettimeofday(&cur_time, NULL);
                          ping_req_ts = ((cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
                          last_ping = cur_time.tv_sec;
-
-#ifdef DEBUGG
                          vtun_syslog(LOG_INFO, "PING ...");
-#endif
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                          for(i=0; i<chan_amt; i++) { // TODO: remove ping DUP code
                              if( (len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0 ) {
@@ -1309,8 +1279,6 @@ int lfd_linker(void)
                          last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
                     }
                 }
-            }
-
             continue;
         }
 
@@ -1343,14 +1311,12 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 #endif
                 if( (len=proto_read(fd0, buf)) <= 0 ) {
-                    sem_post_if(&dev_my, tun_device_sem);
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
                          break;
                     }
                     if(proto_err_cnt > 5) { // TODO XXX whu do we need this?? why doesnt proto_read just return <0???
                              vtun_syslog(LOG_INFO, "MAX proto read len==0 reached; exit!");
-                             sem_post_if(&dev_my, tun_device_sem);
                              linker_term = TERM_NONFATAL;
                              break;
                     }
@@ -1366,10 +1332,6 @@ int lfd_linker(void)
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
-
-                        sem_post_if(&dev_my, tun_device_sem);
-
-
                         flag_var = ntohs(*((unsigned short *)(buf+(sizeof(unsigned long)))));
                         if(flag_var == FRAME_MODE_NORM) {
                             vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
@@ -1569,7 +1531,6 @@ int lfd_linker(void)
                     if( fl==VTUN_ECHO_REQ ) {
                         /* Send ECHO reply */
                         last_net_read = cur_time.tv_sec;
-                        sem_post_if(&dev_my, tun_device_sem);
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
@@ -1597,13 +1558,11 @@ int lfd_linker(void)
                         rtt = (   (( (cur_time.tv_sec ) * 1000) + (cur_time.tv_usec / 1000) - ping_req_ts) + rtt_old + rtt_old_old   ) / 3;
                         rtt_old_old = rtt_old;
                         rtt_old = rtt;
-                        sem_post_if(&dev_my, tun_device_sem); // added..???
                         continue; 
                     }
                     if( fl==VTUN_CONN_CLOSE ) {
                         vtun_syslog(LOG_INFO,"Connection closed by other side");
                         vtun_syslog(LOG_INFO, "sem_post! conn closed other");
-                        sem_post_if(&dev_my, tun_device_sem);
                         linker_term = TERM_NONFATAL;
                         break;
                     }
@@ -1621,7 +1580,6 @@ int lfd_linker(void)
                     if(chan_num == 0) { // reserved aux channel
                          if(flag_var == 0) { // this is a workaround for some bug... TODO!!
                               vtun_syslog(LOG_ERR,"BUG! flag_var == 0 received on chan 0! sqn %lu, len %d. DROPPING",seq_num, len);
-                              sem_post_if(&dev_my, tun_device_sem);
                               continue;
                          } 
                          chan_num_virt = flag_var - FLAGS_RESERVED;
@@ -1735,8 +1693,6 @@ int lfd_linker(void)
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %lu chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
 #endif
-                        sem_post_if(&dev_my, tun_device_sem);
-
                         sem_post(write_buf_sem);
 
 
@@ -1755,7 +1711,6 @@ int lfd_linker(void)
                     if(buf_len > lfd_host->MAX_REORDER) {
                         // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
                         //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
-                    	sem_post_if(&dev_my, tun_device_sem); // we will do nothing more this time..??
                         incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
 
                         sem_post(write_buf_sem);
@@ -1795,8 +1750,6 @@ int lfd_linker(void)
 
                     if( (flag_var == FRAME_MODE_RXMIT) &&
                             ((succ_flag == 0) || ( (seq_num-shm_conn_info->write_buf[chan_num_virt].last_written_seq) < lfd_host->MAX_REORDER ))) {
-                        sem_post_if(&dev_my, tun_device_sem); // starting blocking send ...
-
                         vtun_syslog(LOG_INFO, "sending FRAME_MODE_NORM to notify THIS channel is now OK");
                         tmp_l = htonl(incomplete_seq_buf[0]);
                         if( memcpy(buf, &tmp_l, sizeof(unsigned long)) < 0) {
@@ -1916,14 +1869,6 @@ int lfd_linker(void)
     shm_conn_info->channels_mask &= ~(1 << my_physical_channel_num); // del channel num from binary mask
     sem_post(&(shm_conn_info->AG_flags_sem));
 
-    if(dev_my) {
-        // ASSERT!! we have not removet lock
-        vtun_syslog(LOG_INFO, "ASSERT FAILED! we've not removed lock!. FIXED.");
-
-        sem_post(tun_device_sem);
-
-    }
-
     vtun_syslog(LOG_INFO, "exiting linker loop");
     if( !linker_term && errno )
         vtun_syslog(LOG_INFO,"%s (%d)", strerror(errno), errno);
@@ -1935,21 +1880,6 @@ int lfd_linker(void)
         shm_conn_info->normal_senders--; // TODO HERE: add all possible checks for sudden deaths!!!
     }
 
-    if(shm_conn_info->normal_senders == 0) {
-
-        //if(mypid != shm_conn_info->rxmt_mode_pid) kill(shm_conn_info->rxmt_mode_pid, SIGUSR2);
-
-        /*
-        // notify every possible pid
-        if(mypid != shm_conn_info->lock_pid) kill(shm_conn_info->lock_pid, SIGUSR2);
-        fprev = shm_conn_info->resend_buf.frames.rel_head;
-        if(mypid != shm_conn_info->resend_buf.frames_buf[fprev].sender_pid)
-             kill(shm_conn_info->resend_buf.frames_buf[fprev].sender_pid, SIGUSR2);
-        fprev = shm_conn_info->write_buf.frames.rel_head;
-        if(mypid != shm_conn_info->write_buf.frames_buf[fprev].sender_pid)
-             kill(shm_conn_info->write_buf.frames_buf[fprev].sender_pid, SIGUSR2);
-        */
-    }
 
     shm_conn_info->stats[my_physical_channel_num].pid = 0;
     shm_conn_info->stats[my_physical_channel_num].weight = 0;
