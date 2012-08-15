@@ -772,10 +772,6 @@ int ag_switcher() {
 
 int lfd_linker(void)
 {
-#ifdef DEBUGG
-    struct timeval work_loop1;
-    struct timeval work_loop2;
-#endif
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     tun_device = lfd_host->loc_fd; // virtual tun device
     int len, len1, fl;
@@ -1070,10 +1066,6 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         usleep(100); // todo need to tune; Is it necessary? I don't know
-#ifdef DEBUGG
-        gettimeofday(&work_loop1, NULL );
-        vtun_syslog(LOG_INFO, "WORK LOOP start");
-#endif
         errno = 0;
         gettimeofday(&cur_time, NULL);
 
@@ -1295,10 +1287,6 @@ int lfd_linker(void)
              *
              * */
         //check all chans for being set..
-#ifdef DEBUGG
-        gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "WORK LOOP read time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
-#endif
         for(chan_num=0; chan_num<chan_amt; chan_num++) {
             fd0 = -1;
             if(FD_ISSET(channels[chan_num], &fdset)) {
@@ -1796,11 +1784,6 @@ int lfd_linker(void)
              *
              *
              * */
-#ifdef DEBUGG
-        gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "WORK LOOP write time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
-#endif
-
         sem_wait(&(shm_conn_info->AG_flags_sem));
         tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1845,11 +1828,6 @@ int lfd_linker(void)
             gettimeofday(&cur_time, NULL);
             last_action = cur_time.tv_sec;
             lfd_host->stat.comp_out += len;
-#ifdef DEBUGG
-        gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "WORK LOOP full loop: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
-#endif
-
     }
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
