@@ -1071,7 +1071,7 @@ int lfd_linker(void)
 
           // do an expensive thing
           timersub(&cur_time, &last_timing, &tv_tmp);
-
+          //this is Tick module
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
             for (int i = 0; i < chan_amt; i++) {
@@ -1162,29 +1162,35 @@ int lfd_linker(void)
                           break;
                       }
                       
-                      for(i=0;i<chan_amt;i++) {
-                           if( ((cur_time.tv_sec - shm_conn_info->write_buf[i].last_lws_notified) > LWS_NOTIFY_PEROID) &&
-                                (shm_conn_info->write_buf[i].last_written_seq > last_last_written_seq[i])) {
-                                // TODO: DUP code!
-                                *((unsigned long *)buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
-                               last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
-                               shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
-                               *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                               if((len1 = proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
-                                   vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
-                                   linker_term = TERM_NONFATAL;
-                               }
-                               shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
-                           }
-                      }
+                for (i = 0; i < chan_amt; i++) {
+                sem_wait(&(shm_conn_info->write_buf_sem));
+                unsigned long last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
+                unsigned long last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
+                sem_post(&(shm_conn_info->write_buf_sem));
+                if (((cur_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
+                    // TODO: DUP code!
+                    sem_wait(&(shm_conn_info->write_buf_sem));
+                    *((unsigned long *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
+                    last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
+                    shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+                    sem_post(&(shm_conn_info->write_buf_sem));
+                    *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                    if ((len1 = proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                        linker_term = TERM_NONFATAL;
+                    }
+                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
+                }
+            }
        
                // now check ALL connections
                for(i=0; i<chan_amt; i++) {
+                   sem_wait(&(shm_conn_info->write_buf_sem));
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
-                   
+                   sem_post(&(shm_conn_info->write_buf_sem));
                    if( timercmp(&tv_tmp, &max_latency, >=) ) {
 
-                       sem_wait_tw(write_buf_sem);
+                       sem_wait(write_buf_sem);
 
                        incomplete_seq_len = missing_resend_buffer(i, incomplete_seq_buf, &buf_len);
 
