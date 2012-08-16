@@ -777,7 +777,7 @@ int lfd_linker(void)
     int len, len1, fl;
     int err=0;
     struct timeval tv;
-    char *out, *out2;
+    char *out, *out2 = NULL;
     char *buf; // in common for info packet
     unsigned long int seq_num;
     int buf_len;
