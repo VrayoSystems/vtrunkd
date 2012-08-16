@@ -1320,7 +1320,7 @@ int lfd_linker(void)
                 }
                 proto_err_cnt = 0;
 
-                /* Handle frame flags */
+                /* Handle frame flags module */
 
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
@@ -1336,14 +1336,18 @@ int lfd_linker(void)
                         } else if (flag_var == FRAME_JUST_STARTED) {
                             // the opposite end has zeroed counters; zero mine!
                             vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters");
+                            sem_wait(&(shm_conn_info->write_buf_sem));
                             for(i=0; i<chan_amt; i++) {
                                 shm_conn_info->seq_counter[i] = SEQ_START_VAL;
                                 shm_conn_info->write_buf[i].last_written_seq = SEQ_START_VAL;
                             }
+                            sem_post(&(shm_conn_info->write_buf_sem));
+                            sem_wait(&(shm_conn_info->resend_buf_sem));
                             for(i=0; i<RESEND_BUF_SIZE; i++) {
                                 if(shm_conn_info->resend_frames_buf[i].chan_num == chan_num)
                                     shm_conn_info->resend_frames_buf[i].seq_num = 0;
                             }
+                            sem_post(&(shm_conn_info->resend_buf_sem));
                             continue;
                         } else if (flag_var == FRAME_PRIO_PORT_NOTIFY) {
                             // connect to port specified
@@ -1480,16 +1484,9 @@ int lfd_linker(void)
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int) flag_var);
 					}
 
-//vtun_syslog(LOG_INFO, "sem_wait_tw 4");
-
-                        sem_wait_tw(resend_buf_sem);
-
-//vtun_syslog(LOG_INFO, "sem_wait_tw 4 fin");
+                        sem_wait(resend_buf_sem);
                         len=get_resend_frame(chan_num, ntohl(*((unsigned long *)buf)), &out2, &sender_pid);
-
                         sem_post(resend_buf_sem);
-
-
 
                         if(len <= 0) {
                             statb.rxmits_notfound++;
@@ -1588,14 +1585,7 @@ int lfd_linker(void)
                          chan_num_virt = chan_num;
                     }
 
-                    /*
-                    if(flag_var == FRAME_MODE_RXMIT) {
-                         rxmt_mode_request = 1; // follow pessimistic...
-                    }
-                    */
-
-                    sem_wait_tw(write_buf_sem);
-
+                    sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
 
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
@@ -1603,6 +1593,7 @@ int lfd_linker(void)
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
                     }
+                    sem_post(write_buf_sem);
 
                     if(incomplete_seq_len == -1) {
                         vtun_syslog(LOG_ERR, "ASSERT FAILED! free write buf assert failed on chan %d", chan_num_virt);
@@ -1612,20 +1603,24 @@ int lfd_linker(void)
                     if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                         vtun_syslog(LOG_ERR, "WARNING! MAX_ALLOWED_BUF_LEN reached! Flushing... chan %d", chan_num_virt);
                     }
-
-                    timersub(&cur_time, &shm_conn_info->write_buf[chan_num_virt].last_write_time, &tv_tmp);
+                    sem_wait(write_buf_sem);
+                    struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
+                    sem_post(write_buf_sem);
+                    timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
                     if ( (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP) &&
-                         (timerisset(&shm_conn_info->write_buf[chan_num_virt].last_write_time))) {
+                         (timerisset(&last_write_time_tmp))) {
                         //if(buf_len > 1)
                         vtun_syslog(LOG_ERR, "WARNING! MAX_LATENCY_DROP triggering at play! chan %d", chan_num_virt);
                         statb.max_latency_drops++;
                     }
 
+                    sem_wait(write_buf_sem);
                     fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
                     if(fprev == -1) { // don't panic ;-)
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
                     }
+                    sem_post(write_buf_sem);
                     fold = -1;
 
 #ifdef DEBUGG
@@ -1639,8 +1634,11 @@ int lfd_linker(void)
 
                     acnt = 0;
                     while(fprev > -1) {
-                        if( shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1)
-                                || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
+                        sem_wait(write_buf_sem);
+                        int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1) ? 1 : 0;
+                        sem_post(write_buf_sem);
+                        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
+                            sem_wait(write_buf_sem);
                             //sum here time_lag Issue #11
 						if ((buf_len > 1) && (time_lag_info_arr[chan_num_virt].once_flag)) { //only first packet
 							time_lag_info_arr[chan_num_virt].once_flag = 0;
@@ -1651,10 +1649,9 @@ int lfd_linker(void)
 						} else {
 
 						}
-
-                        	if( (len = dev_write(tun_device,
-                                                 shm_conn_info->frames_buf[fprev].out,
-                                                 shm_conn_info->frames_buf[fprev].len)) < 0 ) {
+                            struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
+                            sem_post(write_buf_sem);
+                            if ((len = dev_write(tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
                                 if( errno != EAGAIN && errno != EINTR ) { // TODO: WTF???????
                                     vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
@@ -1663,14 +1660,14 @@ int lfd_linker(void)
                                     //continue; // orig.. wtf??
                                 }
                             } else {
-                                if(len < shm_conn_info->frames_buf[fprev].len) {
+                                if(len < frame_seq_tmp.len) {
                                     vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len, shm_conn_info->frames_buf[fprev].len);
                                 }
                             }
+                            sem_wait(write_buf_sem);
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num ,shm_conn_info->write_buf[chan_num_virt].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders, weight, shm_conn_info->frames_buf[fprev].len, chan_num_virt);
 #endif
-
                             shm_conn_info->write_buf[chan_num_virt].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
@@ -1681,6 +1678,7 @@ int lfd_linker(void)
                                              &shm_conn_info->wb_free_frames,
                                              shm_conn_info->frames_buf,
                                              fold);
+                            sem_post(write_buf_sem);
                         } else break;
 #ifdef DEBUGG
                         if(assert_cnt(7)) break; // TODO: add #ifdef DEBUGG
@@ -1688,18 +1686,19 @@ int lfd_linker(void)
                     }
 
 				time_lag_info_arr[chan_num_virt].once_flag = 1;
-
                     // send lws(last written sequence number) to remote side
-                    if(shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS)) {
+                    sem_wait(write_buf_sem);
+                    int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
+                    sem_post(write_buf_sem);
+                    if(cond_flag) {
+                        sem_wait(write_buf_sem);
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %lu chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
 #endif
-                        sem_post(write_buf_sem);
-
-
                         *((unsigned long *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
+                        sem_post(write_buf_sem);
                         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
                         if ((len1 = proto_write(channels[chan_num_virt], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
@@ -1712,8 +1711,8 @@ int lfd_linker(void)
                     if(buf_len > lfd_host->MAX_REORDER) {
                         // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
                         //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
+                        sem_wait(write_buf_sem);
                         incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
-
                         sem_post(write_buf_sem);
 
                         if(incomplete_seq_len) {
@@ -1747,8 +1746,6 @@ int lfd_linker(void)
 
                     lfd_host->stat.byte_in += len; // the counter became completely wrong
 
-                    sem_post(write_buf_sem);
-
                     if( (flag_var == FRAME_MODE_RXMIT) &&
                             ((succ_flag == 0) || ( (seq_num-shm_conn_info->write_buf[chan_num_virt].last_written_seq) < lfd_host->MAX_REORDER ))) {
                         vtun_syslog(LOG_INFO, "sending FRAME_MODE_NORM to notify THIS channel is now OK");
@@ -1776,7 +1773,7 @@ int lfd_linker(void)
             } // if fd0>0
         } // for chans..
 
-        // if we could not create logical channels yet. We can't send data from tun to net. Hope to create later...
+        // if we could not create logical channels YET. We can't send data from tun to net. Hope to create later...
         if (chan_amt <= 1) { // only service channel available
             vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
             continue;

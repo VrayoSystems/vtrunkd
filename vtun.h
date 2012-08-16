@@ -339,10 +339,10 @@ struct conn_info {
     int resend_buf_idx;
     struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
-    sem_t write_buf_sem;
+    sem_t write_buf_sem; //for write buf, seq_counter
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
     struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
-    sem_t resend_buf_sem;
+    sem_t resend_buf_sem; //for resend buf,  (ever between write_buf_sem if need double blocking)
     sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     short usecount;
