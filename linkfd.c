@@ -445,8 +445,8 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     }
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
-    sem_trywait(&(shm_conn_info->tun_device_sem));
-    if (errno == EAGAIN) { // if semaphore is locked then go out
+    int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
+    if (try_flag !=0) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
     len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
