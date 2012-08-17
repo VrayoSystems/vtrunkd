@@ -537,7 +537,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
     delay_cnt++; // need for mean_delay calculation (legacy)
 #ifdef DEBUGG
-    if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u ms", (delay_acc/delay_cnt));
+    if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
 #endif
 
     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].up_data_len_amt += len;
@@ -1131,17 +1131,28 @@ int lfd_linker(void)
 					time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
 					pid_remote = shm_conn_info->stats[i].pid_remote;
 					sem_post(&(shm_conn_info->stats_sem));
-
-					((struct time_lag_packet *) buf)->time_lag = htonl(time_lag_remote);
-					((struct time_lag_packet *) buf)->flag = htons(FRAME_TIME_LAG);
-					((struct time_lag_packet *) buf)->pid = htons(pid_remote);
-					if ((len1 = proto_write(channels[0], buf, (sizeof(struct time_lag_packet) | VTUN_BAD_FRAME))) < 0) {
-						vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit");//?????
-						linker_term = TERM_NONFATAL;//?????
-					}
-					shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
-				}
-			}
+					uint32_t time_lag_remote_h = htonl(time_lag_remote);
+                    if( memcpy(buf, &time_lag_remote_h, sizeof(uint32_t)) < 0) {
+                        vtun_syslog(LOG_ERR, "memcpy imf");
+                        err=1;
+                    }
+                    uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
+                    if (memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t)) < 0) {
+                        vtun_syslog(LOG_ERR, "memcpy imf");
+                        err = 1;
+                    }
+                    uint16_t pid_remote_h = htons(pid_remote);
+                    if (memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t)) < 0) {
+                        vtun_syslog(LOG_ERR, "memcpy imf");
+                        err = 1;
+                    }
+                    if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
+                        linker_term = TERM_NONFATAL; //?????
+                    }
+                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
+                }
+            }
 
 
 
