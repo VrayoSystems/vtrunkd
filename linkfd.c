@@ -1147,10 +1147,10 @@ int lfd_linker(void)
                         err = 1;
                     }
                     vtun_syslog(LOG_INFO, "Sending time lag.....");
-//                    if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
-//                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
-//                        linker_term = TERM_NONFATAL; //?????
-//                    }
+                    if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
+                        linker_term = TERM_NONFATAL; //?????
+                    }
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                 }
             }
@@ -1331,13 +1331,13 @@ int lfd_linker(void)
                     continue;
                 }
                 proto_err_cnt = 0;
-#ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
-#endif
                 /* Handle frame flags module */
 
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+#endif
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
@@ -1495,7 +1495,7 @@ int lfd_linker(void)
 							sem_post(&(shm_conn_info->stats_sem));
 							continue;
 						} else {
-							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du!", (unsigned int) flag_var);
+							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
 
                         sem_wait(resend_buf_sem);
