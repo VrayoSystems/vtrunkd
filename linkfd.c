@@ -1146,10 +1146,11 @@ int lfd_linker(void)
                         vtun_syslog(LOG_ERR, "memcpy imf");
                         err = 1;
                     }
-                    if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
-                        linker_term = TERM_NONFATAL; //?????
-                    }
+                    vtun_syslog(LOG_INFO, "Sending time lag.....");
+//                    if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
+//                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
+//                        linker_term = TERM_NONFATAL; //?????
+//                    }
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                 }
             }
@@ -1330,7 +1331,9 @@ int lfd_linker(void)
                     continue;
                 }
                 proto_err_cnt = 0;
-
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+#endif
                 /* Handle frame flags module */
 
                 fl = len & ~VTUN_FSIZE_MASK;
