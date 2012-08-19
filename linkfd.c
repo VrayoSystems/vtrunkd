@@ -388,35 +388,36 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
 int retransmit_send(char *out2, int mypid) {
     int len;
     sem_wait(&(shm_conn_info->resend_buf_sem));
-    struct frame_seq end_sent_frame = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx];
+    int log_chan_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].chan_num;
+    unsigned long  seq_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].seq_num;
     sem_post(&(shm_conn_info->resend_buf_sem));
-    if ((end_sent_frame.sender_pid == mypid) | (end_sent_frame.seq_num == 0)) {
+    int count_back = seq_num_tmp - last_sent_packet_num[log_chan_num_tmp].seq_num;
+
+    if (count_back <= 0) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: last packet my notify");
-#endif
-        return LASTPACKETMY_NOTIFY;
-    } else if (end_sent_frame.seq_num == last_sent_packet_num[end_sent_frame.chan_num].seq_num) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: resend limit notify");
+        vtun_syslog(LOG_INFO, "debug: last packet my notify");
 #endif
         return LASTPACKETMY_NOTIFY;
     }
-#ifdef DEBUGG
-    last_sent_packet_num[end_sent_frame.chan_num].num_resend++;
-    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame from top... chan %d seq %lu len %d number of resend - %lu", end_sent_frame.chan_num, end_sent_frame.seq_num, len, last_sent_packet_num[end_sent_frame.chan_num].num_resend);
-#endif
-    last_sent_packet_num[end_sent_frame.chan_num].seq_num = end_sent_frame.seq_num;
+    last_sent_packet_num[log_chan_num_tmp].seq_num++;
     sem_wait(&(shm_conn_info->resend_buf_sem));
-    len = get_resend_frame(end_sent_frame.chan_num, end_sent_frame.seq_num, &out2, &end_sent_frame.sender_pid);
+    len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
     sem_post(&(shm_conn_info->resend_buf_sem));
-    statb.bytes_sent_rx += len;
-    if (len && proto_write(channels[end_sent_frame.chan_num], out2, len) < 0) {
+    if (len == -1){
+        last_sent_packet_num[log_chan_num_tmp].seq_num = seq_num_tmp;
+        len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
+    }
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", end_sent_frame.chan_num, strerror(errno), errno);
+    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, len);
+#endif
+    statb.bytes_sent_rx += len;
+    if (len && proto_write(channels[log_chan_num_tmp], out2, len) < 0) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", log_chan_num_tmp, strerror(errno), errno);
 #endif
         return CONTINUE_ERROR;
     }
-    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[end_sent_frame.chan_num].up_data_len_amt += len;
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[log_chan_num_tmp].up_data_len_amt += len;
     return len;
 }
 
@@ -541,6 +542,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #endif
 
     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].up_data_len_amt += len;
+
+    last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
+//    last_sent_packet_num[chan_num].num_resend = 0;
     return len;
 }
 
