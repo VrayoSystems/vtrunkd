@@ -328,16 +328,29 @@ struct conn_stats {
     struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
 };
 
+struct hashed_packet {
+    char packet[VTUN_FRAME_SIZE2 + 200];
+    int len;
+    int sender_pid;
+    int logical_channel;
+};
 
+struct packet_hash_map {
+    struct hashed_packet data[RESEND_BUF_SIZE]; // memory for resend_buf
+    int index;
+    sem_t resend_buf_sem; //for resend buf,  (ever between write_buf_sem if need double blocking)
+    unsigned long last_seq_num;
+};
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t tun_device_sem;
+    struct packet_hash_map resend_buffer;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
+    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem; //for write buf, seq_counter
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
