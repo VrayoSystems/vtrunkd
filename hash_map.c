@@ -7,6 +7,7 @@
  */
 
 #include <semaphore.h>
+#include <string.h>
 #include "hash_map.h"
 #include "vtun.h"
 
@@ -34,12 +35,12 @@ unsigned long add_packet(struct packet_hash_map *map, int logical_channel, char 
  */
 struct hashed_packet* get_packet_by_seq(struct packet_hash_map *map, unsigned long seq_num) {
     int new_index, shift;
-    char* packet;
+    struct hashed_packet* packet;
     sem_wait(&(map->resend_buf_sem));
     shift = map->last_seq_num - seq_num;
     if (shift >= RESEND_BUF_SIZE) {
         sem_post(&(map->resend_buf_sem));
-        return 0; // seq_num not found
+        return NULL; // seq_num not found
     } else {
         new_index = get_loop_back_shift(shift, map->index, RESEND_BUF_SIZE);
         packet = &(map->data[new_index]);
@@ -49,7 +50,7 @@ struct hashed_packet* get_packet_by_seq(struct packet_hash_map *map, unsigned lo
 }
 
 struct hashed_packet* get_last_packet(struct packet_hash_map *map) {
-    char* packet;
+    struct hashed_packet* packet;
     sem_wait(&(map->resend_buf_sem));
     packet = &(map->data[map->index]);
     sem_post(&(map->resend_buf_sem));

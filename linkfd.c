@@ -145,7 +145,7 @@ struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval cur_time; // current time source
 
-struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
+unsigned long last_sent_packet_num=0; // initialized by 0
 
 fd_set fdset;
 int tun_device;
@@ -387,39 +387,33 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    int len;
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    int log_chan_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].chan_num;
-    unsigned long  seq_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].seq_num;
-    sem_post(&(shm_conn_info->resend_buf_sem));
-    int count_back = seq_num_tmp - last_sent_packet_num[log_chan_num_tmp].seq_num;
+    struct hashed_packet* packet = NULL;
+    unsigned long  seq_num_tmp = get_last_seq_num(&(shm_conn_info->resend_buffer));
 
-    if (count_back <= 0) {
+    if ((seq_num_tmp - last_sent_packet_num) <= 0) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: last packet my notify");
 #endif
         return LASTPACKETMY_NOTIFY;
     }
-    last_sent_packet_num[log_chan_num_tmp].seq_num++;
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
-    sem_post(&(shm_conn_info->resend_buf_sem));
-    if (len == -1){
-        last_sent_packet_num[log_chan_num_tmp].seq_num = seq_num_tmp;
-        len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
+    last_sent_packet_num++;
+    packet = get_packet_by_seq(&(shm_conn_info->resend_buffer), last_sent_packet_num);
+    if (packet == NULL){
+        last_sent_packet_num = seq_num_tmp;
+        packet = get_packet_by_seq(&(shm_conn_info->resend_buffer), last_sent_packet_num);
     }
 #ifdef DEBUGG
     vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, len);
 #endif
-    statb.bytes_sent_rx += len;
-    if (len && proto_write(channels[log_chan_num_tmp], out2, len) < 0) {
+    statb.bytes_sent_rx += packet->len;
+    if (packet->len && proto_write(channels[packet->logical_channel], packet->packet, packet->len) < 0) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", log_chan_num_tmp, strerror(errno), errno);
 #endif
         return CONTINUE_ERROR;
     }
-    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[log_chan_num_tmp].up_data_len_amt += len;
-    return len;
+    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[packet->logical_channel].up_data_len_amt += packet->len;
+    return packet->len;
 }
 
 /**
@@ -431,7 +425,7 @@ int retransmit_send(char *out2, int mypid) {
  *
  *
  */
-int select_devread_send(char *buf, char *out2, int mypid) {
+int select_devread_send(char *buf, char *out_buf, int mypid) {
     int len;
     int chan_num;
     struct my_ip *ip;
@@ -513,13 +507,13 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         hash += tcp->dest;
     }
     chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
-    sem_wait(&(shm_conn_info->common_sem));
-    (shm_conn_info->seq_counter[chan_num])++;
-    unsigned long tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-    sem_post(&(shm_conn_info->common_sem));
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    len = seqn_add_tail(chan_num, buf, &out2, len, tmp_seq_counter, channel_mode, mypid);
-    sem_post(&(shm_conn_info->resend_buf_sem));
+
+    memcpy((&(out_buf) + LINKFD_FRAME_RESERV), buf, len);
+    unsigned long seq_num = htonl(get_last_seq_num(&(shm_conn_info->resend_buffer))+1);
+    memcpy((&(out_buf) + LINKFD_FRAME_RESERV + len), (char *) (&seq_num), sizeof(unsigned long));
+    *((unsigned short *) (out_buf + LINKFD_FRAME_RESERV + len + sizeof(unsigned long))) = htons(MODE_NORMAL);
+    len = len + sizeof(unsigned long) + sizeof(unsigned short);
+    add_packet(&(shm_conn_info->resend_buffer), chan_num, out_buf, len, mypid);
 
     statb.bytes_sent_norm += len;
 
@@ -530,7 +524,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
-    if (len && proto_write(channels[chan_num], out2, len) < 0) {
+    if (len && proto_write(channels[chan_num], out_buf + LINKFD_FRAME_RESERV, len) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
@@ -544,8 +538,8 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 
     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan_num].up_data_len_amt += len;
 
-    last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
-//    last_sent_packet_num[chan_num].num_resend = 0;
+    last_sent_packet_num = seq_num;
+
     return len;
 }
 
@@ -783,7 +777,7 @@ int lfd_linker(void)
     int err=0;
     struct timeval tv;
     char *out, *out2 = NULL;
-    char *buf; // in common for info packet
+    char *buf, *out_buf;
     unsigned long int seq_num;
     int buf_len;
     int maxfd;
@@ -867,10 +861,14 @@ int lfd_linker(void)
         return 0;
     }
 
+    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE + VTUN_FRAME_OVERHEAD)) ) {
+        vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
+        return 0;
+    }
+
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
-    memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
     linker_term = 0;
@@ -1824,7 +1822,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: R_MODE main send");
 #endif
-                len = select_devread_send(buf, out2, mypid);
+                len = select_devread_send(buf, out_buf, mypid);
                 if (len == BREAK_ERROR) {
                     break;
                 } else if (len == CONTINUE_ERROR) {
@@ -1837,7 +1835,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: AG_MODE");
 #endif
-            len = select_devread_send(buf, out2, mypid);
+            len = select_devread_send(buf, out_buf, mypid);
             if (len == BREAK_ERROR) {
                 break;
             } else if (len == CONTINUE_ERROR) {
