@@ -324,6 +324,20 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
     return len;
 }
 
+unsigned long get_last_packet_seq_num(int chan_num) {
+    int j = shm_conn_info->resend_buf_idx;
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            return shm_conn_info->resend_frames_buf[j].seq_num;
+        }
+        j--;
+        if (j < 0) {
+            j = RESEND_BUF_SIZE - 1;
+        }
+    }
+    return -1;
+}
+
 int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *flag_var) {
     *seq_num = ntohl(*((unsigned long *)(&out[len-sizeof(unsigned long)-sizeof(unsigned short)])));
     *flag_var = ntohs(*((unsigned short *)(&out[len-sizeof(unsigned short)])));
@@ -386,38 +400,40 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    int len;
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    int log_chan_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].chan_num;
-    unsigned long  seq_num_tmp = shm_conn_info->resend_frames_buf[shm_conn_info->resend_buf_idx].seq_num;
-    sem_post(&(shm_conn_info->resend_buf_sem));
-    int count_back = seq_num_tmp - last_sent_packet_num[log_chan_num_tmp].seq_num;
-
-    if (count_back <= 0) {
+    int len = LASTPACKETMY_NOTIFY;
+    for (int i = 1; i <= chan_amt; i++) {
+        sem_wait(&(shm_conn_info->resend_buf_sem));
+        unsigned long seq_num_tmp = get_last_packet_seq_num(i);
+        sem_post(&(shm_conn_info->resend_buf_sem));
+        if ((seq_num_tmp - last_sent_packet_num[i].seq_num == 0) || (seq_num_tmp == -1)) {
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: last packet my notify");
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
 #endif
-        return LASTPACKETMY_NOTIFY;
-    }
-    last_sent_packet_num[log_chan_num_tmp].seq_num++;
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
-    sem_post(&(shm_conn_info->resend_buf_sem));
-    if (len == -1){
-        last_sent_packet_num[log_chan_num_tmp].seq_num = seq_num_tmp;
-        len = get_resend_frame(log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, &out2, &mypid);
-    }
+            continue;
+        }
+        last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
-    vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", log_chan_num_tmp, last_sent_packet_num[log_chan_num_tmp].seq_num, len);
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
 #endif
-    statb.bytes_sent_rx += len;
-    if (len && proto_write(channels[log_chan_num_tmp], out2, len) < 0) {
+        sem_wait(&(shm_conn_info->resend_buf_sem));
+        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        if (len == -1) {
+            last_sent_packet_num[i].seq_num = seq_num_tmp;
+            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        }
+        sem_post(&(shm_conn_info->resend_buf_sem));
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", log_chan_num_tmp, strerror(errno), errno);
+        vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
-        return CONTINUE_ERROR;
+        statb.bytes_sent_rx += len;
+        if (len && proto_write(channels[i], out2, len) < 0) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
+#endif
+            return CONTINUE_ERROR;
+        }
+        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len;
     }
-    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[log_chan_num_tmp].up_data_len_amt += len;
     return len;
 }
 
