@@ -428,6 +428,9 @@ int retransmit_send(char *out2, int mypid) {
         vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
+        if (last_sent_packet_num[i].seq_num % 50 == 0) {
+            vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
         if (len && proto_write(channels[i], out2, len) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
@@ -543,7 +546,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
 #endif
-
+    if (tmp_seq_counter % 50 == 0) {
+        vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
+    }
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
@@ -1608,7 +1613,9 @@ int lfd_linker(void)
                     out = buf; // wtf?
 
                     len = seqn_break_tail(out, len, &seq_num, &flag_var);
-                    
+                    if (seq_num % 50 == 0) {
+                        vtun_syslog(LOG_DEBUG, "Receive frame ... chan %d seq %lu len %d", chan_num, seq_num, len);
+                    }
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
