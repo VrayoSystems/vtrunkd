@@ -315,9 +315,9 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
                 (shm_conn_info->resend_frames_buf[i].chan_num == conn_num)) {
 
             len = shm_conn_info->resend_frames_buf[i].len;
-//            *((unsigned short *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len-sizeof(unsigned short)))) = htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode.  RXMIT mode broken HERE!! // clean flags?
+            *((unsigned short *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len-sizeof(unsigned short)))) = htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
             *out = shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV;
-//            *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
+            *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
             break;
         }
     }
@@ -400,7 +400,7 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    int pid, len = LASTPACKETMY_NOTIFY;
+    int len = LASTPACKETMY_NOTIFY;
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         unsigned long seq_num_tmp = get_last_packet_seq_num(i);
@@ -416,11 +416,11 @@ int retransmit_send(char *out2, int mypid) {
             vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &pid);
+        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
         int j = 10;
         while (len == -1) {
             last_sent_packet_num[i].seq_num = seq_num_tmp - j;
-            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &pid);
+            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
             j--;
         }
         sem_post(&(shm_conn_info->resend_buf_sem));
