@@ -417,9 +417,11 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-        if (len == -1) {
-            last_sent_packet_num[i].seq_num = seq_num_tmp;
+        int j = 10;
+        while (len == -1) {
+            last_sent_packet_num[i].seq_num = seq_num_tmp - j;
             len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+            j--;
         }
         sem_post(&(shm_conn_info->resend_buf_sem));
 #ifdef DEBUGG
