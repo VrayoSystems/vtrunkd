@@ -103,6 +103,7 @@ long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
 int acnt = 0; // assert variable
 short int chan_amt = 0; // Number of logical channels already established(created)
+char *out_buf;
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -338,6 +339,20 @@ unsigned long get_last_packet_seq_num(int chan_num) {
     return -1;
 }
 
+unsigned long get_oldest_packet_seq_num(int chan_num) {
+    int j = shm_conn_info->resend_buf_idx;
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            return shm_conn_info->resend_frames_buf[j].seq_num;
+        }
+        j--;
+        if (j < 0) {
+            j = RESEND_BUF_SIZE - 1;
+        }
+    }
+    return -1;
+}
+
 int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *flag_var) {
     *seq_num = ntohl(*((unsigned long *)(&out[len-sizeof(unsigned long)-sizeof(unsigned short)])));
     *flag_var = ntohs(*((unsigned short *)(&out[len-sizeof(unsigned short)])));
@@ -417,12 +432,11 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-        int j = 10;
-        while (len == -1) {
-            last_sent_packet_num[i].seq_num = seq_num_tmp - j;
-            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-            j--;
-        }
+    if (len == -1) {
+        last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);
+        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        memcpy(out_buf, out2, len);
+    }
         sem_post(&(shm_conn_info->resend_buf_sem));
 #ifdef DEBUGG
         vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
@@ -431,7 +445,7 @@ int retransmit_send(char *out2, int mypid) {
         if (last_sent_packet_num[i].seq_num % 50 == 0) {
             vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
-        if (len && proto_write(channels[i], out2, len) < 0) {
+        if (len && proto_write(channels[i], out_buf, len) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
 #endif
@@ -886,6 +900,10 @@ int lfd_linker(void)
 
     if( !(buf = lfd_alloc(VTUN_FRAME_SIZE + VTUN_FRAME_OVERHEAD)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
+        return 0;
+    }
+    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2+200)) ) {
+        vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
 
