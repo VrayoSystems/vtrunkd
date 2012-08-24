@@ -341,14 +341,14 @@ unsigned long get_last_packet_seq_num(int chan_num) {
 
 unsigned long get_oldest_packet_seq_num(int chan_num) {
     int j = shm_conn_info->resend_buf_idx;
-    j--;
+    j++;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             return shm_conn_info->resend_frames_buf[j].seq_num;
         }
-        j--;
-        if (j < 0) {
-            j = RESEND_BUF_SIZE - 1;
+        j++;
+        if (j == RESEND_BUF_SIZE) {
+            j = 0;
         }
     }
     return -1;
