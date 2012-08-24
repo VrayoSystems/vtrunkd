@@ -341,6 +341,7 @@ unsigned long get_last_packet_seq_num(int chan_num) {
 
 unsigned long get_oldest_packet_seq_num(int chan_num) {
     int j = shm_conn_info->resend_buf_idx;
+    j--;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             return shm_conn_info->resend_frames_buf[j].seq_num;
@@ -426,18 +427,28 @@ int retransmit_send(char *out2, int mypid) {
 #endif
             continue;
         }
+        if (last_sent_packet_num[i].num_resend == 0) {
+            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d top frame is seq %lu len %d", i, seq_num_tmp, len);
+        }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        if (last_sent_packet_num[i].num_resend == 0) {
+            vtun_syslog(LOG_DEBUG, "get first resend frame ... chan %d top frame is seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
         if (len == -1) {
-            last_sent_packet_num[i].seq_num = seq_num_tmp-(RESEND_BUF_SIZE-500);
+            last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);//seq_num_tmp-(RESEND_BUF_SIZE-500);
             len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
         }
-//        memcpy(out_buf, out2, len);
+        memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
+        if (last_sent_packet_num[i].num_resend == 0) {
+            last_sent_packet_num[i].num_resend++;
+            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d start for seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
 #ifdef DEBUGG
         vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
@@ -445,7 +456,7 @@ int retransmit_send(char *out2, int mypid) {
         if (last_sent_packet_num[i].seq_num % 50 == 0) {
             vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
-        if (len && proto_write(channels[i], out2, len) < 0) {
+        if (len && proto_write(channels[i], out_buf, len) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
 #endif
