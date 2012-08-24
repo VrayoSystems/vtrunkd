@@ -432,11 +432,11 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-    if (len == -1) {
-        last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);
-        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-        memcpy(out_buf, out2, len);
-    }
+        if (len == -1) {
+            last_sent_packet_num[i].seq_num = seq_num_tmp-(RESEND_BUF_SIZE-500);
+            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        }
+//        memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
 #ifdef DEBUGG
         vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
@@ -445,7 +445,7 @@ int retransmit_send(char *out2, int mypid) {
         if (last_sent_packet_num[i].seq_num % 50 == 0) {
             vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
-        if (len && proto_write(channels[i], out_buf, len) < 0) {
+        if (len && proto_write(channels[i], out2, len) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
 #endif
@@ -607,7 +607,7 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
             (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq) >= STRANGE_SEQ_FUTURE ) ||
             ( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST )) { // this ABS comparison makes checks in MRB unnesesary...
-        vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT seq_num %lu lws %lu; diff is: %d >= 1000", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq));
+        vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT logical channel %i seq_num %lu lws %lu; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq));
         shm_conn_info->write_buf[conn_num].broken_cnt++;
         if(shm_conn_info->write_buf[conn_num].broken_cnt > 3) {
             // fix lws
@@ -911,6 +911,9 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
+    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+        last_sent_packet_num[i].seq_num = SEQ_START_VAL+1;
+    }
     maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
     linker_term = 0;
