@@ -421,7 +421,7 @@ int retransmit_send(char *out2, int mypid) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         unsigned long seq_num_tmp = get_last_packet_seq_num(i);
         sem_post(&(shm_conn_info->resend_buf_sem));
-        if ((seq_num_tmp - last_sent_packet_num[i].seq_num == 0) || (seq_num_tmp == -1)) {
+        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) == 0) || (seq_num_tmp == -1)) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
 #endif
@@ -1191,7 +1191,7 @@ int lfd_linker(void)
 					pid_remote = shm_conn_info->stats[i].pid_remote;
 					sem_post(&(shm_conn_info->stats_sem));
 					uint32_t time_lag_remote_h = htonl(time_lag_remote);
-                    if( memcpy(buf, &time_lag_remote_h, sizeof(uint32_t)) < 0) {
+                    if( memcpy(buf, &time_lag_remote_h, sizeof(unsigned long)) < 0) {
                         vtun_syslog(LOG_ERR, "memcpy imf");
                         err=1;
                     }
