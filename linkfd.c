@@ -362,7 +362,7 @@ int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *
 
 
 /**
- * Generate new packet number, wrapping packet and add to resend queue.
+ * Generate new packet number, wrapping packet and add to resend queue. (unsynchronized)
  *
  * @param conn_num
  * @param buf - data for send
@@ -374,33 +374,16 @@ int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *
  * @return
  */
 int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long seq_num, unsigned short flag, int sender_pid) {
-    int oldidx = shm_conn_info->resend_buf_idx;
-    int newf = oldidx;
-    int ic = 0;
-    // TODO reimplement - get free slot
-    do {
-        if((!shm_conn_info->resend_frames_buf[newf].seq_num) || (shm_conn_info->resend_frames_buf[newf].seq_num <
-                shm_conn_info->write_buf[shm_conn_info->resend_frames_buf[newf].chan_num].remote_lws))
-            break;
-        newf = ++shm_conn_info->resend_buf_idx;
-        if(newf >= RESEND_BUF_SIZE) {
-            newf = shm_conn_info->resend_buf_idx = 0;
-        }
-        ic++;
-    } while (newf != oldidx);
+    int newf = shm_conn_info->resend_buf_idx;
 
-    if( (newf == oldidx) && (ic > 2)) { // this sucks...
-        vtun_syslog(LOG_ERR, "WARNING! no free and written elements in resend buf! chan %d remote_lws %lu seq_num %lu", conn_num, shm_conn_info->write_buf[conn_num].remote_lws, seq_num);
-        newf = ++shm_conn_info->resend_buf_idx;
-        if(newf >= RESEND_BUF_SIZE) {
-            newf = shm_conn_info->resend_buf_idx = 0;
-        }
+    shm_conn_info->resend_buf_idx++;
+    if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
+        shm_conn_info->resend_buf_idx = 0;
     }
 
     shm_conn_info->resend_frames_buf[newf].seq_num = seq_num;
     shm_conn_info->resend_frames_buf[newf].sender_pid = sender_pid;
     shm_conn_info->resend_frames_buf[newf].chan_num = conn_num;
-
 
     memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV), buf, len);
 	seq_num = htonl(seq_num);
