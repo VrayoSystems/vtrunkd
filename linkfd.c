@@ -109,7 +109,7 @@ char *out_buf;
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 uint16_t tmp_flags;
-unsigned long long local_common_seq_num;
+
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -325,38 +325,30 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
     return len;
 }
 
-unsigned long get_seq_num_by_common(int* chan) {
+unsigned long get_last_packet_seq_num(int chan_num) {
     int j = shm_conn_info->resend_buf_idx;
-    unsigned long long acc = 0;
-    unsigned long seq_num;
-    *chan = -1;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
-        if (shm_conn_info->resend_frames_buf[j].common_seq_num == local_common_seq_num) {
-            *chan = shm_conn_info->resend_frames_buf[j].chan_num;
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             return shm_conn_info->resend_frames_buf[j].seq_num;
         }
-        if (acc < shm_conn_info->resend_frames_buf[j].common_seq_num) {
-            acc = shm_conn_info->resend_frames_buf[j].common_seq_num;
-            *chan = shm_conn_info->resend_frames_buf[j].chan_num;
-            seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
+        j--;
+        if (j < 0) {
+            j = RESEND_BUF_SIZE - 1;
         }
     }
-    if (*chan == -1) {
-        return -1;
-    } else {
-        return seq_num;
-    }
+    return -1;
 }
 
 unsigned long get_oldest_packet_seq_num(int chan_num) {
     int j = shm_conn_info->resend_buf_idx;
+    j++;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            return shm_conn_info->resend_frames_buf[j].seq_num;
+        }
         j++;
         if (j == RESEND_BUF_SIZE) {
             j = 0;
-        }
-        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            return shm_conn_info->resend_frames_buf[j].seq_num;
         }
     }
     return -1;
@@ -382,15 +374,13 @@ int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *
  * @return
  */
 int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long seq_num, unsigned short flag, int sender_pid) {
-    int newf;
+    int newf = shm_conn_info->resend_buf_idx;
 
-    (shm_conn_info->resend_buf_idx)++;
+    shm_conn_info->resend_buf_idx++;
     if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
         shm_conn_info->resend_buf_idx = 0;
     }
 
-    newf = shm_conn_info->resend_buf_idx;
-    shm_conn_info->resend_frames_buf[newf].common_seq_num = ++shm_conn_info->common_seq_counter;
     shm_conn_info->resend_frames_buf[newf].seq_num = seq_num;
     shm_conn_info->resend_frames_buf[newf].sender_pid = sender_pid;
     shm_conn_info->resend_frames_buf[newf].chan_num = conn_num;
@@ -409,44 +399,65 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    int len = 0;
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    unsigned long long common_seq_num = shm_conn_info->common_seq_counter;
-    sem_post(&(shm_conn_info->resend_buf_sem));
-    if (local_common_seq_num != common_seq_num) {
-        int chan;
-        unsigned long seq_num;
-        local_common_seq_num++;
+    int len = 0, send_counter = 0;
+    for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        seq_num = get_seq_num_by_common(&chan);
+        unsigned long seq_num_tmp = get_last_packet_seq_num(i);
         sem_post(&(shm_conn_info->resend_buf_sem));
-        if (seq_num == -1) {
-            return LASTPACKETMY_NOTIFY;
+        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) == 0) || (seq_num_tmp == -1)) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
+#endif
+            continue;
         }
+        if (last_sent_packet_num[i].num_resend == 0) {
+            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d top frame is seq %lu len %d", i, seq_num_tmp, len);
+        }
+        last_sent_packet_num[i].seq_num++;
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
+#endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        len = get_resend_frame(chan, seq_num, &out2, &mypid);
+        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        if (last_sent_packet_num[i].num_resend == 0) {
+            vtun_syslog(LOG_DEBUG, "get first resend frame ... chan %d top frame is seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
+        if (len == -1) {
+            last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);//seq_num_tmp-(RESEND_BUF_SIZE-500);
+            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        }
+        if(len == -1) {
+            vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+            continue;
+        }
         memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
+        if (last_sent_packet_num[i].num_resend == 0) {
+            last_sent_packet_num[i].num_resend++;
+            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d start for seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
 #ifdef DEBUGG
-        vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", chan, seq_num, len);
+        vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        if (local_common_seq_num % 50 == 0) {
-            vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d local common seq %llu", chan, seq_num, len, local_common_seq_num);
+        if (last_sent_packet_num[i].seq_num % 50 == 0) {
+            vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
-        if (len && proto_write(channels[chan], out_buf, len) < 0) {
+        if (len && proto_write(channels[i], out_buf, len) < 0) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan, strerror(errno), errno);
+            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
 #endif
             return CONTINUE_ERROR;
         }
-        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[chan].up_data_len_amt += len;
-        return len;
-    } else {
+        send_counter++;
+        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len;
+    }
+    if (send_counter == 0) {
         return LASTPACKETMY_NOTIFY;
+    } else {
+        return 1;
     }
 }
-
 
 /**
  * Procedure select all(only tun_device now) file descriptors and if data available read from tun device, pack and write to net
@@ -545,7 +556,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     sem_post(&(shm_conn_info->common_sem));
     sem_wait(&(shm_conn_info->resend_buf_sem));
     len = seqn_add_tail(chan_num, buf, &out2, len, tmp_seq_counter, channel_mode, mypid);
-    local_common_seq_num = shm_conn_info->common_seq_counter;
     sem_post(&(shm_conn_info->resend_buf_sem));
 
     statb.bytes_sent_norm += len;
@@ -554,7 +564,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
 #endif
     if (tmp_seq_counter % 50 == 0) {
-        vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d common seq %llu", chan_num, tmp_seq_counter, len, local_common_seq_num);
+        vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
     }
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)

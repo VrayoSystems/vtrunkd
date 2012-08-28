@@ -345,7 +345,6 @@ struct conn_info {
     sem_t resend_buf_sem; //for resend buf,  (ever between write_buf_sem if need double blocking)
     sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
-    unsigned long long common_seq_counter;
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
