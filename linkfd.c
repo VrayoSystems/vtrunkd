@@ -416,7 +416,7 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
-    int len = LASTPACKETMY_NOTIFY;
+    int len = 0, send_counter = 0;
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         unsigned long seq_num_tmp = get_last_packet_seq_num(i);
@@ -443,6 +443,10 @@ int retransmit_send(char *out2, int mypid) {
             last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);//seq_num_tmp-(RESEND_BUF_SIZE-500);
             len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
         }
+        if(len == -1) {
+            vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+            continue;
+        }
         memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
         if (last_sent_packet_num[i].num_resend == 0) {
@@ -462,9 +466,14 @@ int retransmit_send(char *out2, int mypid) {
 #endif
             return CONTINUE_ERROR;
         }
+        send_counter++;
         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len;
     }
-    return len;
+    if (send_counter == 0) {
+        return LASTPACKETMY_NOTIFY;
+    } else {
+        return 1;
+    }
 }
 
 /**
