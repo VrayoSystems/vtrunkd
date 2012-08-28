@@ -378,6 +378,7 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
 
     shm_conn_info->resend_buf_idx++;
     if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
+        vtun_syslog(LOG_INFO, "seqn_add_tail() resend_frames_buf loop end");
         shm_conn_info->resend_buf_idx = 0;
     }
 
@@ -400,11 +401,12 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  */
 int retransmit_send(char *out2, int mypid) {
     int len = 0, send_counter = 0;
+    unsigned long seq_num_tmp;
     for (int i = 1; i <= chan_amt; i++) {
-        sem_wait(&(shm_conn_info->resend_buf_sem));
-        unsigned long seq_num_tmp = get_last_packet_seq_num(i);
-        sem_post(&(shm_conn_info->resend_buf_sem));
-        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) == 0) || (seq_num_tmp == -1)) {
+        sem_wait(&(shm_conn_info->common_sem));
+        seq_num_tmp = shm_conn_info->seq_counter[i];
+        sem_post(&(shm_conn_info->common_sem));
+        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) <= 0) || (seq_num_tmp == -1)) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
 #endif
