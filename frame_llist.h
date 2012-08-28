@@ -34,7 +34,7 @@ struct frame_seq {
     int rel_next; // relative pointer [TODO: make it short or even char!]
     int sender_pid; // okay as short?
     int chan_num;
-    //char retransmit_times;
+    unsigned long long common_seq_num;
 };
 
 struct frame_llist{
