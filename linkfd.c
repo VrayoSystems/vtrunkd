@@ -406,7 +406,7 @@ int retransmit_send(char *out2, int mypid) {
         sem_wait(&(shm_conn_info->common_sem));
         seq_num_tmp = shm_conn_info->seq_counter[i];
         sem_post(&(shm_conn_info->common_sem));
-        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) <= 0) || (seq_num_tmp == -1)) {
+        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) <= 0) || (seq_num_tmp == SEQ_START_VAL)) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
 #endif
@@ -917,7 +917,7 @@ int lfd_linker(void)
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
-        last_sent_packet_num[i].seq_num = SEQ_START_VAL+1;
+        last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
     maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
