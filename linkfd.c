@@ -108,7 +108,7 @@ char *out_buf;
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
-uint16_t tmp_flags;
+uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 
 int proto_err_cnt = 0;
 
@@ -1154,8 +1154,10 @@ int lfd_linker(void)
             } else {
                 shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
             }
+            tmp_AG = shm_conn_info->AG_ready_flags;
+            tmp_channels_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
-            vtun_syslog(LOG_INFO, "Mode %i", tmp_flags);
+            vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u", tmp_flags, tmp_AG, tmp_channels_mask);
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
