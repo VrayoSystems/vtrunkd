@@ -436,6 +436,8 @@ int retransmit_send(char *out2, int mypid) {
         }
         if(len == -1) {
             vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+            struct frame_seq resend_frames_buf_clone[RESEND_BUF_SIZE];
+            memcpy(&resend_frames_buf_clone, &(shm_conn_info->resend_frames_buf), sizeof(struct frame_seq)*RESEND_BUF_SIZE);
             last_sent_packet_num[i].seq_num = seq_num_tmp;
             continue;
         }
