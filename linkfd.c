@@ -306,8 +306,14 @@ int fix_free_writebuf() {
     return 0;
 }
 
+void gg(){
+    return;
+}
 
 int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sender_pid) {
+    if (seq_num == 18446744073709551615) {
+        gg();
+    }
     int i, len = -1;
     // TODO: we should be searching from most probable start place
     //   not to scan through the whole buffer to the end
@@ -430,6 +436,7 @@ int retransmit_send(char *out2, int mypid) {
         }
         if(len == -1) {
             vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+            last_sent_packet_num[i].seq_num = seq_num_tmp;
             continue;
         }
         memcpy(out_buf, out2, len);
@@ -1157,7 +1164,7 @@ int lfd_linker(void)
             tmp_AG = shm_conn_info->AG_ready_flags;
             tmp_channels_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
-            vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u", tmp_flags, tmp_AG, tmp_channels_mask);
+            vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -1859,7 +1866,7 @@ int lfd_linker(void)
              *
              * */
         sem_wait(&(shm_conn_info->AG_flags_sem));
-        tmp_flags = shm_conn_info->AG_ready_flags & shm_conn_info->channels_mask;
+        tmp_flags = shm_conn_info->AG_ready_flags ^ shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
 #ifdef DEBUGG
@@ -1895,7 +1902,7 @@ int lfd_linker(void)
             } else if (len == CONTINUE_ERROR) {
                 continue;
             } else if (len == TRYWAIT_NOTIFY) {
-                continue; //todo need to check resend_buf for new packet
+                continue;
             }
         }
 
