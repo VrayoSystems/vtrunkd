@@ -51,6 +51,9 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -885,6 +888,24 @@ int lfd_linker(void)
 
     int mypid = getpid(); // watchdog; current pid
     int sender_pid; // tmp var for resend detect my own pid
+    /* Create if need, pid directory*/
+    if (mkdir(LINKFD_PID_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
+        if (errno == EEXIST) {
+            vtun_syslog(LOG_INFO, "%s already  exists :)", LINKFD_PID_DIR);
+        } else {
+            vtun_syslog(LOG_ERR, "Can't create lock directory %s: %s (%d)", LINKFD_PID_DIR, strerror(errno), errno);
+        }
+    }
+    char pid_file[255], mypid_str[20];
+    sprintf(pid_file, "%s/%s", LINKFD_PID_DIR, lfd_host->host);
+    int mypid_file = open(pid_file, O_WRONLY | O_CREAT | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+    if (mypid_file < 0) {
+        vtun_syslog(LOG_ERR, "Can't create temp lock file %s", pid_file);
+    }
+    len = sprintf(mypid_str, "%d\n", mypid);
+    if (write(mypid_file, mypid_str, len) != len) {
+        vtun_syslog(LOG_ERR, "Can't write PID %d to %s", mypid, pid_file);
+    }
     unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
@@ -1935,6 +1956,9 @@ int lfd_linker(void)
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
     lfd_free(buf);
+    free(out_buf);
+    unlink(pid_file);
+    close(mypid_file);
 
     for(i=0; i<chan_amt; i++) {
         close(channels[i]);
