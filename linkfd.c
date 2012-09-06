@@ -314,9 +314,6 @@ void gg(){
 }
 
 int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sender_pid) {
-    if (seq_num == 18446744073709551615) {
-        gg();
-    }
     int i, len = -1;
     // TODO: we should be searching from most probable start place
     //   not to scan through the whole buffer to the end
@@ -334,11 +331,12 @@ int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sende
     return len;
 }
 
-unsigned long get_last_packet_seq_num(int chan_num) {
+int get_last_packet_seq_num(int chan_num, unsigned long *seq_num) {
     int j = shm_conn_info->resend_buf_idx;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            return shm_conn_info->resend_frames_buf[j].seq_num;
+            *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
+            return 1;
         }
         j--;
         if (j < 0) {
@@ -348,12 +346,13 @@ unsigned long get_last_packet_seq_num(int chan_num) {
     return -1;
 }
 
-unsigned long get_oldest_packet_seq_num(int chan_num) {
+int get_oldest_packet_seq_num(int chan_num, unsigned long *seq_num) {
     int j = shm_conn_info->resend_buf_idx;
     j++;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            return shm_conn_info->resend_frames_buf[j].seq_num;
+            *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
+            return 1;
         }
         j++;
         if (j == RESEND_BUF_SIZE) {
@@ -410,23 +409,23 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  */
 int retransmit_send(char *out2, int mypid) {
     int len = 0, send_counter = 0;
-    unsigned long seq_num_tmp;
+    unsigned long top_seq_num, seq_num_tmp = 1;
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->common_sem));
-        seq_num_tmp = shm_conn_info->seq_counter[i];
+        top_seq_num = shm_conn_info->seq_counter[i];
         sem_post(&(shm_conn_info->common_sem));
-        if (((seq_num_tmp - last_sent_packet_num[i].seq_num) <= 0) || (seq_num_tmp == SEQ_START_VAL)) {
+        if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
 #endif
             continue;
         }
         if (last_sent_packet_num[i].num_resend == 0) {
-            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d top frame is seq %lu len %d", i, seq_num_tmp, len);
+            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d top frame is seq %lu len %d", i, top_seq_num, len);
         }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
@@ -434,14 +433,20 @@ int retransmit_send(char *out2, int mypid) {
             vtun_syslog(LOG_DEBUG, "get first resend frame ... chan %d top frame is seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
         if (len == -1) {
-            last_sent_packet_num[i].seq_num = get_oldest_packet_seq_num(i);//seq_num_tmp-(RESEND_BUF_SIZE-500);
+            int succ = get_oldest_packet_seq_num(i, &seq_num_tmp);
+            if (succ == -1) {
+                sem_post(&(shm_conn_info->resend_buf_sem));
+                last_sent_packet_num[i].seq_num = top_seq_num;
+                vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+                continue;
+            }
+            last_sent_packet_num[i].seq_num = seq_num_tmp;
             len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
         }
-        if(len == -1) {
-            vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
-            struct frame_seq resend_frames_buf_clone[RESEND_BUF_SIZE];
-            memcpy(&resend_frames_buf_clone, &(shm_conn_info->resend_frames_buf), sizeof(struct frame_seq)*RESEND_BUF_SIZE);
-            last_sent_packet_num[i].seq_num = seq_num_tmp;
+        if (len == -1) {
+            sem_post(&(shm_conn_info->resend_buf_sem));
+            vtun_syslog(LOG_ERR, "ERROR R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+            last_sent_packet_num[i].seq_num = top_seq_num;
             continue;
         }
         memcpy(out_buf, out2, len);
