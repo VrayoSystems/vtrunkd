@@ -826,8 +826,8 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    vtun_syslog(LOG_INFO, "channel speed %i", chan_info->send);
-    if ((max_speed / 2 < chan_info->send) & (max_speed * 2 > chan_info->send)) {
+    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u AG_FLOW_FACTOR - %d", chan_info->send / 1000, max_speed, AG_FLOW_FACTOR);
+    if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
     return 0;

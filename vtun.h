@@ -105,6 +105,8 @@
 #define P_TCP_CONN_AMOUNT 5 // int
 // big jitter
 #define ABSOLUTE_MAX_JITTER 2500 // in ms
+// ag switch compare parameter always less than 1 but higher than 0
+#define AG_FLOW_FACTOR 0.2
 
 
 /* Compiled-in values */
