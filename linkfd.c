@@ -36,6 +36,7 @@
  *
  */
 
+#define _GNU_SOURCE
 #include "config.h"
 
 #include <stdio.h>
@@ -889,8 +890,22 @@ int lfd_linker(void)
           timer_resolution.tv_sec = lfd_host->TICK_SECS;
           timer_resolution.tv_usec = 0;
     }
-    
 
+#ifdef HAVE_SCHED_H
+    int cpu_numbers = sysconf(_SC_NPROCESSORS_ONLN); /* Get numbers of CPUs */
+    if (cpu_numbers != -1) {
+        cpu_set_t cpu_set;
+        CPU_ZERO(&cpu_set);
+        CPU_SET(my_physical_channel_num % cpu_numbers, &cpu_set);
+        if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set)) {
+            vtun_syslog(LOG_INFO, "Can't set cpu");
+        } else {
+            vtun_syslog(LOG_INFO, "Set process %i on cpu %i", my_physical_channel_num, my_physical_channel_num % cpu_numbers);
+        }
+    } else {
+        vtun_syslog(LOG_INFO, "sysconf(_SC_NPROCESSORS_ONLN) return error");
+    }
+#endif
     int mypid = getpid(); // watchdog; current pid
     int sender_pid; // tmp var for resend detect my own pid
     /* Create if need, pid directory*/
