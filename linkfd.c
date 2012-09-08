@@ -416,13 +416,7 @@ int retransmit_send(char *out2, int mypid) {
         top_seq_num = shm_conn_info->seq_counter[i];
         sem_post(&(shm_conn_info->common_sem));
         if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: logical channel #%i last packet my notify", i);
-#endif
             continue;
-        }
-        if (last_sent_packet_num[i].num_resend == 0) {
-            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d top frame is seq %lu len %d", i, top_seq_num, len);
         }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
@@ -430,10 +424,7 @@ int retransmit_send(char *out2, int mypid) {
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-        if (last_sent_packet_num[i].num_resend == 0) {
-            vtun_syslog(LOG_DEBUG, "get first resend frame ... chan %d top frame is seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
-        }
-        if (len == -1) {
+          if (len == -1) {
             int succ = get_oldest_packet_seq_num(i, &seq_num_tmp);
             if (succ == -1) {
                 sem_post(&(shm_conn_info->resend_buf_sem));
@@ -460,9 +451,6 @@ int retransmit_send(char *out2, int mypid) {
         vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        if (last_sent_packet_num[i].seq_num % 50 == 0) {
-            vtun_syslog(LOG_DEBUG, "R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
-        }
         if (len && proto_write(channels[i], out_buf, len) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
@@ -582,10 +570,8 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
+    vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
 #endif
-    if (tmp_seq_counter % 50 == 0) {
-        vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
-    }
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
