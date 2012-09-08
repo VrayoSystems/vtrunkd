@@ -1901,7 +1901,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE)
+        if (0) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_DEBUG, "debug: R_MODE");
 #endif
