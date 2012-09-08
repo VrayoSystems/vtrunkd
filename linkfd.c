@@ -897,7 +897,7 @@ int lfd_linker(void)
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(my_physical_channel_num % cpu_numbers, &cpu_set);
-        if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set)) {
+        if (sched_setaffinity(0, sizeof(cpu_set), &cpu_set) == -1) {
             vtun_syslog(LOG_INFO, "Can't set cpu");
         } else {
             vtun_syslog(LOG_INFO, "Set process %i on cpu %i", my_physical_channel_num, my_physical_channel_num % cpu_numbers);
