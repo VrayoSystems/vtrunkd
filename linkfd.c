@@ -410,13 +410,19 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
  */
 int retransmit_send(char *out2, int mypid) {
     int len = 0, send_counter = 0;
-    unsigned long top_seq_num, seq_num_tmp = 1;
+    unsigned long top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->common_sem));
         top_seq_num = shm_conn_info->seq_counter[i];
         sem_post(&(shm_conn_info->common_sem));
+        sem_wait(&(shm_conn_info->write_buf_sem));
+        remote_lws = shm_conn_info->write_buf[i].remote_lws;
+        sem_post(&(shm_conn_info->write_buf_sem));
         if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
             continue;
+        }
+        if ((last_sent_packet_num[i].seq_num + 1) <= remote_lws) {
+            last_sent_packet_num[i].seq_num = remote_lws;
         }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
