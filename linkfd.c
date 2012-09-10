@@ -544,7 +544,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         return CONTINUE_ERROR;
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "debug: R_MODE we have read data from tun device and going to send it through net");
+    vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
     // now determine packet IP..
     ip = (struct my_ip*) (buf);
@@ -813,7 +813,7 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u AG_FLOW_FACTOR - %d", chan_info->send / 1000, max_speed, AG_FLOW_FACTOR);
+    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, AG_FLOW_FACTOR);
     if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
@@ -1603,7 +1603,7 @@ int lfd_linker(void)
                         }
 
                         if( ((lfd_host->flags & VTUN_PROT_MASK) == VTUN_TCP) && (sender_pid == mypid)) {
-                            vtun_syslog(LOG_INFO, "Will not resend my own data! It is on the way! frame len %d seq_numi %lu chan %d", len, ntohl(*((unsigned long *)buf)), chan_num);
+                            vtun_syslog(LOG_INFO, "Will not resend my own data! It is on the way! frame len %d seq_num %lu chan %d", len, ntohl(*((unsigned long *)buf)), chan_num);
                             continue;
                         }
                         vtun_syslog(LOG_ERR, "Resending bad frame len %d eq lu %d id %lu chan %d", len, sizeof(unsigned long), ntohl(*((unsigned long *)buf)), chan_num);
