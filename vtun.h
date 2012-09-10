@@ -113,6 +113,7 @@
 // defines period of LWS notification; helps reduce resend_buf outage probability
 // uses TICK_SECS as base interval
 #define LWS_NOTIFY_PEROID 3 // seconds; TODO: make this configurable
+#define LWS_NOTIFY_MAX_SUB_SEQ 30
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
 #define FRAME_BUF_SIZE 400 // int
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!

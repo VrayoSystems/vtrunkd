@@ -1163,7 +1163,27 @@ int lfd_linker(void)
         usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&cur_time, NULL);
-
+        /* TODO write function for lws sending*/
+        for (i = 0; i < chan_amt; i++) {
+        sem_wait(&(shm_conn_info->write_buf_sem));
+        unsigned long last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
+        unsigned long last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
+        sem_post(&(shm_conn_info->write_buf_sem));
+            if ((last_written_seq_tmp > (last_last_written_seq[i] + LWS_NOTIFY_MAX_SUB_SEQ))) {
+            // TODO: DUP code!
+            sem_wait(&(shm_conn_info->write_buf_sem));
+            *((unsigned long *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
+            last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
+            shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+            sem_post(&(shm_conn_info->write_buf_sem));
+            *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
+            if ((len1 = proto_write(channels[i], buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                linker_term = TERM_NONFATAL;
+            }
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
+        }
+    }
           // do an expensive thing
           timersub(&cur_time, &last_timing, &tv_tmp);
           //this is Tick module
