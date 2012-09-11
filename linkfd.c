@@ -435,7 +435,7 @@ int retransmit_send(char *out2, int mypid) {
             if (succ == -1) {
                 sem_post(&(shm_conn_info->resend_buf_sem));
                 last_sent_packet_num[i].seq_num = top_seq_num;
-                vtun_syslog(LOG_DEBUG, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
+                vtun_syslog(LOG_INFO, "R_MODE can't found frame for chan %d seq %lu ... continue", i, last_sent_packet_num[i].seq_num);
                 continue;
             }
             last_sent_packet_num[i].seq_num = seq_num_tmp;
@@ -451,10 +451,10 @@ int retransmit_send(char *out2, int mypid) {
         sem_post(&(shm_conn_info->resend_buf_sem));
         if (last_sent_packet_num[i].num_resend == 0) {
             last_sent_packet_num[i].num_resend++;
-            vtun_syslog(LOG_DEBUG, "Resend frame ... chan %d start for seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+            vtun_syslog(LOG_INFO, "Resend frame ... chan %d start for seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
         }
 #ifdef DEBUGG
-        vtun_syslog(LOG_DEBUG, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
         if (len && proto_write(channels[i], out_buf, len) < 0) {
@@ -523,7 +523,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         return CONTINUE_ERROR; // Nothing to read, continue.
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_DEBUG, "debug: we have data on tun device...");
+    vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
 #endif
     if (FD_ISSET(tun_device, &fdset)) {
     } else {
@@ -576,7 +576,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
-    vtun_syslog(LOG_DEBUG, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
+    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
 #endif
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
@@ -1704,7 +1704,7 @@ int lfd_linker(void)
 
                     len = seqn_break_tail(out, len, &seq_num, &flag_var);
                     if (seq_num % 50 == 0) {
-                        vtun_syslog(LOG_DEBUG, "Receive frame ... chan %d seq %lu len %d", chan_num, seq_num, len);
+                        vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %lu len %d", chan_num, seq_num, len);
                     }
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
@@ -1925,18 +1925,18 @@ int lfd_linker(void)
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
 #ifdef DEBUGG
-            vtun_syslog(LOG_DEBUG, "debug: send time, AG_ready_flags %xx0", tmp_flags);
+            vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
         if (tmp_flags != 0) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
-            vtun_syslog(LOG_DEBUG, "debug: R_MODE");
+            vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
                 continue;
             } else if (len == LASTPACKETMY_NOTIFY) { // if this physical channel had sent last packet
 #ifdef DEBUGG
-            vtun_syslog(LOG_DEBUG, "debug: R_MODE main send");
+            vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 len = select_devread_send(buf, out2, mypid);
                 if (len == BREAK_ERROR) {
@@ -1949,7 +1949,7 @@ int lfd_linker(void)
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
 #ifdef DEBUGG
-            vtun_syslog(LOG_DEBUG, "debug: AG_MODE");
+            vtun_syslog(LOG_INFO, "debug: AG_MODE");
 #endif
             len = select_devread_send(buf, out2, mypid);
             if (len == BREAK_ERROR) {
@@ -2016,7 +2016,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
     shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num); // start with disable AG mode
 #ifdef DEBUGG
-            vtun_syslog(LOG_DEBUG, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
+            vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif
     sem_post(&(shm_conn_info->AG_flags_sem));
     old_prio=getpriority(PRIO_PROCESS,0);
