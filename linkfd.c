@@ -490,6 +490,12 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
+    if (rand() % 2) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: Random continue");
+#endif
+        return CONTINUE_ERROR;
+    }
     if (!FD_ISSET(tun_device, &fdset)) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Nothing to read");
@@ -964,8 +970,7 @@ int lfd_linker(void)
     maxfd = (service_channel > tun_device ? service_channel : tun_device);
 
     linker_term = 0;
-
-    
+    srand((unsigned int) time(NULL ));
 
     if(srv) {
         // now read one single byte
