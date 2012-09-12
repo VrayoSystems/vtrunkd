@@ -1377,8 +1377,16 @@ int lfd_linker(void)
 
         tv.tv_sec  = timer_resolution.tv_sec;
         tv.tv_usec = timer_resolution.tv_usec;
-
-        if( (len = select(maxfd+1, &fdset, NULL, NULL, &tv)) < 0 ) { // selecting from multiple processes does actually work...
+#ifdef DEBUGG
+        struct timeval work_loop1, work_loop2;
+        gettimeofday(&work_loop1, NULL );
+#endif
+        len = select(maxfd + 1, &fdset, NULL, NULL, &tv);
+#ifdef DEBUGG
+        gettimeofday(&work_loop2, NULL );
+        vtun_syslog(LOG_INFO, "First select time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
+#endif
+        if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
             if( errno != EAGAIN && errno != EINTR ) {
                 vtun_syslog(LOG_INFO, "eagain select err; exit");
