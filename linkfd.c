@@ -1783,9 +1783,20 @@ int lfd_linker(void)
                     }
 #endif
 
+                    fd_set fdset_wr_dev;
+                    FD_ZERO(&fdset_wr_dev);
+                    FD_SET(tun_device, &fdset_wr_dev);
+                    tv.tv_sec = 0;
+                    tv.tv_usec = 60;
+                    int len_sel2 = 0;
 
                     acnt = 0;
                     while(fprev > -1) {
+                        len_sel2 = select(tun_device + 1, NULL, &fdset_wr_dev, NULL, &tv);
+                        if (FD_ISSET(tun_device, &fdset_wr_dev) && (len_sel2 > 0)) {
+                        } else {
+                            break;
+                        }
                         sem_wait(write_buf_sem);
                         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1) ? 1 : 0;
                         sem_post(write_buf_sem);
