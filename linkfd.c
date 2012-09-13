@@ -825,7 +825,7 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, AG_FLOW_FACTOR);
+    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
     if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
@@ -1211,8 +1211,8 @@ int lfd_linker(void)
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed =
                         (shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets = 0;
-                vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i);
+                vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d port %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i, channel_ports[i]);
             }
             tmp_flags = ag_switcher();
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -1384,7 +1384,7 @@ int lfd_linker(void)
         len = select(maxfd + 1, &fdset, NULL, NULL, &tv);
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "First select time: %lu ms", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
+        vtun_syslog(LOG_INFO, "First select time: %lu us", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
 #endif
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
@@ -1730,7 +1730,10 @@ int lfd_linker(void)
                     } else {
                          chan_num_virt = chan_num;
                     }
-
+#ifdef DEBUGG
+                    struct timeval work_loop1, work_loop2;
+                    gettimeofday(&work_loop1, NULL );
+#endif
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
 
@@ -1740,7 +1743,10 @@ int lfd_linker(void)
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
                     }
                     sem_post(write_buf_sem);
-
+#ifdef DEBUGG
+                    gettimeofday(&work_loop2, NULL );
+                    vtun_syslog(LOG_INFO, "write_buf_add time: %lu us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
+#endif
                     if(incomplete_seq_len == -1) {
                         vtun_syslog(LOG_ERR, "ASSERT FAILED! free write buf assert failed on chan %d", chan_num_virt);
                         buf_len = 100000; // flush the sh*t
@@ -1796,6 +1802,10 @@ int lfd_linker(void)
 
 						}
                             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
+#ifdef DEBUGG
+                            struct timeval work_loop1, work_loop2;
+                            gettimeofday(&work_loop1, NULL );
+#endif
                             sem_post(write_buf_sem);
                             if ((len = dev_write(tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
@@ -1812,6 +1822,9 @@ int lfd_linker(void)
                             }
                             sem_wait(write_buf_sem);
 #ifdef DEBUGG
+                            gettimeofday(&work_loop2, NULL );
+                            vtun_syslog(LOG_INFO, "dev_write time: %lu us",
+                                    (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
                             vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num ,shm_conn_info->write_buf[chan_num_virt].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders, weight, shm_conn_info->frames_buf[fprev].len, chan_num_virt);
 #endif
                             shm_conn_info->write_buf[chan_num_virt].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
