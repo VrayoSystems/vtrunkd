@@ -1898,7 +1898,7 @@ int lfd_linker(void)
         }
 #endif
         acnt = 0;
-        if ((fprev > -1) && FD_ISSET(tun_device, &fdset_w)) {
+        while ((fprev > -1) && FD_ISSET(tun_device, &fdset_w)) {
             int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1) ? 1 : 0;
             if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
                 struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
@@ -1941,6 +1941,7 @@ int lfd_linker(void)
             if (assert_cnt(7))
                 break; // TODO: add #ifdef DEBUGG
 #endif
+            break;
         }
         sem_post(write_buf_sem);
 
