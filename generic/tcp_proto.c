@@ -62,7 +62,7 @@ void ggg()
 }
 int tcp_write(int fd, char *buf, int len)
 {
-     register char *ptr;
+     char *ptr;
 
      if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
          unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
@@ -89,7 +89,7 @@ int tcp_write(int fd, char *buf, int len)
 int tcp_read(int fd, char *buf)
 {
      unsigned short len, flen;
-     register int rlen;     
+     int rlen;
 
      /* Rad frame size */
      if( (rlen = read_n(fd, (char *)&len, sizeof(short)) ) <= 0) {

@@ -71,7 +71,7 @@ void vtun_syslog (int priority, char *format, ...);
 /* Read exactly len bytes (Signal safe)*/
 static inline int read_n(int fd, char *buf, int len)
 {
-    register int t = 0, w, ecount = 0;
+    int t = 0, w, ecount = 0;
 
 	while (!__io_canceled && len > 0) {
 	  if( (w = read(fd, buf, len)) < 0 ){
@@ -97,7 +97,7 @@ static inline int read_n(int fd, char *buf, int len)
 /* Write exactly len bytes (Signal safe)*/
 static inline int write_n(int fd, char *buf, int len)
 {
-	register int t=0, w;
+	int t=0, w;
 
 	while (!__io_canceled && len > 0) {
  	  if( (w = write(fd, buf, len)) < 0 ){
