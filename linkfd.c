@@ -1460,6 +1460,15 @@ int lfd_linker(void)
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 #endif
+                fd_set fdset0;
+                FD_ZERO(&fdset0);
+                FD_SET(fd0, &fdset0);
+                struct timeval tv0;
+                tv0.tv_sec = 0;
+                tv0.tv_usec=0;
+                if (select(fd0 + 1, &fdset0, NULL, NULL, &tv0) != 1) {
+                    continue;
+                }
                 if( (len=proto_read(fd0, buf)) <= 0 ) {
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
