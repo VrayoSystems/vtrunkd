@@ -25,6 +25,8 @@ grep `grep " Session " /tmp/syslog-cli* | awk -F[ {'print $2'} | awk -F] {'print
 grep `grep " Session " /tmp/syslog-cli* | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/syslog-cli* > /tmp/syslog-2_cli$1
 grep `grep " Session " /tmp/syslog-srv* | awk -F[ {'print $2'} | awk -F] {'print $1'} | head -1` /tmp/syslog-srv* > /tmp/syslog-1_srv$1  
 grep `grep " Session " /tmp/syslog-srv* | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/syslog-srv* > /tmp/syslog-2_srv$1
+grep "First select time" /tmp/syslog-1_cli$1 > /tmp/syslog-1_cli$1_select_time
+grep "First select time" /tmp/syslog-2_cli$1 > /tmp/syslog-2_cli$1_select_time
 scp /tmp/syslog* andrey@bonanza:~/Dropbox/alarm_logs/
 rm /tmp/syslog*
 echo "Clear syslog"
