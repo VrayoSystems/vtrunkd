@@ -1397,7 +1397,7 @@ int lfd_linker(void)
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "First select time: %lu us", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)));
+        vtun_syslog(LOG_INFO, "First select time: %lu us descriptors num: %i", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)), len);
 #endif
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
