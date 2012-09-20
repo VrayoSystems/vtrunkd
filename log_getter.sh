@@ -32,6 +32,8 @@ grep "First select time" /tmp/syslog-1_cli$1 > /tmp/syslog-1_cli$1_select_time
 grep "First select time" /tmp/syslog-2_cli$1 > /tmp/syslog-2_cli$1_select_time
 grep 'write_buf_add called!' /tmp/syslog-1_cli$1 > /tmp/syslog-1_cli$1_write_buf
 grep 'write_buf_add called!' /tmp/syslog-2_cli$1 > /tmp/syslog-2_cli$1_write_buf
+grep 'select_devread_send' /tmp/syslog-1_srv$1 > /tmp/syslog-1_srv$1_select_devread_send
+grep 'select_devread_send' /tmp/syslog-2_srv$1 > /tmp/syslog-2_srv$1_select_devread_send
 scp /tmp/syslog* andrey@bonanza:~/Dropbox/alarm_logs/
 rm /tmp/syslog*
 echo "Clear syslog"
