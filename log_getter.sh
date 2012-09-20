@@ -11,10 +11,9 @@ ssh user@srv-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -s -f /home/user/
 sleep 5
 echo "Starting client 1..."
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest1 192.168.57.101 -P 5003"
-sleep 5
 echo "Starting client 2..."
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest2 192.168.58.101 -P 5003"
-sleep 3
+sleep 1
 echo "Full started"
 echo "Worcking..."
 ssh user@cli-32 "curl -m 100 http://10.200.1.31/u -o /dev/null"
