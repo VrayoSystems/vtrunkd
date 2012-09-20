@@ -517,7 +517,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     shm_conn_info->token = my_token;
     sem_post(&(shm_conn_info->common_sem));
     if (!FD_ISSET(tun_device, &fdset)) {
-        sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Nothing to read");
 #endif
