@@ -502,7 +502,20 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if (try_flag !=0) { // if semaphore is locked then go out
         return TRYWAIT_NOTIFY;
     }
-
+    sem_wait(&(shm_conn_info->common_sem));
+    if (shm_conn_info->token == my_token) {
+        sem_post(&(shm_conn_info->common_sem));
+        sem_post(&(shm_conn_info->tun_device_sem));
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: last token my - %i, continue", my_token);
+#endif
+        return CONTINUE_ERROR;
+    }
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: last token - %i my token - %i", shm_conn_info->token, my_token);
+#endif
+    shm_conn_info->token = my_token;
+    sem_post(&(shm_conn_info->common_sem));
     if (!FD_ISSET(tun_device, &fdset)) {
         sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
@@ -1380,20 +1393,7 @@ int lfd_linker(void)
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
-
-        sem_wait(&(shm_conn_info->common_sem));
-        if (shm_conn_info->token == my_token) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: last token my - %i, continue", my_token);
-#endif
-        } else {
-            FD_SET(tun_device, &fdset);
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: last token - %i my token - %i", shm_conn_info->token, my_token);
-#endif
-        }
-        shm_conn_info->token = my_token;
-        sem_post(&(shm_conn_info->common_sem));
+        FD_SET(tun_device, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
