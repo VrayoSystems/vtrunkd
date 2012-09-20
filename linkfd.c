@@ -157,7 +157,7 @@ int channels[MAX_TCP_LOGICAL_CHANNELS];
 int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
 int delay_cnt;
-
+int my_token;
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
         vtun_syslog(LOG_ERR, "ASSERT FAILED! Infinite loop detected at %d. Emergency break.", where);
@@ -498,12 +498,24 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
-    if (rand() % 2) {
+    int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
+    if (try_flag !=0) { // if semaphore is locked then go out
+        return TRYWAIT_NOTIFY;
+    }
+    sem_wait(&(shm_conn_info->common_sem));
+    if (shm_conn_info->token == my_token) {
+        sem_post(&(shm_conn_info->common_sem));
+        sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: Random continue");
+        vtun_syslog(LOG_INFO, "debug: last token my - %i, continue", my_token);
 #endif
         return CONTINUE_ERROR;
     }
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: last token - %i my token - %i", shm_conn_info->token, my_token);
+#endif
+    shm_conn_info->token = my_token;
+    sem_post(&(shm_conn_info->common_sem));
     if (!FD_ISSET(tun_device, &fdset)) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Nothing to read");
@@ -512,10 +524,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     }
     FD_ZERO(&fdset);
     FD_SET(tun_device, &fdset);
-    int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
-    if (try_flag !=0) { // if semaphore is locked then go out
-        return TRYWAIT_NOTIFY;
-    }
+
     len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
     if (len < 0) {
         if (errno != EAGAIN && errno != EINTR) {
@@ -2052,6 +2061,15 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
             vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif
     sem_post(&(shm_conn_info->AG_flags_sem));
+    /*token init*/
+    sem_wait(&(shm_conn_info->common_sem));
+    my_token = shm_conn_info->first_token_use;
+    shm_conn_info->first_token_use++;
+    sem_post(&(shm_conn_info->common_sem));
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: my token - %i", my_token);
+#endif
+
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
 
