@@ -377,6 +377,16 @@ int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *
     return len-sizeof(unsigned long)-sizeof(unsigned short);
 }
 
+/**
+ * Function for add flag and seq_num to packet
+ */
+int pack_packet(char *buf, int len, unsigned long seq_num, int flag) {
+    unsigned long seq_num_n = htonl(seq_num);
+    unsigned short flag_n = htons(flag);
+    memcpy(buf + len, &seq_num_n, sizeof(unsigned long));
+    memcpy(buf + len + sizeof(unsigned long), &flag_n, sizeof(unsigned short));
+    return len + sizeof(unsigned long) + sizeof(unsigned short);
+}
 
 /**
  * Generate new packet number, wrapping packet and add to resend queue. (unsynchronized)
@@ -388,9 +398,8 @@ int seqn_break_tail(char *out, int len, unsigned long *seq_num, unsigned short *
  * @param seq_num - output packet number
  * @param flag
  * @param sender_pid
- * @return
  */
-int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long seq_num, unsigned short flag, int sender_pid) {
+void seqn_add_tail(int conn_num, char *buf, int len, unsigned long seq_num, unsigned short flag, int sender_pid) {
     int newf = shm_conn_info->resend_buf_idx;
 
     shm_conn_info->resend_buf_idx++;
@@ -402,15 +411,9 @@ int seqn_add_tail(int conn_num, char *buf, char **out, int len, unsigned long se
     shm_conn_info->resend_frames_buf[newf].seq_num = seq_num;
     shm_conn_info->resend_frames_buf[newf].sender_pid = sender_pid;
     shm_conn_info->resend_frames_buf[newf].chan_num = conn_num;
+    shm_conn_info->resend_frames_buf[newf].len = len;
 
     memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV), buf, len);
-	seq_num = htonl(seq_num);
-	memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV + len), (char *) (&seq_num), sizeof(unsigned long));
-	*((unsigned short *) (shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV + len + sizeof(unsigned long))) = htons(flag);
-	*out = shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV;
-	shm_conn_info->resend_frames_buf[newf].len = len + sizeof(unsigned long) + sizeof(unsigned short);
-
-	return shm_conn_info->resend_frames_buf[newf].len;
 }
 
 /**
@@ -582,8 +585,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     (shm_conn_info->seq_counter[chan_num])++;
     unsigned long tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
     sem_post(&(shm_conn_info->common_sem));
+    len = pack_packet(buf, len, tmp_seq_counter, channel_mode);
     sem_wait(&(shm_conn_info->resend_buf_sem));
-    len = seqn_add_tail(chan_num, buf, &out2, len, tmp_seq_counter, channel_mode, mypid);
+    seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, mypid);
     sem_post(&(shm_conn_info->resend_buf_sem));
 
     statb.bytes_sent_norm += len;
@@ -595,7 +599,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
-    if (len && proto_write(channels[chan_num], out2, len) < 0) {
+    if (len && proto_write(channels[chan_num], buf, len) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
