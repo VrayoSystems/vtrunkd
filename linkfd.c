@@ -417,6 +417,47 @@ void seqn_add_tail(int conn_num, char *buf, int len, unsigned long seq_num, unsi
 }
 
 /**
+ * Add packet to fast resend buffer
+ *
+ * @param conn_num
+ * @param buf - pointer to packet
+ * @return -1 - error if buffer full and packet's quantity if success
+ */
+int add_fast_resend_frame(int conn_num, char *buf, int len, unsigned long seq_num) {
+    if (shm_conn_info->fast_resend_buf_idx >= MAX_TCP_PHYSICAL_CHANNELS) {
+        return -1; // fast_resend_buf is full
+    }
+    int i = shm_conn_info->fast_resend_buf_idx; // get next free index
+    ++(shm_conn_info->fast_resend_buf_idx);
+    unsigned short flag = MODE_NORMAL;
+    shm_conn_info->fast_resend_buf[i].seq_num = seq_num;
+    shm_conn_info->fast_resend_buf[i].sender_pid = 0;
+    shm_conn_info->fast_resend_buf[i].chan_num = conn_num;
+    shm_conn_info->fast_resend_buf[i].len = len;
+
+    memcpy((shm_conn_info->fast_resend_buf[i].out + LINKFD_FRAME_RESERV), buf, len);
+    return shm_conn_info->fast_resend_buf_idx;
+}
+
+/**
+ * Add packet to fast resend buffer
+ *
+ * @param conn_num - pointer for available variable
+ * @param buf - pointer to allocated memory
+ * @return
+ */
+int get_fast_resend_frame(int *conn_num, char *buf, int *len, unsigned long *seq_num) {
+    if (shm_conn_info->fast_resend_buf_idx == 0) {
+        return -1; // buffer is blank
+    }
+    int i = --(shm_conn_info->fast_resend_buf_idx);
+    memcpy(buf, shm_conn_info->fast_resend_buf[i].out + LINKFD_FRAME_RESERV, shm_conn_info->fast_resend_buf[i].len);
+    *conn_num = shm_conn_info->fast_resend_buf[i].chan_num;
+    *len = shm_conn_info->fast_resend_buf[i].len;
+    return i;
+}
+
+/**
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
@@ -494,7 +535,8 @@ int retransmit_send(char *out2, int mypid) {
  *
  */
 int select_devread_send(char *buf, char *out2, int mypid) {
-    int len;
+    int len, select_ret, idx;
+    unsigned long tmp_seq_counter = 0;
     int chan_num;
     struct my_ip *ip;
     struct tcphdr *tcp;
@@ -507,85 +549,101 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #endif
         return CONTINUE_ERROR;
     }
-    if (!FD_ISSET(tun_device, &fdset)) {
+    sem_wait(&(shm_conn_info->resend_buf_sem));
+    idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
+    if (idx == -1) {
+        if (!FD_ISSET(tun_device, &fdset)) {
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: Nothing to read");
+            vtun_syslog(LOG_INFO, "debug: Nothing to read");
 #endif
-        return TRYWAIT_NOTIFY;
-    }
-    FD_ZERO(&fdset);
-    FD_SET(tun_device, &fdset);
-    int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
-    if (try_flag !=0) { // if semaphore is locked then go out
-        return TRYWAIT_NOTIFY;
-    }
-    len = select(tun_device + 1, &fdset, NULL, NULL, &tv);
-    if (len < 0) {
-        if (errno != EAGAIN && errno != EINTR) {
+            return TRYWAIT_NOTIFY;
+        }
+        FD_ZERO(&fdset);
+        FD_SET(tun_device, &fdset);
+        int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
+        if (try_flag != 0) { // if semaphore is locked then go out
+            return TRYWAIT_NOTIFY;
+        }
+        select_ret = select(tun_device + 1, &fdset, NULL, NULL, &tv);
+        if (select_ret < 0) {
+            if (errno != EAGAIN && errno != EINTR) {
+                sem_post(&(shm_conn_info->tun_device_sem));
+                vtun_syslog(LOG_INFO, "select error; exit");
+                return BREAK_ERROR;
+            } else {
+                sem_post(&(shm_conn_info->tun_device_sem));
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select error; continue norm");
+#endif
+                return CONTINUE_ERROR;
+            }
+        } else if (select_ret == 0) {
             sem_post(&(shm_conn_info->tun_device_sem));
-            vtun_syslog(LOG_INFO, "select error; exit");
-            return BREAK_ERROR;
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: we don't have data on tun device; continue norm.");
+#endif
+            return CONTINUE_ERROR; // Nothing to read, continue.
+        }
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
+#endif
+        if (FD_ISSET(tun_device, &fdset)) {
         } else {
             sem_post(&(shm_conn_info->tun_device_sem));
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "select error; continue norm");
-#endif
             return CONTINUE_ERROR;
         }
-    } else if (len == 0) {
+        // we aren't checking FD_ISSET because we did select one descriptor
+        len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: we don't have data on tun device; continue norm.");
-#endif
-        return CONTINUE_ERROR; // Nothing to read, continue.
-    }
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
-#endif
-    if (FD_ISSET(tun_device, &fdset)) {
-    } else {
-        sem_post(&(shm_conn_info->tun_device_sem));
-        return CONTINUE_ERROR;
-    }
-    // we aren't checking FD_ISSET because we did select one descriptor
-    len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
-    sem_post(&(shm_conn_info->tun_device_sem));
-    if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
-        if (errno != EAGAIN && errno != EINTR) {
-            vtun_syslog(LOG_INFO, "sem_post! dev read err");
-            return BREAK_ERROR;
-        } else { // non fatal error
+        if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
+            if (errno != EAGAIN && errno != EINTR) {
+                vtun_syslog(LOG_INFO, "sem_post! dev read err");
+                return BREAK_ERROR;
+            } else { // non fatal error
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
 #endif
+                return CONTINUE_ERROR;
+            }
+        } else if (len == 0) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
+#endif
             return CONTINUE_ERROR;
         }
-    } else if (len == 0) {
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
+        vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
-        return CONTINUE_ERROR;
+        // now determine packet IP..
+        ip = (struct my_ip*) (buf);
+        unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
+        hash += (unsigned int) (ip->ip_dst.s_addr);
+        hash += ip->ip_p;
+        if (ip->ip_p == 6) { // TCP...
+            tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
+            //vtun_syslog(LOG_INFO, "TCP port s %d d %d", ntohs(tcp->source), ntohs(tcp->dest));
+            hash += tcp->source;
+            hash += tcp->dest;
+        }
+        chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
+        sem_wait(&(shm_conn_info->common_sem));
+        (shm_conn_info->seq_counter[chan_num])++;
+        tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
+        sem_post(&(shm_conn_info->common_sem));
+        len = pack_packet(buf, len, tmp_seq_counter, channel_mode);
     }
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
-#endif
-    // now determine packet IP..
-    ip = (struct my_ip*) (buf);
-    unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
-    hash += (unsigned int) (ip->ip_dst.s_addr);
-    hash += ip->ip_p;
-    if (ip->ip_p == 6) { // TCP...
-        tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
-        //vtun_syslog(LOG_INFO, "TCP port s %d d %d", ntohs(tcp->source), ntohs(tcp->dest));
-        hash += tcp->source;
-        hash += tcp->dest;
+    FD_ZERO(&fdset);
+    FD_SET(channels[chan_num], &fdset);
+    select_ret = select(channels[chan_num] + 1, NULL, &fdset, NULL, &tv);
+    if (select_ret != 1) {
+        sem_wait(&(shm_conn_info->resend_buf_sem));
+        idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
+        sem_post(&(shm_conn_info->resend_buf_sem));
+        if (idx == -1) {
+            vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+        }
+        return TRYWAIT_NOTIFY;
     }
-    chan_num = (hash % ((int) chan_amt - 1)) + 1; // send thru 1-n channel
-    sem_wait(&(shm_conn_info->common_sem));
-    (shm_conn_info->seq_counter[chan_num])++;
-    unsigned long tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-    sem_post(&(shm_conn_info->common_sem));
-    len = pack_packet(buf, len, tmp_seq_counter, channel_mode);
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, mypid);
     sem_post(&(shm_conn_info->resend_buf_sem));
