@@ -543,6 +543,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
+    fd_set fdset_tun;
     if (rand() % 2) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: Random continue");
@@ -558,13 +559,13 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #endif
             return TRYWAIT_NOTIFY;
         }
-        FD_ZERO(&fdset);
-        FD_SET(tun_device, &fdset);
+        FD_ZERO(&fdset_tun);
+        FD_SET(tun_device, &fdset_tun);
         int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
         if (try_flag != 0) { // if semaphore is locked then go out
             return TRYWAIT_NOTIFY;
         }
-        select_ret = select(tun_device + 1, &fdset, NULL, NULL, &tv);
+        select_ret = select(tun_device + 1, &fdset_tun, NULL, NULL, &tv);
         if (select_ret < 0) {
             if (errno != EAGAIN && errno != EINTR) {
                 sem_post(&(shm_conn_info->tun_device_sem));
@@ -587,7 +588,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
 #endif
-        if (FD_ISSET(tun_device, &fdset)) {
+        if (FD_ISSET(tun_device, &fdset_tun)) {
         } else {
             sem_post(&(shm_conn_info->tun_device_sem));
             return CONTINUE_ERROR;
@@ -632,9 +633,17 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         sem_post(&(shm_conn_info->common_sem));
         len = pack_packet(buf, len, tmp_seq_counter, channel_mode);
     }
-    FD_ZERO(&fdset);
-    FD_SET(channels[chan_num], &fdset);
-    select_ret = select(channels[chan_num] + 1, NULL, &fdset, NULL, &tv);
+#ifdef DEBUGG
+    else {
+        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf, packet amount - %i", idx);
+    }
+#endif
+    FD_ZERO(&fdset_tun);
+    FD_SET(channels[chan_num], &fdset_tun);
+    select_ret = select(channels[chan_num] + 1, NULL, &fdset_tun, NULL, &tv);
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "Trying to select desctiptor %i channel %d", channels[chan_num], chan_num);
+#endif
     if (select_ret != 1) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
@@ -642,8 +651,14 @@ int select_devread_send(char *buf, char *out2, int mypid) {
         if (idx == -1) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "BUSY - desctiptor %i channel %d");
+#endif
         return TRYWAIT_NOTIFY;
     }
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "READY - desctiptor %i channel %d");
+#endif
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, mypid);
     sem_post(&(shm_conn_info->resend_buf_sem));
