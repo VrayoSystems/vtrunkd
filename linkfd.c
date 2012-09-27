@@ -544,12 +544,6 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     fd_set fdset_tun;
-    if (rand() % 2) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: Random continue");
-#endif
-        return CONTINUE_ERROR;
-    }
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     if (idx == -1) {
