@@ -30,6 +30,7 @@
 #define TRYWAIT_NOTIFY -3
 #define LASTPACKETMY_NOTIFY -4
 #define RESENDLIMIT_NOTIFY -5
+#define NET_WRITE_BUSY_NOTIFY -5
 
 #define LINKFD_PID_DIR "/var/run/vtrunkd"
 /* Priority of the process in the link_fd function */

@@ -549,7 +549,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     if (idx == -1) {
         if (!FD_ISSET(tun_device, &fdset)) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: Nothing to read");
+            vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
 #endif
             return TRYWAIT_NOTIFY;
         }
@@ -648,7 +648,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "BUSY - desctiptor %i channel %d");
 #endif
-        return TRYWAIT_NOTIFY;
+        return NET_WRITE_BUSY_NOTIFY;
     }
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "READY - desctiptor %i channel %d");
@@ -2057,10 +2057,24 @@ int lfd_linker(void)
 #endif
             len = select_devread_send(buf, out2, mypid);
             if (len == BREAK_ERROR) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "select_devread_send() BREAK_ERROR");
+#endif
                 break;
             } else if (len == CONTINUE_ERROR) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
+#endif
                 continue;
             } else if (len == TRYWAIT_NOTIFY) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
+#endif
+                continue;
+            } else if (len == NET_WRITE_BUSY_NOTIFY) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
+#endif
                 continue;
             }
         }
