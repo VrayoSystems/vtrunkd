@@ -453,8 +453,9 @@ int get_fast_resend_frame(int *conn_num, char *buf, int *len, unsigned long *seq
     int i = --(shm_conn_info->fast_resend_buf_idx);
     memcpy(buf, shm_conn_info->fast_resend_buf[i].out + LINKFD_FRAME_RESERV, shm_conn_info->fast_resend_buf[i].len);
     *conn_num = shm_conn_info->fast_resend_buf[i].chan_num;
+    *seq_num = shm_conn_info->fast_resend_buf[i].seq_num;
     *len = shm_conn_info->fast_resend_buf[i].len;
-    return i;
+    return i+1;
 }
 
 /**
@@ -630,7 +631,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     }
 #ifdef DEBUGG
     else {
-        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf, packet amount - %i", idx);
+        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - &i, len - %i, seq - %lu, packet amount - %i", chan_num, len, tmp_seq_counter, idx);
     }
 #endif
     FD_ZERO(&fdset_tun);
@@ -647,12 +648,12 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "BUSY - desctiptor %i channel %d");
+    vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
         return NET_WRITE_BUSY_NOTIFY;
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "READY - desctiptor %i channel %d");
+    vtun_syslog(LOG_INFO, "READY - descriptor %i channel %d");
 #endif
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, mypid);
