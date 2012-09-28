@@ -546,6 +546,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     fd_set fdset_tun;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
+    sem_post(&(shm_conn_info->resend_buf_sem));
     if (idx == -1) {
         if (!FD_ISSET(tun_device, &fdset)) {
 #ifdef DEBUGG
