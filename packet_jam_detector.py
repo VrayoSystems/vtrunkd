@@ -1,17 +1,17 @@
 import sys, time, glob, os
-def printTiming(fileName, stopLine):
+def printTiming(fileName, stopTime):
         outFile = open("timing_" + fileName, 'w')
         prev = 0
         for l in file(fileName):
                 dl = l.split(" ");
                 sdtime = dl[2];
-                if sdtime.find(stopLine) != -1:
-                        break
                 dt = time.strptime(sdtime.split(".")[0], '%H:%M:%S');
                 ms = int(sdtime.split(".")[1])
                 t = int(time.mktime(dt))*1000+ms
+                if (t > stopTime):
+                        break
                 if prev == 0: prev = t
-                outFile.write((sdtime + " {0}").format(prev - t))
+                outFile.write((sdtime + " {0}").format(prev - t) + '\n')
                 prev = t
         outFile.close()
 
@@ -43,5 +43,5 @@ for logFile in folderStuff:
 print ("jam time - " + timeLine + " " + str(timeMs))
 if timeLine != '':
         for logFile in folderStuff:
-                printTiming(logFile, timeLine[:-2])
+                printTiming(logFile, timeMs)
 
