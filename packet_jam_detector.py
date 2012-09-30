@@ -1,9 +1,8 @@
 import sys, time, glob, os
 def printTiming(fileName, stopLine):
-        outFile = file("timing" + fileName)
+        outFile = open("timing_" + fileName, 'w')
         prev = 0
         for l in file(fileName):
-                print l
                 dl = l.split(" ");
                 sdtime = dl[2];
                 if sdtime.find(stopLine) != -1:
@@ -12,12 +11,12 @@ def printTiming(fileName, stopLine):
                 ms = int(sdtime.split(".")[1])
                 t = int(time.mktime(dt))*1000+ms
                 if prev == 0: prev = t
-                print (sdtime + " {0}").format(prev - t)
+                outFile.write((sdtime + " {0}").format(prev - t))
                 prev = t
         outFile.close()
 
 def findTime(fileName):
-        timeMs = 0
+        timeMs = 99999999999999999999999
         timeLine = ''
         for line in file(fileName):
                 if -1 != line.find("Requesting bad frame"):
@@ -27,7 +26,6 @@ def findTime(fileName):
                         ms = int(sdtime.split(".")[1])
                         timeMs = int(time.mktime(splittedLine))*1000+ms
                         timeLine = sdtime
-                        print (timeLine + " "+timeMs)
                         break
         return timeMs, timeLine
 
@@ -42,6 +40,7 @@ for logFile in folderStuff:
         if timeMsNew < timeMs:
                 timeMs = timeMsNew
                 timeLine = timeLineNew
+print ("jam time - " + timeLine + " " + str(timeMs))
 if timeLine != '':
         for logFile in folderStuff:
                 printTiming(logFile, timeLine[:-2])
