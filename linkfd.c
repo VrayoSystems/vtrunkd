@@ -907,6 +907,9 @@ int ag_switcher() {
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u", chan_info->recv_q, chan_info->send_q );
+#endif
     if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
