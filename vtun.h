@@ -330,6 +330,7 @@ struct conn_stats {
     uint32_t time_lag_remote;// calculated here
     uint32_t time_lag; // get from another side
     struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
+    uint32_t max_send_q;
 };
 
 

@@ -148,6 +148,7 @@ struct {
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval cur_time; // current time source
+uint32_t my_max_send_q, max_of_max_send_q;
 
 struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
 
@@ -545,6 +546,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     fd_set fdset_tun;
+    if (((max_of_max_send_q - my_max_send_q)/1300) > (lfd_host->MAX_REORDER * 0.6)) {
+        return SEND_Q_NOTIFY;
+    }
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -906,9 +910,19 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
+    sem_wait(&(shm_conn_info->stats_sem));
+    shm_conn_info->stats[my_physical_channel_num].max_send_q = chan_info->send_q;
+    my_max_send_q = chan_info->send_q;
+    max_of_max_send_q = 0;
+    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+        if ((i != my_physical_channel_num) && (max_of_max_send_q < shm_conn_info->stats[i].max_send_q)) {
+            max_of_max_send_q = shm_conn_info->stats[i].max_send_q;
+        }
+    }
+    sem_post(&(shm_conn_info->stats_sem));
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u", chan_info->recv_q, chan_info->send_q );
+    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u anonother max send_q %u", chan_info->recv_q, chan_info->send_q,  max_of_max_send_q);
 #endif
     if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
@@ -1048,6 +1062,8 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
+    my_max_send_q = 0;
+    max_of_max_send_q = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
@@ -2079,6 +2095,11 @@ int lfd_linker(void)
             } else if (len == NET_WRITE_BUSY_NOTIFY) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
+#endif
+                continue;
+            } else if (len == SEND_Q_NOTIFY) {
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
 #endif
                 continue;
             }
