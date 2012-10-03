@@ -18,8 +18,8 @@ echo "Full started"
 echo "Worcking..."
 ssh user@cli-32 "curl -m 100 --connect-timeout 4 http://10.200.1.31/u -o /dev/null"
 echo "killall vtrunkd"
-ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
-ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
+ssh user@srv-32 "sudo killall vtrunkd && sudo ipcrm -M 567888"
+ssh user@cli-32 "sudo killall vtrunkd && sudo ipcrm -M 567888"
 echo "Transfer syslogs"
 scp user@cli-32:/var/log/syslog /tmp/syslog-cli$1
 scp user@srv-32:/var/log/syslog /tmp/syslog-srv$1

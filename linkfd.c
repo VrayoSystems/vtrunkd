@@ -174,6 +174,7 @@ static volatile sig_atomic_t linker_term;
 
 static void sig_term(int sig)
 {
+    vtun_syslog(LOG_INFO, "Get sig_term");
     vtun_syslog(LOG_INFO, "Closing connection");
     io_cancel();
     linker_term = VTUN_SIG_TERM;
@@ -181,6 +182,7 @@ static void sig_term(int sig)
 
 static void sig_hup(int sig)
 {
+    vtun_syslog(LOG_INFO, "Get sig_hup");
     vtun_syslog(LOG_INFO, "Reestablishing connection");
     io_cancel();
     linker_term = VTUN_SIG_HUP;
@@ -189,6 +191,7 @@ static void sig_hup(int sig)
 /* Statistic dump */
 void sig_alarm(int sig)
 {
+    vtun_syslog(LOG_INFO, "Get sig_alarm");
     static time_t tm;
     static char stm[20];
     /*
@@ -204,6 +207,7 @@ void sig_alarm(int sig)
 
 static void sig_usr1(int sig)
 {
+    vtun_syslog(LOG_INFO, "Get sig_usr1");
     /* Reset statistic counters on SIGUSR1 */
     lfd_host->stat.byte_in = lfd_host->stat.byte_out = 0;
     lfd_host->stat.comp_in = lfd_host->stat.comp_out = 0;
@@ -1664,6 +1668,7 @@ int lfd_linker(void)
                                     break;
                                 }
                                 if((j==30 || j==0) && (errno != 0)) {
+                                    vtun_syslog(LOG_INFO,"WTF j==30 || j==0");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
@@ -2063,18 +2068,19 @@ int lfd_linker(void)
 #endif
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
-                continue;
+                len = 0;
             } else if (len == LASTPACKETMY_NOTIFY) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 len = select_devread_send(buf, out2, mypid);
                 if (len == BREAK_ERROR) {
+                    vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                     break;
                 } else if (len == CONTINUE_ERROR) {
-                    continue;
+                    len = 0;
                 } else if (len == TRYWAIT_NOTIFY) {
-                    continue; //todo need to check resend_buf for new packet again ????
+                    len = 0; //todo need to check resend_buf for new packet again ????
                 }
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
@@ -2083,30 +2089,28 @@ int lfd_linker(void)
 #endif
             len = select_devread_send(buf, out2, mypid);
             if (len == BREAK_ERROR) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "select_devread_send() BREAK_ERROR");
-#endif
+                vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
                 break;
             } else if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
 #endif
-                continue;
+                len = 0;
             } else if (len == TRYWAIT_NOTIFY) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
 #endif
-                continue;
+                len = 0;
             } else if (len == NET_WRITE_BUSY_NOTIFY) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
 #endif
-                continue;
+                len = 0;
             } else if (len == SEND_Q_NOTIFY) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
 #endif
-                continue;
+                len = 0;
             }
         }
 
