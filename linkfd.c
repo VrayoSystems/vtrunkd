@@ -1267,6 +1267,11 @@ int lfd_linker(void)
     shm_conn_info->lock_time = cur_time.tv_sec;
     
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
+    struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
+    get_info_time.tv_sec = 0;
+    get_info_time.tv_usec = 300000;
+    get_info_time_last.tv_sec = 0;
+    get_info_time_last.tv_usec = 0;
 
 /**
  * Main program loop
@@ -1275,6 +1280,21 @@ int lfd_linker(void)
         usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&cur_time, NULL);
+        timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
+        if ( timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=)) {
+            tmp_flags = ag_switcher();
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            if (tmp_flags == 1) {
+                shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
+            } else {
+                shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
+            }
+            tmp_AG = shm_conn_info->AG_ready_flags;
+            tmp_channels_mask = shm_conn_info->channels_mask;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            get_info_time_last.tv_sec = cur_time.tv_sec;
+            get_info_time_last.tv_usec = cur_time.tv_usec;
+        }
         /* TODO write function for lws sending*/
         for (i = 0; i < chan_amt; i++) {
         sem_wait(&(shm_conn_info->write_buf_sem));
@@ -1321,16 +1341,6 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d port %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i, channel_ports[i]);
             }
-            tmp_flags = ag_switcher();
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            if (tmp_flags == 1) {
-                shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
-            } else {
-                shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
-            }
-            tmp_AG = shm_conn_info->AG_ready_flags;
-            tmp_channels_mask = shm_conn_info->channels_mask;
-            sem_post(&(shm_conn_info->AG_flags_sem));
             vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
