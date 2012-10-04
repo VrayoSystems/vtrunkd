@@ -985,7 +985,7 @@ int lfd_linker(void)
         // now set up timer resolution
      max_latency.tv_sec = lfd_host->MAX_LATENCY/1000;
      max_latency.tv_usec = (lfd_host->MAX_LATENCY - max_latency.tv_sec * 1000) * 1000;
- /*
+    
     if( (lfd_host->TICK_SECS * 1000) > lfd_host->MAX_LATENCY) {
           timer_resolution.tv_sec = max_latency.tv_sec;
           timer_resolution.tv_usec = max_latency.tv_usec;
@@ -993,9 +993,7 @@ int lfd_linker(void)
           timer_resolution.tv_sec = lfd_host->TICK_SECS;
           timer_resolution.tv_usec = 0;
     }
-*/
-     timer_resolution.tv_sec = 0;
-     timer_resolution.tv_usec = 700000;
+
 #ifdef HAVE_SCHED_H
     int cpu_numbers = sysconf(_SC_NPROCESSORS_ONLN); /* Get numbers of CPUs */
     if (cpu_numbers != -1) {
@@ -1274,7 +1272,7 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
-//        usleep(100); // todo need to tune; Is it necessary? I don't know
+        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&cur_time, NULL);
         /* TODO write function for lws sending*/
