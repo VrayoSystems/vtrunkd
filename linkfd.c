@@ -552,8 +552,12 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     fd_set fdset_tun;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "max_of_max_send_q %u my_max_send_q %u lfd_host->MAX_REORDER %i", max_of_max_send_q, my_max_send_q, lfd_host->MAX_REORDER);
+            vtun_syslog(LOG_INFO, "Difference %i", (my_max_send_q - max_of_max_send_q)/1300);
 #endif
-    if (((max_of_max_send_q - my_max_send_q)/1300) > (lfd_host->MAX_REORDER * 0.6)) {
+    if (((my_max_send_q - max_of_max_send_q)/1300) > (lfd_host->MAX_REORDER * 0.6)) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "Queue skip");
+#endif
         return SEND_Q_NOTIFY;
     }
     sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -919,9 +923,9 @@ int ag_switcher() {
     }
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[my_physical_channel_num].max_send_q = chan_info->send_q;
-    my_max_send_q = chan_info->send_q;
+    my_max_send_q = shm_conn_info->stats[my_physical_channel_num].max_send_q;
     max_of_max_send_q = 0;
-    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+    for (int i = 0; i < 2; i++) {
         if ((i != my_physical_channel_num) && (max_of_max_send_q < shm_conn_info->stats[i].max_send_q)) {
             max_of_max_send_q = shm_conn_info->stats[i].max_send_q;
         }
@@ -1269,7 +1273,7 @@ int lfd_linker(void)
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
-    get_info_time.tv_usec = 300000;
+    get_info_time.tv_usec = 100000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
 
@@ -1277,7 +1281,7 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
-        usleep(100); // todo need to tune; Is it necessary? I don't know
+//        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&cur_time, NULL);
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
