@@ -2146,9 +2146,11 @@ int lfd_linker(void)
         shm_conn_info->normal_senders--; // TODO HERE: add all possible checks for sudden deaths!!!
     }
 
-
+    sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[my_physical_channel_num].pid = 0;
     shm_conn_info->stats[my_physical_channel_num].weight = 0;
+    shm_conn_info->stats[my_physical_channel_num].max_send_q = 0;
+    sem_post(&(shm_conn_info->stats_sem));
 
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
