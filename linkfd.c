@@ -551,7 +551,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     tv.tv_usec = 0;
     fd_set fdset_tun;
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "max_of_max_send_q %u my_max_send_q %u lfd_host->MAX_REORDER %i", max_of_max_send_q, my_max_send_q, lfd_host->MAX_REORDER);
+            vtun_syslog(LOG_INFO, "max_of_max_send_q byte - %u packets - %u my_max_send_q byte - %u packets - %u lfd_host->MAX_REORDER %i", max_of_max_send_q, max_of_max_send_q/1300, my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER);
             vtun_syslog(LOG_INFO, "Difference %i", ((int)my_max_send_q - (int)max_of_max_send_q)/1300);
 #endif
     if (((((int)my_max_send_q - (int)max_of_max_send_q))/1300) > (lfd_host->MAX_REORDER * 0.6)) {
