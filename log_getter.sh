@@ -16,7 +16,8 @@ ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/san
 sleep 1
 echo "Full started"
 echo "Worcking..."
-ssh user@cli-32 "curl -m 100 --connect-timeout 4 http://10.200.1.31/u -o /dev/null"
+echo "speed_download %{speed_download}" | curl -m 100 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/$1speed
+echo "" >>  /tmp/$1speed
 echo "killall vtrunkd"
 ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
@@ -35,7 +36,7 @@ grep 'select_devread_send() frame' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_sel
 grep 'select_devread_send() frame' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_select_devread_send
 grep 'max_of_max_send_q' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_max_of_max_send_q
 grep 'max_of_max_send_q' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_max_of_max_send_q
-scp /tmp/$1syslog* andrey@bonanza:~/sandbox/alarm_logs/
+scp /tmp/$1* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/$1syslog*
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
