@@ -911,19 +911,10 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
         chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0);
     }
-    sem_wait(&(shm_conn_info->stats_sem));
-    shm_conn_info->stats[my_physical_channel_num].max_send_q = chan_info->send_q;
-    my_max_send_q = shm_conn_info->stats[my_physical_channel_num].max_send_q;
-    max_of_max_send_q = 0;
-    for (int i = 0; i < 2; i++) {
-        if ((i != my_physical_channel_num) && (max_of_max_send_q < shm_conn_info->stats[i].max_send_q)) {
-            max_of_max_send_q = shm_conn_info->stats[i].max_send_q;
-        }
-    }
-    sem_post(&(shm_conn_info->stats_sem));
+    my_max_send_q = chan_info->send_q;
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u anonother max send_q %u", chan_info->recv_q, chan_info->send_q,  max_of_max_send_q);
+    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u", chan_info->recv_q, chan_info->send_q);
 #endif
     if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
@@ -1487,10 +1478,9 @@ int lfd_linker(void)
         }
         FD_ZERO(&fdset);
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "max_of_max_send_q byte - %u packets - %u my_max_send_q byte - %u packets - %u lfd_host->MAX_REORDER %i", max_of_max_send_q, max_of_max_send_q/1300, my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER);
-        vtun_syslog(LOG_INFO, "Difference %i", ((int)my_max_send_q - (int)max_of_max_send_q)/1300);
+        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
 #endif
-        if (((((int) my_max_send_q - (int) max_of_max_send_q)) / 1300) < (lfd_host->MAX_REORDER * 0.5)) {
+        if ((((int) my_max_send_q) / 1300) < (int)((float)(lfd_host->MAX_REORDER) * 0.6)) {
             FD_SET(tun_device, &fdset);
         }
 #ifdef DEBUGG

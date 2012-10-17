@@ -34,8 +34,8 @@ grep 'write_buf_add called!' /tmp/$1syslog-1_cli > /tmp/$1syslog-1_cli_write_buf
 grep 'write_buf_add called!' /tmp/$1syslog-2_cli > /tmp/$1syslog-2_cli_write_buf
 grep 'select_devread_send() frame' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_select_devread_send
 grep 'select_devread_send() frame' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_select_devread_send
-grep 'max_of_max_send_q' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_max_of_max_send_q
-grep 'max_of_max_send_q' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_max_of_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_max_send_q
 scp /tmp/$1* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/$1syslog*
 echo "Clear syslog"
