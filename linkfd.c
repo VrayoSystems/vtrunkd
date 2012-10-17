@@ -1574,6 +1574,9 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 #endif
                 if( (len=proto_read(fd0, buf)) <= 0 ) {
+                    if (len == 0) {
+                        continue;
+                    }
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
                          break;
