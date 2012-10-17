@@ -16,7 +16,7 @@ ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/san
 sleep 1
 echo "Full started"
 echo "Worcking..."
-echo "speed_download %{speed_download}" | curl -m 100 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/$1speed
+echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/$1speed
 echo "" >>  /tmp/$1speed
 echo "killall vtrunkd"
 ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
