@@ -36,6 +36,10 @@ grep 'select_devread_send() frame' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_sel
 grep 'select_devread_send() frame' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_select_devread_send
 grep 'my_max_send_q' /tmp/$1syslog-1_srv > /tmp/$1syslog-1_srv_max_send_q
 grep 'my_max_send_q' /tmp/$1syslog-2_srv > /tmp/$1syslog-2_srv_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-srv > /tmp/$1syslog-srv_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-1_cli > /tmp/$1syslog-1_cli_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-2_cli > /tmp/$1syslog-2_cli_max_send_q
+grep 'my_max_send_q' /tmp/$1syslog-cli > /tmp/$1syslog-cli_max_send_q
 scp /tmp/$1* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/$1syslog*
 echo "Clear syslog"
