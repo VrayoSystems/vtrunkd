@@ -550,6 +550,15 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     fd_set fdset_tun;
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u skip limit %i", my_max_send_q, my_max_send_q/1300, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
+#endif
+    if ((((int)max_of_max_send_q)/1300) > (int)(((float)(lfd_host->MAX_REORDER)) * 0.6)) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "Queue skip");
+#endif
+        return SEND_Q_NOTIFY;
+    }
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1254,7 +1263,7 @@ int lfd_linker(void)
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
-    get_info_time.tv_usec = 50000;
+    get_info_time.tv_usec = 100000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
 
@@ -1477,20 +1486,7 @@ int lfd_linker(void)
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
-#endif
-        if ((((int) my_max_send_q) / 1300) < (int)((float)(lfd_host->MAX_REORDER) * 0.6)) {
-            FD_SET(tun_device, &fdset);
-            tv.tv_sec = timer_resolution.tv_sec;
-            tv.tv_usec = timer_resolution.tv_usec;
-        } else {
-            tv.tv_sec = get_info_time.tv_sec;
-            tv.tv_usec = get_info_time.tv_usec;
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "tun read select skip");
-#endif
-        }
+        FD_SET(tun_device, &fdset);
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
