@@ -1482,18 +1482,19 @@ int lfd_linker(void)
 #endif
         if ((((int) my_max_send_q) / 1300) < (int)((float)(lfd_host->MAX_REORDER) * 0.6)) {
             FD_SET(tun_device, &fdset);
-        }
+            tv.tv_sec = timer_resolution.tv_sec;
+            tv.tv_usec = timer_resolution.tv_usec;
+        } else {
+            tv.tv_sec = get_info_time.tv_sec;
+            tv.tv_usec = get_info_time.tv_usec;
 #ifdef DEBUGG
-        else {
             vtun_syslog(LOG_INFO, "tun read select skip");
-        }
 #endif
+        }
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
 
-        tv.tv_sec  = timer_resolution.tv_sec;
-        tv.tv_usec = timer_resolution.tv_usec;
 #ifdef DEBUGG
         struct timeval work_loop1, work_loop2;
         gettimeofday(&work_loop1, NULL );
