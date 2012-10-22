@@ -124,7 +124,7 @@ struct conn_info *shm_conn_info;
 int srv;
 
 struct lfd_mod *lfd_mod_head = NULL, *lfd_mod_tail = NULL;
-struct channel_info channel_info_st;
+struct channel_info * chan_info;
 
 struct {
     int bytes_sent_norm;
@@ -893,7 +893,7 @@ int sem_wait_tw(sem_t *sem) {
 
 
 int ag_switcher() {
-    struct channel_info* chan_info;
+//    struct channel_info* chan_info;
     int max_speed_chan = 0;
     uint32_t max_speed = 0;
     for (int i = 1; i < chan_amt; i++) {
@@ -907,10 +907,10 @@ int ag_switcher() {
     }
     if (srv) {
         vtun_syslog(LOG_INFO, "Server %i is calling get_format_tcp_info()", my_physical_channel_num);
-        chan_info = get_format_tcp_info(0, channel_ports[max_speed_chan], &channel_info_st);
+        get_format_tcp_info(0, channel_ports[max_speed_chan], chan_info);
     } else {
         vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
-        chan_info = get_format_tcp_info(channel_ports[max_speed_chan], 0, &channel_info_st);
+        get_format_tcp_info(channel_ports[max_speed_chan], 0, chan_info);
     }
     my_max_send_q = chan_info->send_q;
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
@@ -1050,12 +1050,16 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
+    if( !(chan_info = malloc(sizeof(struct channel_info))) ) {
+        vtun_syslog(LOG_ERR,"Can't allocate struct chan_info for the linker");
+        return 0;
+    }
 
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
-    memset((void *) &channel_info_st, 0, sizeof(struct channel_info));
+    memset((void *)chan_info, 0, sizeof(struct channel_info));
     my_max_send_q = 0;
     max_of_max_send_q = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
