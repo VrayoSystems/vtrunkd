@@ -159,6 +159,7 @@ int channels[MAX_TCP_LOGICAL_CHANNELS];
 int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
 int delay_cnt;
+uint32_t my_max_speed_chan;
 
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
@@ -903,7 +904,9 @@ int ag_switcher() {
         }
     }
     if (max_speed_chan == 0) {
-        return 0;
+        max_speed_chan = my_max_speed_chan;
+    } else {
+        my_max_speed_chan = max_speed_chan;
     }
     if (srv) {
         vtun_syslog(LOG_INFO, "Server %i is calling get_format_tcp_info()", my_physical_channel_num);
@@ -968,6 +971,14 @@ int lfd_linker(void)
     struct timeval timer_resolution = {0, 0};
     struct timeval max_latency = {0, 0};
     struct timeval tv_tmp;
+    int stdout_file = open("/dev/null", O_RDWR);
+    /* Redirect output to file */
+     if (dup2(stdout_file, STDOUT_FILENO) == -1) /* STDOUT_FILENO = 1 */
+     {
+         vtun_syslog(LOG_INFO, "Error duping STDOUT_FILENO to file");
+         exit(0);
+     }
+     close(stdout_file);
         // now set up timer resolution
      max_latency.tv_sec = lfd_host->MAX_LATENCY/1000;
      max_latency.tv_usec = (lfd_host->MAX_LATENCY - max_latency.tv_sec * 1000) * 1000;
@@ -1060,6 +1071,7 @@ int lfd_linker(void)
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)chan_info, 0, sizeof(struct channel_info));
+    my_max_speed_chan = 0;
     my_max_send_q = 0;
     max_of_max_send_q = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
