@@ -112,6 +112,7 @@ char *out_buf;
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
+int hold_mode; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 
 int proto_err_cnt = 0;
@@ -124,7 +125,7 @@ struct conn_info *shm_conn_info;
 int srv;
 
 struct lfd_mod *lfd_mod_head = NULL, *lfd_mod_tail = NULL;
-struct channel_info * chan_info;
+struct channel_info *chan_info[MAX_TCP_LOGICAL_CHANNELS];
 
 struct {
     int bytes_sent_norm;
@@ -149,7 +150,6 @@ struct {
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval cur_time; // current time source
-uint32_t my_max_send_q, max_of_max_send_q;
 
 struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
 
@@ -160,6 +160,7 @@ int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
 int delay_cnt;
 uint32_t my_max_speed_chan;
+uint32_t my_holded_max_speed;
 
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
@@ -892,35 +893,85 @@ int sem_wait_tw(sem_t *sem) {
     return 0;
 }
 
-
+/**
+ * Modes switcher and socket status collector
+ * @return - 0 for R_MODE and 1 for AG_MODE
+ */
 int ag_switcher() {
-//    struct channel_info* chan_info;
+    if (srv) {
+        vtun_syslog(LOG_INFO, "Server %i is calling ag_switcher()", my_physical_channel_num);
+        for (int i = 0; i < chan_amt; i++) {
+            chan_info[i]->rport = channel_ports[i];
+        }
+    } else {
+        vtun_syslog(LOG_INFO, "Client %i is calling ag_switcher()", my_physical_channel_num);
+        for (int i = 0; i < chan_amt; i++) {
+            chan_info[i]->lport = channel_ports[i];
+        }
+    }
     int max_speed_chan = 0;
     uint32_t max_speed = 0;
+    sem_wait(&(shm_conn_info->stats_sem));
     for (int i = 1; i < chan_amt; i++) {
         if (max_speed < shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed) {
             max_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed;
             max_speed_chan = i;
         }
     }
-    if (max_speed_chan == 0) {
+    shm_conn_info->stats[my_physical_channel_num].max_upload_speed = max_speed;
+    sem_post(&(shm_conn_info->stats_sem));
+    if (max_speed == 0) {
         max_speed_chan = my_max_speed_chan;
     } else {
         my_max_speed_chan = max_speed_chan;
     }
-    if (srv) {
-        vtun_syslog(LOG_INFO, "Server %i is calling get_format_tcp_info()", my_physical_channel_num);
-        get_format_tcp_info(0, channel_ports[max_speed_chan], chan_info);
-    } else {
-        vtun_syslog(LOG_INFO, "Client %i is calling get_format_tcp_info()", my_physical_channel_num);
-        get_format_tcp_info(channel_ports[max_speed_chan], 0, chan_info);
-    }
-    my_max_send_q = chan_info->send_q;
-    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+    vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
+    get_format_tcp_info(chan_info, chan_amt);
+    /*find my max send_q*/
+    uint32_t my_max_send_q = chan_info[0]->send_q;
+    int my_max_send_q_chan_num = 0;
+    for (int i = 1; i < chan_amt; i++) {
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u", chan_info->recv_q, chan_info->send_q);
+        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
 #endif
-    if (max_speed > ((chan_info->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
+        if (my_max_send_q < chan_info[i]->send_q) {
+            my_max_send_q = chan_info[i]->send_q;
+            my_max_send_q_chan_num = i;
+        }
+    }
+    /*store my max send_q in shm and find another max send_q*/
+    uint32_t max_of_max_send_q = 0;
+    uint32_t max_of_max_speed = 0;
+    sem_wait(&(shm_conn_info->stats_sem));
+    shm_conn_info->stats[my_physical_channel_num].max_send_q = my_max_send_q;
+    for (int i = 0; i < 2; i++) {
+        if ((i != my_physical_channel_num) && (max_of_max_send_q < shm_conn_info->stats[i].max_send_q)) {
+            max_of_max_send_q = shm_conn_info->stats[i].max_send_q;
+        }
+        if ((i != my_physical_channel_num) && (max_of_max_speed < shm_conn_info->stats[i].max_upload_speed)) {
+            max_of_max_speed = shm_conn_info->stats[i].max_upload_speed;
+        }
+    }
+    sem_post(&(shm_conn_info->stats_sem));
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
+#endif
+    if (max_speed == 0) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "max_speed == 0");
+#endif
+        hold_mode = 0;
+        return 0;
+    }
+    uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
+    uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
+    if (((max_of_max_send_q - my_max_send_q) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte) {
+        hold_mode = 0;
+    } else {
+        hold_mode = 1;
+    }
+    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+    if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
     return 0;
@@ -1061,19 +1112,19 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
-    if( !(chan_info = malloc(sizeof(struct channel_info))) ) {
-        vtun_syslog(LOG_ERR,"Can't allocate struct chan_info for the linker");
-        return 0;
+    for (int j = 0; j < MAX_TCP_LOGICAL_CHANNELS; i++) {
+        if (!(chan_info[i] = malloc(sizeof(struct channel_info)))) {
+            vtun_syslog(LOG_ERR, "Can't allocate array of struct chan_info for the linker");
+            return 0;
+        }
+        memset(chan_info[i], 0, sizeof(struct channel_info));
     }
 
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
-    memset((void *)chan_info, 0, sizeof(struct channel_info));
     my_max_speed_chan = 0;
-    my_max_send_q = 0;
-    max_of_max_send_q = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
@@ -1326,8 +1377,10 @@ int lfd_linker(void)
 
             for (int i = 0; i < chan_amt; i++) {
                 // speed(kb/s) calculation
+                sem_wait(&(shm_conn_info->stats_sem));
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt
                         / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                sem_post(&(shm_conn_info->stats_sem));
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt = 0;
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
@@ -1495,10 +1548,7 @@ int lfd_linker(void)
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
-#endif
-        if ((((int) my_max_send_q) / 1300) < (int)((float)(lfd_host->MAX_REORDER) * 0.6)) {
+        if (hold_mode == 0) {
             FD_SET(tun_device, &fdset);
             tv.tv_sec = timer_resolution.tv_sec;
             tv.tv_usec = timer_resolution.tv_usec;
@@ -1507,6 +1557,7 @@ int lfd_linker(void)
             tv.tv_usec = get_info_time.tv_usec;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "tun read select skip");
+            vtun_syslog(LOG_INFO, "debug: HOLD_MODE");
 #endif
         }
         for(i=0; i<chan_amt; i++) {
