@@ -125,7 +125,7 @@ struct conn_info *shm_conn_info;
 int srv;
 
 struct lfd_mod *lfd_mod_head = NULL, *lfd_mod_tail = NULL;
-struct channel_info *chan_info[MAX_TCP_LOGICAL_CHANNELS];
+struct channel_info **chan_info = NULL;
 
 struct {
     int bytes_sent_norm;
@@ -1112,8 +1112,12 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
+    if (!(chan_info = (struct channel_info **) malloc(sizeof(struct channel_info *) * MAX_TCP_LOGICAL_CHANNELS))) {
+        vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
+        return 0;
+    }
     for (int j = 0; j < MAX_TCP_LOGICAL_CHANNELS; i++) {
-        if (!(chan_info[i] = malloc(sizeof(struct channel_info)))) {
+        if (!(chan_info[i] = (struct channel_info*) malloc(sizeof(struct channel_info)))) {
             vtun_syslog(LOG_ERR, "Can't allocate array of struct chan_info for the linker");
             return 0;
         }
