@@ -1112,10 +1112,12 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
-    if (!(chan_info = (struct channel_info **) malloc(sizeof(struct channel_info *) * MAX_TCP_LOGICAL_CHANNELS))) {
+    vtun_syslog(LOG_INFO, "Allocate memory for array of struct *chan_info");
+    if (!(chan_info = (struct channel_info **) calloc(MAX_TCP_LOGICAL_CHANNELS, sizeof(struct channel_info *)))) {
         vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
         return 0;
     }
+    vtun_syslog(LOG_INFO, "Allocate memory for chan_info structures");
     for (int j = 0; j < MAX_TCP_LOGICAL_CHANNELS; i++) {
         if (!(chan_info[i] = (struct channel_info*) malloc(sizeof(struct channel_info)))) {
             vtun_syslog(LOG_ERR, "Can't allocate array of struct chan_info for the linker");
@@ -1123,7 +1125,7 @@ int lfd_linker(void)
         }
         memset(chan_info[i], 0, sizeof(struct channel_info));
     }
-
+    vtun_syslog(LOG_INFO, "Memory allocated");
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
