@@ -965,6 +965,10 @@ int ag_switcher() {
     }
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "logical_chanel num - %i mss - %u MAX_REORDER * mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num,max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
+        vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %u , logic_speed %i kb/s max_of_max_send_q - %u",max_of_max_send_q - my_max_send_q, max_of_max_speed, max_of_max_send_q);
+#endif
     if (((max_of_max_send_q - my_max_send_q) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte) {
         hold_mode = 0;
     } else {
