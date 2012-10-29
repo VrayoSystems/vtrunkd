@@ -1118,7 +1118,7 @@ int lfd_linker(void)
         return 0;
     }
     vtun_syslog(LOG_INFO, "Allocate memory for chan_info structures");
-    for (int j = 0; j < MAX_TCP_LOGICAL_CHANNELS; i++) {
+    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         if (!(chan_info[i] = (struct channel_info*) malloc(sizeof(struct channel_info)))) {
             vtun_syslog(LOG_ERR, "Can't allocate array of struct chan_info for the linker");
             return 0;
