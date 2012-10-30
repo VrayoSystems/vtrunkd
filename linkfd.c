@@ -639,14 +639,14 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     }
 #ifdef DEBUGG
     else {
-        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - &i, len - %i, seq - %lu, packet amount - %i", chan_num, len, tmp_seq_counter, idx);
+        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %lu, packet amount - %i", chan_num, len, tmp_seq_counter, idx);
     }
 #endif
     FD_ZERO(&fdset_tun);
     FD_SET(channels[chan_num], &fdset_tun);
     select_ret = select(channels[chan_num] + 1, NULL, &fdset_tun, NULL, &tv);
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Trying to select desctiptor %i channel %d", channels[chan_num], chan_num);
+    vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", channels[chan_num], chan_num);
 #endif
     if (select_ret != 1) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
