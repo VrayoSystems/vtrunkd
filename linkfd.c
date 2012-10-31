@@ -1039,14 +1039,6 @@ int lfd_linker(void)
     struct timeval timer_resolution = {0, 0};
     struct timeval max_latency = {0, 0};
     struct timeval tv_tmp;
-    int stdout_file = open("/dev/null", O_RDWR);
-    /* Redirect output to file */
-     if (dup2(stdout_file, STDOUT_FILENO) == -1) /* STDOUT_FILENO = 1 */
-     {
-         vtun_syslog(LOG_INFO, "Error duping STDOUT_FILENO to file");
-         exit(0);
-     }
-     close(stdout_file);
         // now set up timer resolution
      max_latency.tv_sec = lfd_host->MAX_LATENCY/1000;
      max_latency.tv_usec = (lfd_host->MAX_LATENCY - max_latency.tv_sec * 1000) * 1000;
