@@ -104,7 +104,7 @@ void encrypt_chal(char *chal, char *pwd)
       chal[i] ^= xor_msk[i%xor_len];
 }
 
-void inline decrypt_chal(char *chal, char *pwd)
+void decrypt_chal(char *chal, char *pwd)
 { 
    encrypt_chal(chal, pwd);
 }

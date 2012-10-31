@@ -1,7 +1,8 @@
 /*  
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
 
-   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>,
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
@@ -102,20 +103,25 @@
 #define P_MAX_TUNNELS_NUM 20
 // amount of tcp channels per process (vpn link) requested by CLIENT mode
 #define P_TCP_CONN_AMOUNT 5 // int
+// big jitter
+#define ABSOLUTE_MAX_JITTER 2500 // in ms
+// ag switch compare parameter always less than 1 but higher than 0
+#define AG_FLOW_FACTOR 0.2
 
 
 /* Compiled-in values */
 // defines period of LWS notification; helps reduce resend_buf outage probability
 // uses TICK_SECS as base interval
 #define LWS_NOTIFY_PEROID 3 // seconds; TODO: make this configurable
+#define LWS_NOTIFY_MAX_SUB_SEQ 30
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
 #define FRAME_BUF_SIZE 400 // int
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #define RESEND_BUF_SIZE 1200 // int
 // maximum compiled-in buffers for tcp channels per link
-#define MAX_TCP_CONN_AMOUNT 100 // int
+#define MAX_TCP_LOGICAL_CHANNELS 100 // int
 // max aggregated VPN-links compiled-in (+ some extras for racing)
-#define MAX_AG_CONN 7
+#define MAX_TCP_PHYSICAL_CHANNELS 7
 // 10 seconds to start accepting tcp channels; otherwise timeout
 #define CHAN_START_ACCEPT_TIMEOUT 10
 
@@ -275,6 +281,7 @@ struct _write_buf {
     int broken_cnt;
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
+    uint16_t complete_seq_quantity;
 };
 
 /**
@@ -284,6 +291,8 @@ struct _write_buf {
 struct time_lag_info {
 	uint64_t time_lag_sum;
 	uint16_t time_lag_cnt;
+	uint32_t packet_lag_sum; // lag in packets
+	uint16_t packet_lag_cnt;
 	uint8_t once_flag:1;
 };
 
@@ -298,6 +307,16 @@ struct time_lag {
 	int pid; // our pid
 };
 
+struct speed_chan_data_struct {
+    uint32_t up_current_speed; // current physical channel's speed(kbyte/s) = up_data_len_amt / time
+    uint32_t up_data_len_amt; // in byte
+    uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
+    uint32_t down_data_len_amt; // in byte
+
+    uint32_t down_packets; // per last_tick. need for speed calculation
+    uint32_t down_packet_speed;
+};
+
 /**
  * global structure
  */
@@ -310,42 +329,54 @@ struct conn_stats {
     // and get from another side
     uint32_t time_lag_remote;// calculated here
     uint32_t time_lag; // get from another side
+    struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
+    uint32_t max_send_q;
 };
+
 
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
-    sem_t fd_sem;
+    sem_t tun_device_sem;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct _write_buf write_buf[MAX_TCP_CONN_AMOUNT]; // input
+    struct frame_seq fast_resend_buf[MAX_TCP_PHYSICAL_CHANNELS];
+    int fast_resend_buf_idx; // how many packets in fast_resend_buf
+    struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
-    sem_t write_buf_sem;
-    struct _write_buf resend_buf[MAX_TCP_CONN_AMOUNT]; // output
+    sem_t write_buf_sem; //for write buf, seq_counter
+    struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
     struct frame_llist rb_free_frames; /* init all elements here */ // output (to net)
-    sem_t resend_buf_sem;
-    unsigned long seq_counter[MAX_TCP_CONN_AMOUNT];	// packet sequense counter
+    sem_t resend_buf_sem; //for resend buf,  (ever between write_buf_sem if need double blocking)
+    sem_t common_sem; // for seq_counter
+    unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
-    struct conn_stats stats[MAX_AG_CONN];
+    struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     //int broken_cnt;
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
-#ifdef NOSEM
-    int fdb_sem;
-    int buf_sem;
-#endif
+    sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
+    uint16_t AG_ready_flags; // contain flags for all physical channels 1 - retransmit mode, 0 - ready to aggregation
+    uint16_t channels_mask; // 1 - channel is working 0 - channel is dead
 };
 
 struct resent_chk {
     unsigned long seq_num;
     int chan_num;
+};
+
+#define MAX_NUM_RESEND 1 //max number of resend in retransmit mode
+
+struct last_sent_packet {
+    unsigned long seq_num;
+    unsigned long num_resend; //how many time resend
 };
 
 #define SEM_KEY 567000

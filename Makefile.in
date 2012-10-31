@@ -19,8 +19,8 @@
 #   Makefile.in,v 1.6.2.4.2.1 2006/11/16 04:03:44 mtbishop Exp
 #  
 CC = @CC@
-CFLAGS = @CFLAGS@ @CPPFLAGS@ 
-LDFLAGS = @LIBS@
+CFLAGS = @CFLAGS@ @CPPFLAGS@ -W
+LDFLAGS = @LIBS@ -lutil -lrt -lresolv -L../fss/lib -lnetlink
 
 YACC = @YACC@
 YACCFLAGS = -d
@@ -54,6 +54,8 @@ OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        tcp_proto.o udp_proto.o \
        linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o weight_calculation.o
 
+FSSOBJS = ssfilter.o ss.o
+
 CONFIGURE_FILES = Makefile config.status config.cache config.h config.log 
 
 %.o: %.c vtun.h lib.h
@@ -61,8 +63,11 @@ CONFIGURE_FILES = Makefile config.status config.cache config.h config.log
 
 all: vtrunkd
 
-vtrunkd: $(OBJS)
-	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(LFD_OBJS) $(LDFLAGS)
+vtrunkd: $(OBJS) fss
+	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(FSSOBJS) $(LFD_OBJS) $(LDFLAGS)
+
+fss:
+	cp ../fss/src/ssfilter.o ../fss/src/ss.o ./
 
 cfg_file.tab.c: cfg_file.y cfg_kwords.h config.h
 	$(YACC) $(YACCFLAGS) -b cfg_file cfg_file.y
@@ -91,27 +96,40 @@ install_man:
 install_config: 
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(ETC_DIR)
 	if [ ! -f $(ETC_DIR)/vtrunkd.conf ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) vtrunkd.conf $(DESTDIR)$(ETC_DIR); \
+	  $(INSTALL) -m 600 $(INSTALL_OWNER) vtrunkd.conf $(DESTDIR)$(ETC_DIR)/; \
 	fi
 	if [ ! -f $(ETC_DIR)/vtrunkd-srv.test.conf ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/vtrunkd-srv.test.conf $(DESTDIR)$(ETC_DIR); \
+	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/vtrunkd-srv.test.conf $(DESTDIR)$(ETC_DIR)/; \
 	fi
 	if [ ! -f $(ETC_DIR)/vtrunkd-cli.test.conf ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/vtrunkd-cli.test.conf $(DESTDIR)$(ETC_DIR); \
+	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/vtrunkd-cli.test.conf $(DESTDIR)$(ETC_DIR)/; \
 	fi
+install_scripts:
 	if [ ! -f $(prefix)/cli.sh ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/cli.sh $(DESTDIR)$(prefix); \
+	  $(INSTALL) -m 755 $(INSTALL_OWNER) test/cli.sh $(DESTDIR)$(prefix)/; \
 	fi
 	if [ ! -f $(prefix)/srv.sh ]; then \
-	  $(INSTALL) -m 600 $(INSTALL_OWNER) test/srv.sh $(DESTDIR)$(prefix); \
+	  $(INSTALL) -m 755 $(INSTALL_OWNER) test/srv.sh $(DESTDIR)$(prefix)/; \
 	fi
 
 
-install: vtrunkd install_config install_man
+install: vtrunkd install_config install_man install_scripts
+	mkdir /var/lock/vtrunkd
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(VAR_DIR)/run
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(STAT_DIR)
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(LOCK_DIR)
 	$(INSTALL) -d -m 755 $(INSTALL_OWNER) $(DESTDIR)$(SBIN_DIR)
-	$(INSTALL) -m 755 $(INSTALL_OWNER) vtrunkd $(DESTDIR)$(SBIN_DIR)
+	$(INSTALL) -m 755 $(INSTALL_OWNER) vtrunkd $(DESTDIR)$(SBIN_DIR)/
 
 # DO NOT DELETE THIS LINE -- make depend depends on it.
+remove: remove_config remove_start_bin remove_docs
+
+remove_config:
+	rm -f $(DESTDIR)$(ETC_DIR)/vtrunkd*
+remove_start_bin:
+	rm -f $(DESTDIR)$(prefix)/srv.sh
+	rm -f $(DESTDIR)$(prefix)/cli.sh
+	rm -f $(DESTDIR)$(prefix)/sbin/vtrunkd
+remove_docs:
+	rm -f $(DESTDIR)$(MAN_DIR)/man5/vtrunkd.conf.5
+	rm -f $(DESTDIR)$(MAN_DIR)/man8/vtrunkd.8 

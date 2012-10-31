@@ -1,7 +1,8 @@
 /*  
    vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
 
-   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
+   Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>,
+   Andrey Kuznetsov <andreykyz@gmail.com>
 
    Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
@@ -24,6 +25,15 @@
 #ifndef _LINKFD_H
 #define _LINKFD_H
 
+#define BREAK_ERROR -2
+#define CONTINUE_ERROR -1
+#define TRYWAIT_NOTIFY -3
+#define LASTPACKETMY_NOTIFY -4
+#define RESENDLIMIT_NOTIFY -5
+#define NET_WRITE_BUSY_NOTIFY -5
+#define SEND_Q_NOTIFY -6
+
+#define LINKFD_PID_DIR "/var/run/vtrunkd"
 /* Priority of the process in the link_fd function */
 /* Never set the priority to -19 without stating a good reason.
  *#define LINKFD_PRIO -19

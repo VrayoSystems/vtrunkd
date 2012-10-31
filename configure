@@ -1310,8 +1310,6 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
 --disable-o3     	   Compile without -O3 optimization
---enable-nosem     	   Compile with support for systems without shared semaphores support
---enable-sysvsem     	   Compile with support for systems without POSIX semaphores and use SYSV instead (e.g. 2.4 kernels)
 --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25
 --enable-debugg     	   Compile with verbose logging for debug
 
