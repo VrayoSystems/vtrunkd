@@ -980,6 +980,9 @@ int ag_switcher() {
     } else {
         hold_mode = 1;
     }
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "logical_chanel num - %i hold_mode - %i",my_max_send_q_chan_num, hold_mode);
+#endif
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
     if (max_speed == 0) {
 #ifdef DEBUGG
