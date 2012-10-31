@@ -899,14 +899,24 @@ int sem_wait_tw(sem_t *sem) {
  */
 int ag_switcher() {
     if (srv) {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Server %i is calling ag_switcher()", my_physical_channel_num);
+#endif
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->rport = channel_ports[i];
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "Server %i lport - %i %i", my_physical_channel_num, chan_info[i]->rport, channel_ports[i]);
+#endif
         }
     } else {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Client %i is calling ag_switcher()", my_physical_channel_num);
+#endif
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->lport = channel_ports[i];
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "Client %i lport - %i %i", my_physical_channel_num, chan_info[i]->lport, channel_ports[i]);
+#endif
         }
     }
     int max_speed_chan = 0;
@@ -930,6 +940,9 @@ int ag_switcher() {
     /*find my max send_q*/
     uint32_t my_max_send_q = chan_info[0]->send_q;
     int my_max_send_q_chan_num = 0;
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
+#endif
     for (int i = 1; i < chan_amt; i++) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
@@ -966,8 +979,8 @@ int ag_switcher() {
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "logical_chanel num - %i mss - %u MAX_REORDER * mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num,max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
-        vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %u , logic_speed %i kb/s max_of_max_send_q - %u",max_of_max_send_q - my_max_send_q, max_of_max_speed, max_of_max_send_q);
+    vtun_syslog(LOG_INFO, "logical_chanel num - %i mss - %u MAX_REORDER * mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num,max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
+    vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %u , logic_speed %i kb/s max_of_max_send_q - %u",my_max_send_q_chan_num,max_of_max_send_q - my_max_send_q, max_of_max_speed, max_of_max_send_q);
 #endif
     if (((max_of_max_send_q - my_max_send_q) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte) {
         hold_mode = 0;
