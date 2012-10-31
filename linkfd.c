@@ -905,7 +905,7 @@ int ag_switcher() {
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->rport = channel_ports[i];
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "Server %i lport - %i %i", my_physical_channel_num, chan_info[i]->rport, channel_ports[i]);
+            vtun_syslog(LOG_INFO, "Server %i logic channel - %i lport - %i %i", my_physical_channel_num, i, chan_info[i]->rport, channel_ports[i]);
 #endif
         }
     } else {
@@ -915,7 +915,7 @@ int ag_switcher() {
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->lport = channel_ports[i];
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "Client %i lport - %i %i", my_physical_channel_num, chan_info[i]->lport, channel_ports[i]);
+            vtun_syslog(LOG_INFO, "Client %i logic channel - %i lport - %i %i", my_physical_channel_num, i, chan_info[i]->lport, channel_ports[i]);
 #endif
         }
     }
@@ -969,13 +969,6 @@ int ag_switcher() {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
 #endif
-    if (max_speed == 0) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "max_speed == 0");
-#endif
-        hold_mode = 0;
-        return 0;
-    }
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef DEBUGG
@@ -988,6 +981,13 @@ int ag_switcher() {
         hold_mode = 1;
     }
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+    if (max_speed == 0) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "max_speed == 0");
+#endif
+//        hold_mode = 0;
+        return 0;
+    }
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
