@@ -119,7 +119,7 @@
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #define RESEND_BUF_SIZE 1200 // int
 // maximum compiled-in buffers for tcp channels per link
-#define MAX_TCP_LOGICAL_CHANNELS 100 // int
+#define MAX_TCP_LOGICAL_CHANNELS 7 //100 // int
 // max aggregated VPN-links compiled-in (+ some extras for racing)
 #define MAX_TCP_PHYSICAL_CHANNELS 7
 // 10 seconds to start accepting tcp channels; otherwise timeout
