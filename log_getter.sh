@@ -35,6 +35,7 @@ echo "Full started"
 echo "Worcking..."
 echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed
 echo "" >>  /tmp/${PREFIX}speed
+ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed
 echo "killall vtrunkd"
 ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
@@ -46,7 +47,7 @@ if [ $TEST = "1" ]; then
  echo "" >> /tmp/${PREFIX}speed_eth2
  SPEED_ETH1=`cat /tmp/${PREFIX}speed_eth1 | awk {'print $6'} | awk -F. {'print $1'}`
  SPEED_ETH2=`cat /tmp/${PREFIX}speed_eth2 | awk {'print $6'} | awk -F. {'print $1'}`
- SPEED_AG=`cat /tmp/${PREFIX}speed | awk {'print $6'} | awk -F. {'print $1'}`
+ SPEED_AG=`cat /tmp/${PREFIX}speed | head -1 | awk {'print $6'} | awk -F. {'print $1'}`
  if [ ${SPEED_ETH1} -gt ${SPEED_ETH2} ]; then
   AG_EFF=`python -c "print (${SPEED_AG} - ${SPEED_ETH1}) * 100 / ${SPEED_ETH2}"`
   C_GROW=`python -c "print (${SPEED_AG} *100) / ${SPEED_ETH1}"`
@@ -56,8 +57,10 @@ if [ $TEST = "1" ]; then
   C_GROW=`python -c "print (${SPEED_AG} *100) / ${SPEED_ETH2}"`
   fdsfsdf=`python -c "print (${SPEED_AG} * 100) / ($SPEED_ETH2 + $SPEED_ETH1)"`
  fi
-fi
+ ping -c 10 -q -a 192.168.57.101 | tail -3 >> /tmp/${PREFIX}speed_eth1
+ ping -c 10 -q -a 192.168.58.101 | tail -3 >> /tmp/${PREFIX}speed_eth2
 echo "efficiency factor - ${AG_EFF}% C_grow - ${C_GROW}% C_use - ${fdsfsdf}%" >> /tmp/${PREFIX}speed
+fi
 echo "Transfer syslogs"
 scp user@cli-32:/var/log/syslog /tmp/${PREFIX}syslog-cli
 scp user@srv-32:/var/log/syslog /tmp/${PREFIX}syslog-srv
