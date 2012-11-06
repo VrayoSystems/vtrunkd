@@ -161,6 +161,7 @@ int delay_acc; // accumulated send delay
 int delay_cnt;
 uint32_t my_max_speed_chan;
 uint32_t my_holded_max_speed;
+uint32_t my_max_send_q;
 
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
@@ -938,7 +939,7 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
     get_format_tcp_info(chan_info, chan_amt);
     /*find my max send_q*/
-    uint32_t my_max_send_q = chan_info[0]->send_q;
+    my_max_send_q = chan_info[0]->send_q;
     int my_max_send_q_chan_num = 0;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
@@ -975,11 +976,7 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "logical_chanel num - %i mss - %u MAX_REORDER * mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num,max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %u , logic_speed %i kb/s max_of_max_send_q - %u",my_max_send_q_chan_num,max_of_max_send_q - my_max_send_q, max_of_max_speed, max_of_max_send_q);
 #endif
-    if ((my_max_send_q < (lfd_host->MAX_REORDER * 1300 * 0.3)) | (((max_of_max_send_q - my_max_send_q) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte)) {
-        hold_mode = 0;
-    } else {
-        hold_mode = 1;
-    }
+
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "logical_chanel num - %i hold_mode - %i",my_max_send_q_chan_num, hold_mode);
 #endif
@@ -991,6 +988,14 @@ int ag_switcher() {
 //        hold_mode = 0;
         return 0;
     }
+    if ((my_max_send_q < (lfd_host->MAX_REORDER * 1300 * 0.3)) | (((max_of_max_send_q - my_max_send_q) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte)) {
+        hold_mode = 0;
+    } else {
+        hold_mode = 1;
+    }
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "hold_mode - %i", hold_mode);
+#endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
     }
@@ -1143,6 +1148,7 @@ int lfd_linker(void)
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     my_max_speed_chan = 0;
+    my_max_send_q = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
@@ -1565,8 +1571,11 @@ int lfd_linker(void)
         } else {
             pfdset_w = NULL;
         }
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
+#endif
         FD_ZERO(&fdset);
-        if (hold_mode == 0) {
+        if ((((float)my_max_send_q) / 1300) < ((float)(lfd_host->MAX_REORDER) * 0.6)) {
             FD_SET(tun_device, &fdset);
             tv.tv_sec = timer_resolution.tv_sec;
             tv.tv_usec = timer_resolution.tv_usec;
