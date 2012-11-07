@@ -1576,7 +1576,7 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
 #endif
         FD_ZERO(&fdset);
-        if ((((float)my_max_send_q) / 1300) < ((float)(lfd_host->MAX_REORDER) * 0.6)) {
+        if (hold_mode == 0) {
             FD_SET(tun_device, &fdset);
             tv.tv_sec = timer_resolution.tv_sec;
             tv.tv_usec = timer_resolution.tv_usec;
