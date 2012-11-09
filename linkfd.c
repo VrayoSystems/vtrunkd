@@ -939,13 +939,12 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
     get_format_tcp_info(chan_info, chan_amt);
     /*find my max send_q*/
-    uint32_t my_max_send_q = chan_info[1]->send_q;
-    int my_max_send_q_chan_num = 1;
+    uint32_t my_max_send_q = chan_info[0]->send_q;
+    int my_max_send_q_chan_num = 0;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i - don't use", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
-        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[1]->recv_q, chan_info[1]->send_q, 1);
+        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
 #endif
-    for (int i = 2; i < chan_amt; i++) {
+    for (int i = 1; i < chan_amt; i++) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
 #endif
@@ -969,7 +968,7 @@ int ag_switcher() {
     }
     sem_post(&(shm_conn_info->stats_sem));
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u my_max_send_q/1300 (packets) - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
+        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
 #endif
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
@@ -1575,9 +1574,6 @@ int lfd_linker(void)
         } else {
             pfdset_w = NULL;
         }
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
-#endif
         FD_ZERO(&fdset);
         if (hold_mode == 0) {
             FD_SET(tun_device, &fdset);
