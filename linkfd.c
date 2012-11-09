@@ -972,11 +972,11 @@ int ag_switcher() {
 #endif
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
-    int send_q_delta = max_of_max_send_q - my_max_send_q;
+    int send_q_delta = my_max_send_q - max_of_max_send_q;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "logical_chanel num - %i MAX_REORDER * mss - %u mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num, max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %i , logic_speed %i kb/s max_of_max_send_q - %u",my_max_send_q_chan_num, send_q_delta, max_of_max_speed, max_of_max_send_q);
-    vtun_syslog(LOG_INFO, "logical_chanel num - %i hold_mode - %i",my_max_send_q_chan_num, hold_mode);
+    vtun_syslog(LOG_INFO, "logical_chanel num - %i last hold_mode - %i",my_max_send_q_chan_num, hold_mode);
 #endif
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
     if (max_speed == 0) {
@@ -984,6 +984,9 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "max_speed == 0");
 #endif
         hold_mode = 0;
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "hold_mode - %i", hold_mode);
+#endif
         return 0;
     }
     if (send_q_delta < 0) {
