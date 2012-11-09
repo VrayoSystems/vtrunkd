@@ -995,7 +995,11 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "send_q_delta zeroing");
 #endif
     }
-    if ((((send_q_delta) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed)) < max_reorder_byte)) {
+    int result =(send_q_delta) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed);
+#ifdef DEBUGG
+    vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u",result,max_reorder_byte);
+#endif
+    if (result < max_reorder_byte) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
