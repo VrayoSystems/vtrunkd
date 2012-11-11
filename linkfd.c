@@ -996,7 +996,7 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    int result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed);
+    int result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
