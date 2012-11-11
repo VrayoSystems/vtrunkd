@@ -954,7 +954,7 @@ int ag_switcher() {
         }
     }
     /*store my max send_q in shm and find another max send_q*/
-    uint32_t min_of_max_send_q = 0;
+    uint32_t min_of_max_send_q = ((uint32_t)-1);
     uint32_t max_of_max_speed = 0;
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[my_physical_channel_num].max_send_q = my_max_send_q;
@@ -989,17 +989,18 @@ int ag_switcher() {
 #endif
         return 0;
     }
-    if (send_q_delta < 0) {
-        send_q_delta = 0;
+    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) send_q_c;
+    if (window_overrun < 0) {
+        window_overrun = 0;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "send_q_delta zeroing");
+        vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    int result =(send_q_delta) + (((my_max_send_q - send_q_c) / max_speed) * max_of_max_speed);
+    int result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed);
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u",result,max_reorder_byte);
+    vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
-    if (send_q_delta < max_reorder_byte) {
+    if (result < (int32_t) max_reorder_byte) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
