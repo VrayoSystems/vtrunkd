@@ -108,6 +108,7 @@ long int weight_cnt = 0;
 int acnt = 0; // assert variable
 short int chan_amt = 0; // Number of logical channels already established(created)
 char *out_buf;
+uint16_t dirty_seq_num;
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -1160,6 +1161,7 @@ int lfd_linker(void)
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     my_max_speed_chan = 0;
+    dirty_seq_num = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
@@ -1370,7 +1372,7 @@ int lfd_linker(void)
         errno = 0;
         gettimeofday(&cur_time, NULL);
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
-        if ( timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=)) {
+        if (( timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=)) | ((dirty_seq_num % (lfd_host->MAX_REORDER / 10)) == 0)) {
             tmp_flags = ag_switcher();
             sem_wait(&(shm_conn_info->AG_flags_sem));
             if (tmp_flags == 1) {
@@ -1383,6 +1385,8 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->AG_flags_sem));
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
+        } else if ((dirty_seq_num % (lfd_host->MAX_REORDER / 10)) == 0) {
+
         }
         /* TODO write function for lws sending*/
         for (i = 0; i < chan_amt; i++) {
@@ -2221,6 +2225,8 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
 #endif
                 len = 0;
+            } else {
+                dirty_seq_num++;
             }
         }
             //Check time interval and ping if need.
