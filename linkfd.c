@@ -990,18 +990,19 @@ int ag_switcher() {
 #endif
         return 0;
     }
-    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) send_q_c;
+    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) min_of_max_send_q;
     if (window_overrun < 0) {
         window_overrun = 0;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    int result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
+    max_reorder_byte = (int32_t)(((float) (max_reorder_byte)) *0.8);
+    uint32_t result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
-    if (result < (int32_t) max_reorder_byte) {
+    if (result < max_reorder_byte) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
