@@ -658,22 +658,8 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d", channels[chan_num], chan_num);
+    vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
-        sem_wait(&(shm_conn_info->stats_sem));
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        for (int i = 0; i < 16; i++) {
-            if (i != my_physical_channel_num) {
-                if ((shm_conn_info->channels_mask & (1 << i)) != 0) {
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Send SIGUSR1 to %i", shm_conn_info->stats[i].pid);
-#endif
-                    kill(shm_conn_info->stats[i].pid, SIGUSR1); // send sigusr1 signal to all another alive process for wakeup
-                }
-            }
-        }
-        sem_post(&(shm_conn_info->AG_flags_sem));
-        sem_post(&(shm_conn_info->stats_sem));
         return NET_WRITE_BUSY_NOTIFY;
     }
 #ifdef DEBUGG
