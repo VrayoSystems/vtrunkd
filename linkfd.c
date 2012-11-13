@@ -1400,8 +1400,6 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->AG_flags_sem));
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
-        } else if ((dirty_seq_num % (lfd_host->MAX_REORDER / 10)) == 0) {
-
         }
         /* TODO write function for lws sending*/
         for (i = 0; i < chan_amt; i++) {
@@ -2217,7 +2215,12 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "debug: AG_MODE");
 #endif
             len = select_devread_send(buf, out2, mypid);
-            if (len == BREAK_ERROR) {
+            if (len > 0) {
+                dirty_seq_num++;
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);
+#endif
+            } else if (len == BREAK_ERROR) {
                 vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
                 break;
             } else if (len == CONTINUE_ERROR) {
@@ -2240,8 +2243,6 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
 #endif
                 len = 0;
-            } else {
-                dirty_seq_num++;
             }
         }
             //Check time interval and ping if need.
