@@ -666,9 +666,9 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             if (i != my_physical_channel_num) {
                 if ((shm_conn_info->channels_mask & (1 << i)) != 0) {
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Send SIGUSR1 to %i" shm_conn_info->stats[i]->pid);
+    vtun_syslog(LOG_INFO, "Send SIGUSR1 to %i", shm_conn_info->stats[i].pid);
 #endif
-                    kill(shm_conn_info->stats[i]->pid, SIGUSR1); // send sigusr1 signal to all another alive process for wakeup
+                    kill(shm_conn_info->stats[i].pid, SIGUSR1); // send sigusr1 signal to all another alive process for wakeup
                 }
             }
         }
