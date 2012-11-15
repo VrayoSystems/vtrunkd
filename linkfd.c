@@ -109,6 +109,7 @@ int acnt = 0; // assert variable
 short int chan_amt = 0; // Number of logical channels already established(created)
 char *out_buf;
 uint16_t dirty_seq_num;
+int sendbuff;
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -974,6 +975,12 @@ int ag_switcher() {
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
     int send_q_delta = my_max_send_q - min_of_max_send_q;
+    if (send_q_delta < 0) {
+        send_q_delta = 0;
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "send_q_delta zeroing");
+#endif
+    }
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "logical_chanel num - %i MAX_REORDER * mss - %u mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num, max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %i , max_logic_speed %i kb/s min_of_max_send_q - %u",my_max_send_q_chan_num, send_q_delta, max_of_max_speed, min_of_max_send_q);
@@ -990,15 +997,17 @@ int ag_switcher() {
 #endif
         return 0;
     }
-    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) min_of_max_send_q;
+    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) send_q_c;
     if (window_overrun < 0) {
         window_overrun = 0;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    max_reorder_byte = (int32_t)(((float) (max_reorder_byte)) *0.8);
-    uint32_t result = (send_q_delta) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
+//    max_reorder_byte = (uint32_t)(((float) (max_reorder_byte)) * 0.8);
+
+    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
+//    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
@@ -1200,6 +1209,15 @@ int lfd_linker(void)
             vtun_syslog(LOG_ERR,"Can't create Channels socket");
             return -1;
         }
+int res123 = 0;
+ // Get buffer size
+ socklen_t optlen = sizeof(sendbuff);
+ res123 = getsockopt(prio_s, SOL_SOCKET, SO_SNDBUF, &sendbuff, &optlen);
+
+ if(res123 == -1)
+     vtun_syslog(LOG_ERR,"Error getsockopt one");
+ else
+     vtun_syslog(LOG_INFO,"send buffer size = %d\n", sendbuff);
 
         prio_opt=1;
         setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
