@@ -415,7 +415,9 @@ void seqn_add_tail(int conn_num, char *buf, int len, unsigned long seq_num, unsi
 
     shm_conn_info->resend_buf_idx++;
     if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "seqn_add_tail() resend_frames_buf loop end");
+#endif
         shm_conn_info->resend_buf_idx = 0;
     }
 
@@ -938,7 +940,9 @@ int ag_switcher() {
     } else {
         my_max_speed_chan = max_speed_chan;
     }
+#ifdef DEBUGG
     vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
+#endif
     get_format_tcp_info(chan_info, chan_amt);
     /*find my max send_q*/
     uint32_t my_max_send_q = chan_info[0]->send_q;
@@ -985,8 +989,8 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "logical_chanel num - %i MAX_REORDER * mss - %u mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num, max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %i , max_logic_speed %i kb/s min_of_max_send_q - %u",my_max_send_q_chan_num, send_q_delta, max_of_max_speed, min_of_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i last hold_mode - %i",my_max_send_q_chan_num, hold_mode);
-#endif
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+#endif
     if (max_speed == 0) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "max_speed == 0");
@@ -1442,19 +1446,22 @@ int res123 = 0;
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt = 0;
-                vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
-                vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
-
                 // speed in packets/sec calculation
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed =
                         (shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets = 0;
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
+                vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
+                        shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d port %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i, channel_ports[i]);
+#endif
             }
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
+#endif
                if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -1963,9 +1970,11 @@ int res123 = 0;
                     out = buf; // wtf?
 
                     len = seqn_break_tail(out, len, &seq_num, &flag_var);
+#ifdef DEBUGG
                     if (seq_num % 50 == 0) {
                         vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %lu len %d", chan_num, seq_num, len);
                     }
+#endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
