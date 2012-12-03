@@ -24,6 +24,10 @@ struct {
     int families;
     struct ssfilter *f;
 } filter;
+
+int conn_counter,channel_amount_ss;
+struct channel_info** channel_info_ss;
+
 /*main parse function*/
 static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f)
 {
@@ -34,16 +38,6 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f)
     s.local.family = s.remote.family = r->idiag_family;
     s.lport = ntohs(r->id.idiag_sport);
     s.rport = ntohs(r->id.idiag_dport);
-    if (s.local.family == AF_INET) {
-        s.local.bytelen = s.remote.bytelen = 4;
-    } else {
-        s.local.bytelen = s.remote.bytelen = 16;
-    }
-    memcpy(s.local.data, r->id.idiag_src, s.local.bytelen);
-    memcpy(s.remote.data, r->id.idiag_dst, s.local.bytelen);
-
-//  if (f && f->f && run_ssfilter(f->f, &s) == 0)
-//      return 0;
 
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "fss all conns send_q - %i recv_q - %i lport - %i rport - %i", r->idiag_wqueue, r->idiag_rqueue, s.lport, s.rport);
@@ -51,7 +45,7 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f)
         // fill channel_info structure
     if (conn_counter < channel_amount_ss) {
         for (int i = 0; i < channel_amount_ss; i++) {
-            if ((channel_info_ss[i]->lport == s.lport) | (channel_info_ss[i]->rport == s.rport)) {
+            if ((channel_info_ss[i]->lport == ntohs(r->id.idiag_sport)) | (channel_info_ss[i]->rport == ntohs(r->id.idiag_dport))) {
                 format_info(tcp_show_info(nlh, r));
                 channel_info_ss[i]->recv_q = r->idiag_rqueue;
                 channel_info_ss[i]->send_q = r->idiag_wqueue;
@@ -73,15 +67,14 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f)
     return 0;
 }
 int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amount) {
-    int conn_counter = 0;
-    int ret;
+    int ret = 0;
+    channel_info_ss = channel_info_vt;
+    conn_counter = 0, channel_amount_ss = 0;
     memset(&filter, 0, sizeof(filter));
     filter.dbs = (1 << TCP_DB);
     filter.states = SS_ALL & ~((1 << SS_LISTEN) | (1 << SS_CLOSE) | (1 << SS_TIME_WAIT) | (1 << SS_SYN_RECV));
     filter.families = (1 << AF_INET) | (1 << AF_INET6);
 
-    tcp_show_netlink(&filter, NULL, TCPDIAG_GETSOCK);
-    int fd;
     struct sockaddr_nl nladdr;
     struct {
         struct nlmsghdr nlh;
@@ -94,6 +87,7 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
     char buf[8192];
     struct iovec iov[3];
 
+    int fd;
     if ((fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG)) < 0) {
         switch (errno) {
         case EMFILE:
@@ -161,16 +155,17 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
                     goto skip_it;
 
                 if (h->nlmsg_type == NLMSG_DONE) {
+                    vtun_syslog(LOG_ERR, "Netlink NLMSG_DONE");
                     close(fd);
-                    return 0;
+                    break;
                 }
                 if (h->nlmsg_type == NLMSG_ERROR) {
                     struct nlmsgerr *err = (struct nlmsgerr*)NLMSG_DATA(h);
                     if (h->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
-                        vtun_syslog(LOG_ERR, "ERROR truncated");
+                        vtun_syslog(LOG_ERR, "Netlink ERROR truncated");
                     } else {
                         errno = -err->error;
-                        vtun_syslog(LOG_ERR, "TCPDIAG answers");
+                        vtun_syslog(LOG_ERR, "Netlink TCPDIAG answers");
                     }
                     return -1;
                 }
@@ -181,32 +176,32 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
             }
             err = tcp_show_sock(h, NULL );
             if (err < 0) {
+                vtun_syslog(LOG_ERR, "Netlink err - %i" err);
                 return err;
-                break;
             }
 
     skip_it:
                 h = NLMSG_NEXT(h, status);
             }
             if (msg.msg_flags & MSG_TRUNC) {
-                vtun_syslog(LOG_ERR, "Message truncated\n");
+                vtun_syslog(LOG_INFO, "Netlink Message truncated");
                 continue;
             }
             if (status) {
-                vtun_syslog(LOG_ERR, "!!!Remnant of size %d", status);
+                vtun_syslog(LOG_ERR, "Netlink !!!Remnant of size %d", status);
                 ret = -1;
                 break;
             }
         }
         if (close(fd) == -1) {
-            printf("Unable to close socket: %d\n.", errno);
+            vtun_syslog(LOG_ERR, "Netlink Unable to close socket: %d.", errno);
         }
 
 #ifdef DEBUGG
     for (int i = 0; i < channel_amount; i++) {
-        vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i]->send_q, channel_info_vt[i]->lport, channel_info_vt[i]->rport);
+        vtun_syslog(LOG_INFO, "Netlink fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i]->send_q, channel_info_vt[i]->lport, channel_info_vt[i]->rport);
     }
-    vtun_syslog(LOG_INFO, "fss conn_counter is %i", conn_counter);
+    vtun_syslog(LOG_INFO, "Netlink fss conn_counter is %i", conn_counter);
 #endif
     return 1;
 }
