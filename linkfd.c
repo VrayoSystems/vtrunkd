@@ -79,7 +79,7 @@
 #include "weight_calculation.h"
 #include "net_structs.h"
 #include "netlib.h"
-#include "../fss/include/ss.h"
+#include "netlink_socket_info.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
