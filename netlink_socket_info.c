@@ -78,6 +78,11 @@ struct filter current_filter;
 int conn_counter, channel_amount_ss, show_tcpinfo = 0, show_mem = 0;
 struct channel_info** channel_info_ss;
 
+int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
+static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f);
+static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype);
+int format_info(const struct nlmsghdr *nlh, struct inet_diag_msg *r);
+
 int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 {
     memset(tb, 0, sizeof(struct rtattr *) * (max + 1));
@@ -136,16 +141,15 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     struct msghdr msg;
     struct rtattr rta;
     char buf[8192];
-    struct iovec iov[3];
+    struct iovec iov;
 
     if ((fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG)) < 0) {
-        int errsv = errno;
         switch (errno) {
         case EMFILE:
-            printf("Too many open files.\n");
+            vtun_syslog(LOG_ERR, "Netlink - Too many open files.");
             break;
         default:
-            printf("Error: %d.\n", errsv);
+            vtun_syslog(LOG_ERR, "Netlink - Error: %s (%d)", strerror(errno), errno);
             break;
         }
         return -1;
@@ -171,44 +175,40 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
         req.r.idiag_ext |= (1 << (INET_DIAG_CONG - 1));
     }
 
-    iov[0] = (struct iovec ) { .iov_base = &req, .iov_len = sizeof(req) };
-    if (f->f) {
-//        bclen = ssfilter_bytecompile(f->f, &bc);
-        rta.rta_type = INET_DIAG_REQ_BYTECODE;
-        rta.rta_len = RTA_LENGTH(bclen);
-        iov[1] = (struct iovec ) { &rta, sizeof(rta) };
-        iov[2] = (struct iovec ) { bc, bclen };
-        req.nlh.nlmsg_len += RTA_LENGTH(bclen);
-    }
+    iov.iov_base = &req;
+    iov.iov_len = sizeof(req);
 
-    msg = (struct msghdr ) { .msg_name = (void*) &nladdr, .msg_namelen = sizeof(nladdr), .msg_iov = iov, .msg_iovlen = f->f ? 3 : 1, };
+    msg.msg_name = (void*) &nladdr;
+    msg.msg_namelen = sizeof(nladdr);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1; // iov can be array of structure
 
     if (sendmsg(fd, &msg, 0) < 0)
         return -1;
 
-    iov[0] = (struct iovec ) { .iov_base = buf, .iov_len = sizeof(buf) };
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
 
     while (1) {
         int status;
         struct nlmsghdr *h;
 
-        msg = (struct msghdr ) { (void*) &nladdr, sizeof(nladdr), iov, 1, NULL, 0, 0 };
+        msg = (struct msghdr ) { (void*) &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
 
         status = recvmsg(fd, &msg, 0);
 
         if (status < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                vtun_syslog(LOG_ERR, "Netlink - EINTR, continue...");
                 continue;
-            perror("OVERRUN");
+            }
+            vtun_syslog(LOG_ERR, "Netlink - OVERRUN");
             continue;
         }
         if (status == 0) {
-            fprintf(stderr, "EOF on netlink\n");
+            vtun_syslog(LOG_ERR, "Netlink - EOF on netlink");
             return 0;
         }
-
-        if (dump_fp)
-            fwrite(buf, 1, NLMSG_ALIGN(status), dump_fp);
 
         h = (struct nlmsghdr*) buf;
         while (NLMSG_OK(h, status)) {
@@ -227,10 +227,10 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
             if (h->nlmsg_type == NLMSG_ERROR) {
                 struct nlmsgerr *err = (struct nlmsgerr*) NLMSG_DATA(h);
                 if (h->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr))) {
-                    fprintf(stderr, "ERROR truncated\n");
+                    vtun_syslog(LOG_ERR, "Netlink - ERROR truncated");
                 } else {
                     errno = -err->error;
-                    perror("TCPDIAG answers");
+                    vtun_syslog(LOG_ERR, "Netlink - TCPDIAG answers");
                 }
                 return 0;
             }
@@ -247,16 +247,16 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
             skip_it: h = NLMSG_NEXT(h, status);
         }
         if (msg.msg_flags & MSG_TRUNC) {
-            fprintf(stderr, "Message truncated\n");
+            vtun_syslog(LOG_ERR, "Netlink - Message truncated");
             continue;
         }
         if (status) {
-            fprintf(stderr, "!!!Remnant of size %d\n", status);
+            vtun_syslog(LOG_ERR, "Netlink - !!!Remnant of size %d", status);
 //            exit(1); todo refactor
         }
     }
     if (close(fd) == -1) {
-        printf("Unable to close socket: %d\n.", errno);
+        vtun_syslog(LOG_ERR, "Netlink - Unable to close socket: %s (%d)", strerror(errno), errno);
     }
     return 0;
 }
@@ -265,6 +265,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
  * Function get from **channel_info_vt port's num and fill information about tcp connection
  * @param channel_info_vt
  * @param channel_amount - *channel_info_vt[] array length
+ * @return 1 if succes end 0 if error
  */
 int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amount) {
     channel_info_ss = channel_info_vt;
@@ -278,7 +279,10 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
     current_filter.dbs = default_filter.dbs;
     current_filter.families = default_filter.families;
 
-    tcp_show_netlink(&current_filter, NULL, TCPDIAG_GETSOCK);
+    if(!tcp_show_netlink(&current_filter, NULL, TCPDIAG_GETSOCK)) {
+//        return 0; // TODO workaround for error handling 0 - error 1 - success
+    }
+
 
 #ifdef DEBUGG
     for (int i = 0; i < channel_amount; i++) {
@@ -310,7 +314,7 @@ int format_info(const struct nlmsghdr *nlh, struct inet_diag_msg *r) {
         int len = RTA_PAYLOAD(tb[INET_DIAG_INFO]);
 
         /* workaround for older kernels with less fields ???legacy??? */
-        if (len < sizeof(*info)) {
+        if (len < (int) sizeof(*info)) {
             info = alloca(sizeof(*info));
             memset(info, 0, sizeof(*info));
             memcpy(info, RTA_DATA(tb[INET_DIAG_INFO]), len);
