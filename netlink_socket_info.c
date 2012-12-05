@@ -92,7 +92,7 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
         rta = RTA_NEXT(rta,len);
     }
     if (len)
-        fprintf(stderr, "!!!Deficit %d, rta_len=%d\n", len, rta->rta_len);
+        vtun_syslog(LOG_ERR, "Netlink - !!!Deficit %d, rta_len=%d", len, rta->rta_len);
     return 0;
 }
 
@@ -117,7 +117,7 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f) {
         }
     }
 
-    return 0;
+    return 1;
 }
 
 /**
@@ -152,7 +152,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
             vtun_syslog(LOG_ERR, "Netlink - Error: %s (%d)", strerror(errno), errno);
             break;
         }
-        return -1;
+        return 0;
     }
 
     memset(&nladdr, 0, sizeof(nladdr));
@@ -184,7 +184,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     msg.msg_iovlen = 1; // iov can be array of structure
 
     if (sendmsg(fd, &msg, 0) < 0)
-        return -1;
+        return 0;
 
     iov.iov_base = buf;
     iov.iov_len = sizeof(buf);
@@ -221,6 +221,9 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
                 goto skip_it;
 
             if (h->nlmsg_type == NLMSG_DONE) {
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "Netlink - NLMSG_DONE");
+#endif
                 close(fd);
                 return 0;
             }
@@ -239,9 +242,11 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
                     h = NLMSG_NEXT(h, status);
                     continue;
                 }
-                err = tcp_show_sock(h, NULL );
-                if (err < 0)
-                    return err;
+                if(!tcp_show_sock(h, NULL )){
+                    vtun_syslog(LOG_ERR, "Netlink - tcp_show_sock return error");
+                    return 0;
+                }
+
             }
 
             skip_it: h = NLMSG_NEXT(h, status);
@@ -252,13 +257,13 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
         }
         if (status) {
             vtun_syslog(LOG_ERR, "Netlink - !!!Remnant of size %d", status);
-//            exit(1); todo refactor
+            return 0;
         }
     }
     if (close(fd) == -1) {
         vtun_syslog(LOG_ERR, "Netlink - Unable to close socket: %s (%d)", strerror(errno), errno);
     }
-    return 0;
+    return 1;
 }
 
 /**
@@ -282,8 +287,6 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
     if(!tcp_show_netlink(&current_filter, NULL, TCPDIAG_GETSOCK)) {
 //        return 0; // TODO workaround for error handling 0 - error 1 - success
     }
-
-
 #ifdef DEBUGG
     for (int i = 0; i < channel_amount; i++) {
         vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i]->send_q, channel_info_vt[i]->lport,
