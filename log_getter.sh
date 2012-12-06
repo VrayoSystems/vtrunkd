@@ -21,7 +21,8 @@ echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
 echo "NTP sync..."
-ssh user@cli-32 "sudo ntpdate 192.168.0.101"
+ssh user@cli-32 "sudo ntpdate 192.168.0.101" &
+sleep 1
 ssh user@srv-32 "sudo ntpdate 192.168.0.101"
 echo "Starting server..."
 ssh user@srv-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -s -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-srv.test.conf -P 5003"
@@ -30,7 +31,7 @@ echo "Starting client 1..."
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest1 192.168.57.101 -P 5003"
 echo "Starting client 2..."
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest2 192.168.58.101 -P 5003"
-sleep 5
+sleep 8
 echo "Full started"
 echo "Worcking..."
 echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed
