@@ -141,7 +141,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     struct msghdr msg;
     struct rtattr rta;
     char buf[8192];
-    struct iovec iov[3];
+    struct iovec iov;
 
     if ((fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG)) < 0) {
         switch (errno) {
@@ -174,28 +174,26 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
         req.r.idiag_ext |= (1 << (INET_DIAG_VEGASINFO - 1));
         req.r.idiag_ext |= (1 << (INET_DIAG_CONG - 1));
     }
-    iov[0] = (struct iovec ) { .iov_base = &req, .iov_len = sizeof(req) };
-    msg = (struct msghdr ) { .msg_name = (void*) &nladdr, .msg_namelen = sizeof(nladdr), .msg_iov = iov, .msg_iovlen = f->f ? 3 : 1, };
 
-//    iov.iov_base = &req;
-//    iov.iov_len = sizeof(req);
+    iov.iov_base = &req;
+    iov.iov_len = sizeof(req);
 
-//    msg.msg_name = (void*) &nladdr;
-//    msg.msg_namelen = sizeof(nladdr);
-//    msg.msg_iov = &iov;
-//    msg.msg_iovlen = 1; // iov can be array of structure
+    msg.msg_name = (void*) &nladdr;
+    msg.msg_namelen = sizeof(nladdr);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1; // iov can be array of structure
 
     if (sendmsg(fd, &msg, 0) < 0)
         return 0;
-    iov[0] = (struct iovec ) { .iov_base = buf, .iov_len = sizeof(buf) };
-//    iov.iov_base = buf;
-//    iov.iov_len = sizeof(buf);
+
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
 
     while (1) {
         int status;
         struct nlmsghdr *h;
 
-        msg = (struct msghdr ) { (void*) &nladdr, sizeof(nladdr), iov, 1, NULL, 0, 0 };
+        msg = (struct msghdr ) { (void*) &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
 
         status = recvmsg(fd, &msg, 0);
 
