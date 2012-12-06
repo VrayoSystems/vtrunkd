@@ -187,8 +187,10 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     msg.msg_flags = 0;
 
     if (sendmsg(fd, &msg, 0) < 0)
+    {
+        vtun_syslog(LOG_ERR, "Netlink - Cannot send netlink message: %s (%d)", strerror(errno), errno);
         return 0;
-
+    }
     iov.iov_base = buf;
     iov.iov_len = sizeof(buf);
 
@@ -205,7 +207,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
                 vtun_syslog(LOG_ERR, "Netlink - EINTR, continue...");
                 continue;
             }
-            vtun_syslog(LOG_ERR, "Netlink - OVERRUN");
+            vtun_syslog(LOG_ERR, "Netlink - OVERRUN: %s (%d)", strerror(errno), errno);
             continue;
         }
         if (status == 0) {
@@ -228,7 +230,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
                 vtun_syslog(LOG_INFO, "Netlink - NLMSG_DONE");
 #endif
                 close(fd);
-                return 0;
+                return 1;
             }
             if (h->nlmsg_type == NLMSG_ERROR) {
                 struct nlmsgerr *err = (struct nlmsgerr*) NLMSG_DATA(h);
@@ -236,7 +238,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
                     vtun_syslog(LOG_ERR, "Netlink - ERROR truncated");
                 } else {
                     errno = -err->error;
-                    vtun_syslog(LOG_ERR, "Netlink - TCPDIAG answers");
+                    vtun_syslog(LOG_ERR, "Netlink - TCPDIAG answers: %s (%d)", strerror(errno), errno);
                 }
                 return 0;
             }
@@ -288,7 +290,8 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
     current_filter.families = default_filter.families;
 
     if(!tcp_show_netlink(&current_filter, NULL, TCPDIAG_GETSOCK)) {
-//        return 0; // TODO workaround for error handling 0 - error 1 - success
+        vtun_syslog(LOG_ERR, "Netlink - return error");
+        return 0; // 0 - error 1 - success
     }
 #ifdef DEBUGG
     for (int i = 0; i < channel_amount; i++) {

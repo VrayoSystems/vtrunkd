@@ -939,7 +939,12 @@ int ag_switcher() {
         my_max_speed_chan = max_speed_chan;
     }
     vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
-    get_format_tcp_info(chan_info, chan_amt);
+    if(!get_format_tcp_info(chan_info, chan_amt)) {
+        /*TODO may be need add error counter, because if we have one error
+         * we can use previos values. But if we have two error running
+         * we should take action */
+        vtun_syslog(LOG_ERR, "Ag switcher - netlink return error");
+    }
     /*find my max send_q*/
     uint32_t my_max_send_q = chan_info[0]->send_q;
     int my_max_send_q_chan_num = 0;
