@@ -182,6 +182,9 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     msg.msg_namelen = sizeof(nladdr);
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1; // iov can be array of structure
+    msg.msg_control = NULL;
+    msg.msg_controllen = 0;
+    msg.msg_flags = 0;
 
     if (sendmsg(fd, &msg, 0) < 0)
         return 0;
