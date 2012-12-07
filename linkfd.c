@@ -117,6 +117,7 @@ char channel_mode = MODE_NORMAL;
 int hold_mode; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 
+uint32_t send_q_limit;
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -1009,12 +1010,17 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-
-    uint32_t send_q_limit;
-    if(my_physical_channel_num){
-        send_q_limit = 55000;
+    double rtt_limit = 1200;
+    double rtt = chan_info[my_max_send_q_chan_num]->rtt;
+    double rtt_var = chan_info[my_max_send_q_chan_num]->rtt_var;
+    if (rtt > rtt_limit) {
+        if (send_q_limit > 15000) {
+            send_q_limit -= 5000;
+        }
     } else {
-        send_q_limit = 100000;
+        if (send_q_limit < 80000) {
+            send_q_limit += 5000;
+        }
     }
 //    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
 //    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
@@ -1077,7 +1083,7 @@ int lfd_linker(void)
     char succ_flag; // return flag
 
     int dev_my_cnt = 0; // statistic and watchdog
-    
+    send_q_limit = 55000;
     // timing
     long int last_tick = 0; // important ticking
     struct timeval last_timing = {0, 0};
