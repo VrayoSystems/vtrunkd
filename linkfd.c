@@ -1009,15 +1009,23 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    max_reorder_byte = (uint32_t)(((float) (max_reorder_byte)) * 0.45);
 
+    uint32_t send_q_limit;
+    if(my_physical_channel_num){
+        send_q_limit = 55000;
+    } else {
+        send_q_limit = 100000;
+    }
 //    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
 //    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
     uint32_t result = my_max_send_q;// + (chan_info[my_max_send_q_chan_num]->rtt_var/max_speed);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
+    vtun_syslog(LOG_INFO, "{p_chan_num:%i,l_chan_num:%i,max_reorder_byte:%u,send_q_limit:%u,my_max_send_q:%u,rtt:%f,rtt_var:%f,cwnd:%u}",
+            my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+            chan_info[my_max_send_q_chan_num]->rtt_var, chan_info[my_max_send_q_chan_num]->cwnd);
 #endif
-    if (result < max_reorder_byte) {
+    if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
