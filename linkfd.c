@@ -110,6 +110,9 @@ short int chan_amt = 0; // Number of logical channels already established(create
 char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
+int incomplete_seq_len = 0;
+int buf_len;
+int rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
@@ -1027,9 +1030,9 @@ int ag_switcher() {
     uint32_t result = my_max_send_q;// + (chan_info[my_max_send_q_chan_num]->rtt_var/max_speed);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
-    vtun_syslog(LOG_INFO, "{p_chan_num:%i,l_chan_num:%i,max_reorder_byte:%u,send_q_limit:%u,my_max_send_q:%u,rtt:%f,rtt_var:%f,cwnd:%u}",
+    vtun_syslog(LOG_INFO, "{p_chan_num:%i,l_chan_num:%i,max_reorder_byte:%u,send_q_limit:%u,my_max_send_q:%u,rtt:%f,rtt_var:%f,my_rtt:%i,cwnd:%u,incomplete_seq_len:%i,rxmits:%i,buf_len:%i}",
             my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-            chan_info[my_max_send_q_chan_num]->rtt_var, chan_info[my_max_send_q_chan_num]->cwnd);
+            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len);
 #endif
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1055,13 +1058,13 @@ int lfd_linker(void)
     char *out, *out2 = NULL;
     char *buf; // in common for info packet
     unsigned long int seq_num;
-    int buf_len;
+
     int maxfd;
     int imf;
     int fprev = -1;
     int fold = -1;
     unsigned long incomplete_seq_buf[FRAME_BUF_SIZE];
-    int incomplete_seq_len = 0;
+
     
     unsigned short tmp_s;
     unsigned long tmp_l;
@@ -1140,7 +1143,7 @@ int lfd_linker(void)
     unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
-    int rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
+
     long int ping_req_ts = 0;
     int ping_rcvd = 1; // flag that ping is rcvd; ok to send next
     long int last_ping=0;
