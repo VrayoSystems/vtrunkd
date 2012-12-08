@@ -72,6 +72,10 @@ grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F]
 grep "First select time" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-1_cli_select_time
 grep "{\"p_" /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-cli_json
+grep "{\"p_" /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_json
+grep "{\"p_" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_json
+grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
+grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
 scp /tmp/${PREFIX}* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/${PREFIX}syslog*
 echo "Clear syslog"

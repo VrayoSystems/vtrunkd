@@ -1018,9 +1018,9 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
 #ifdef JSON
-    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i}",
+    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
                 my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len);
+                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
 #endif
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
