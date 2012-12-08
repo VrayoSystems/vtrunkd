@@ -69,18 +69,9 @@ grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F]
 grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-2_cli
 grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | head -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-1_srv  
 grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-2_srv
-grep "First select time" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_select_time
-grep "First select time" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_select_time
-grep 'write_buf_add called!' /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_write_buf
-grep 'write_buf_add called!' /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_write_buf
-grep 'select_devread_send() frame' /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_select_devread_send
-grep 'select_devread_send() frame' /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_select_devread_send
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_max_send_q
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_max_send_q
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-srv_max_send_q
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_max_send_q
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_max_send_q
-grep 'my_max_send_q' /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-cli_max_send_q
+grep "First select time" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-1_cli_select_time
+grep "{\"p_" /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-srv_json
+grep "{\"p_" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-cli_json
 scp /tmp/${PREFIX}* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/${PREFIX}syslog*
 echo "Clear syslog"
