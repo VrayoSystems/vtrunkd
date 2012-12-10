@@ -110,16 +110,13 @@ short int chan_amt = 0; // Number of logical channels already established(create
 char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
-int incomplete_seq_len = 0;
-int buf_len;
-int rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
 
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
-
+int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0; // in ms;
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -1012,21 +1009,22 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-
     uint32_t send_q_limit;
     if(my_physical_channel_num){
         send_q_limit = 55000;
     } else {
-        send_q_limit = 100000;
+        send_q_limit = 55000;
     }
 //    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
 //    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
     uint32_t result = my_max_send_q;// + (chan_info[my_max_send_q_chan_num]->rtt_var/max_speed);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
-    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i}",
-            my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len);
+#endif
+#ifdef JSON
+    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
+                my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
 #endif
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1137,7 +1135,6 @@ int lfd_linker(void)
     unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
-
     long int ping_req_ts = 0;
     int ping_rcvd = 1; // flag that ping is rcvd; ok to send next
     long int last_ping=0;
