@@ -938,7 +938,9 @@ int ag_switcher() {
     } else {
         my_max_speed_chan = max_speed_chan;
     }
+#ifdef DEBUGG
     vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
+#endif
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -990,8 +992,8 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "logical_chanel num - %i MAX_REORDER * mss - %u mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num, max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %i , max_logic_speed %i kb/s min_of_max_send_q - %u",my_max_send_q_chan_num, send_q_delta, max_of_max_speed, min_of_max_send_q);
     vtun_syslog(LOG_INFO, "logical_chanel num - %i last hold_mode - %i",my_max_send_q_chan_num, hold_mode);
-#endif
     vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
+#endif
     if (max_speed == 0) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "max_speed == 0");
