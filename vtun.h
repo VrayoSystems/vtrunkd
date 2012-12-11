@@ -282,6 +282,7 @@ struct _write_buf {
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
     uint16_t complete_seq_quantity;
+    int top_packet_physical_channel_num;
 };
 
 /**

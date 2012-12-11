@@ -116,7 +116,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
-int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0; // in ms;
+int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0, my_miss_packets =0; // in ms;
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -775,7 +775,7 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
     memcpy(shm_conn_info->frames_buf[newf].out, out, len);
     shm_conn_info->frames_buf[newf].len = len;
     shm_conn_info->frames_buf[newf].sender_pid = mypid;
-    //shm_conn_info->write_buf.frames_buf[newf].retransmit_times = 0; // wtf??
+    shm_conn_info->frames_buf[newf].physical_channel_num = my_physical_channel_num;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
@@ -1018,9 +1018,9 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
 #ifdef JSON
-    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
+    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets\":%i\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
                 my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
+                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len, my_miss_packets, chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
 #endif
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1972,9 +1972,11 @@ int res123 = 0;
                     out = buf; // wtf?
 
                     len = seqn_break_tail(out, len, &seq_num, &flag_var);
+#ifdef DEBUGG
                     if (seq_num % 50 == 0) {
                         vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %lu len %d", chan_num, seq_num, len);
                     }
+#endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
@@ -1992,7 +1994,9 @@ int res123 = 0;
 #endif
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
-
+                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].physical_channel_num != my_physical_channel_num) {
+                        my_miss_packets = incomplete_seq_len;
+                    }
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
