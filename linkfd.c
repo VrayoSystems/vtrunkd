@@ -2029,7 +2029,7 @@ int res123 = 0;
                     int another_chan = (my_physical_channel_num == 0) ? 1: 0;
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
-                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].physical_channel_num
+                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_tail].physical_channel_num
                             != my_physical_channel_num) {
                         my_miss_packets[my_physical_channel_num] = incomplete_seq_len;
                         my_miss_packets[another_chan] = 0;
