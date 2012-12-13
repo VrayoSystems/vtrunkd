@@ -116,7 +116,10 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
-int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0, my_miss_packets =0; // in ms;
+int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
+uint16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
+uint16_t miss_packets_max[] = {0,0}; // get from another side
+uint32_t send_q_limit = 55000;
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -1011,18 +1014,18 @@ int ag_switcher() {
         vtun_syslog(LOG_INFO, "window_overrun zeroing");
 #endif
     }
-    uint32_t send_q_limit = (uint32_t)(((float) (max_reorder_byte)) * 0.45);
-
-//    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
-//    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
     uint32_t result = my_max_send_q;// + (chan_info[my_max_send_q_chan_num]->rtt_var/max_speed);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
 #ifdef JSON
-    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets\":%i\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
-                my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len, my_miss_packets, chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
+    vtun_syslog(LOG_INFO,
+            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets_max_get_from_remote\":%i,\"my_miss_packets_max_calculated_here\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
+            my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+            my_miss_packets_max[my_physical_channel_num], my_miss_packets_max[my_physical_channel_num], chan_info[my_max_send_q_chan_num]->send,
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
 #endif
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1394,6 +1397,8 @@ int res123 = 0;
     get_info_time.tv_usec = 50000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
+    timer_resolution.tv_sec = 1;
+    timer_resolution.tv_usec = 0;
 
 /**
  * Main program loop
@@ -1486,29 +1491,32 @@ int res123 = 0;
 				sem_post(&(shm_conn_info->stats_sem));
 
 
-				//todo send time_lag for all process(CONN's)
+				//todo send time_lag for all process(PHYSICAL CHANNELS)
 				uint32_t time_lag_remote;
 				uint16_t pid_remote;
-				for (int i = 0; i < chan_amt; i++) {
+				for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
 					sem_wait(&(shm_conn_info->stats_sem));
+					/* If pid is null --> link didn't up --> continue*/
+                    if (shm_conn_info->stats[i].pid == 0) {
+                        sem_post(&(shm_conn_info->stats_sem));
+                        continue;
+                    }
 					time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
+                    /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
+                    time_lag_remote &= 0xFFFFF; // shrink to 20bit
+                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max[i] << 20);
+                    my_miss_packets_max[i] = 0;
 					pid_remote = shm_conn_info->stats[i].pid_remote;
+                    uint32_t miss_packet_counter_h = htonl(shm_conn_info->miss_packets_max_send_counter++);
 					sem_post(&(shm_conn_info->stats_sem));
-					uint32_t time_lag_remote_h = htonl(time_lag_remote);
-                    if( memcpy(buf, &time_lag_remote_h, sizeof(unsigned long)) < 0) {
-                        vtun_syslog(LOG_ERR, "memcpy imf");
-                        err=1;
-                    }
+					uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
+                    memcpy(buf, &time_lag_remote_h, sizeof(unsigned long));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
-                    if (memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t)) < 0) {
-                        vtun_syslog(LOG_ERR, "memcpy imf");
-                        err = 1;
-                    }
+                    memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t));
                     uint16_t pid_remote_h = htons(pid_remote);
-                    if (memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t)) < 0) {
-                        vtun_syslog(LOG_ERR, "memcpy imf");
-                        err = 1;
-                    }
+                    memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
+                    memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h,
+                            sizeof(shm_conn_info->miss_packets_max_send_counter));
                     vtun_syslog(LOG_INFO, "Sending time lag.....");
                     if ((len1 = proto_write(channels[0], buf, ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
                         vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
@@ -1516,6 +1524,14 @@ int res123 = 0;
                     }
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                 }
+				sem_wait(&(shm_conn_info->stats_sem));
+				if( shm_conn_info->stats[my_physical_channel_num].miss_packets_max > 15 ) {
+				    send_q_limit = send_q_limit - (send_q_limit >> 2);
+				} else if (shm_conn_info->stats[my_physical_channel_num].miss_packets_max  < 5 ) {
+				    send_q_limit = send_q_limit + (send_q_limit >> 3);
+				}
+				sem_post(&(shm_conn_info->stats_sem));
+
             }
 
 
@@ -1862,22 +1878,37 @@ int res123 = 0;
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
 						    int recv_lag = 0;
-							// Issue #11 get time_lag from net here
-							// get pid and time_lag
-							time_lag_local.time_lag=ntohl(((struct time_lag_packet *) buf)->time_lag);
-							time_lag_local.pid = ntohs(((struct time_lag_packet *) buf)->pid);
+							/* Get time_lag and miss_packet_max for some pid from net here */
+						    uint32_t time_lag_and_miss_packets;
+						    memcpy(&time_lag_and_miss_packets, buf, sizeof(uint32_t));
+						    time_lag_and_miss_packets = ntohl(time_lag_and_miss_packets);
+							uint16_t miss_packets_max_tmp = time_lag_and_miss_packets >> 20;
+							time_lag_local.time_lag = time_lag_and_miss_packets & 0xFFFFF;
+							memcpy(&(time_lag_local.pid), buf + sizeof(uint32_t) + sizeof(uint16_t), sizeof(time_lag_local.pid));
+						    time_lag_local.pid = ntohs(time_lag_local.pid);
+                            uint32_t miss_packets_max_recv_counter;
+                            memcpy(&(miss_packets_max_recv_counter), buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(time_lag_local.pid),
+                                    sizeof(shm_conn_info->miss_packets_max_recv_counter));
+                            miss_packets_max_recv_counter = ntohl(miss_packets_max_recv_counter);
 							sem_wait(&(shm_conn_info->stats_sem));
-							for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-								if(time_lag_local.pid ==  shm_conn_info->stats[i].pid){
-									shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
-									recv_lag = 1;
-									break;
-								}
-							}
-                            if (recv_lag) {
-                                vtun_syslog(LOG_INFO, "Time lag for pid: %i is %i", time_lag_local.pid, time_lag_local.time_lag);
+                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
+                                shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
+                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                    if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
+                                        shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
+                                        miss_packets_max[i] = miss_packets_max_tmp;
+                                        shm_conn_info->stats[i].miss_packets_max = miss_packets_max[i];
+                                        recv_lag = 1;
+                                        break;
+                                    }
+                                }
+#ifdef DEBUGG
+                                if (recv_lag) {
+                                    vtun_syslog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
+                                    vtun_syslog(LOG_INFO, "Miss packets for pid: %i is %u", time_lag_local.pid, miss_packets_max_tmp);
+                                }
+#endif
                             }
-							//recover time_lag_local structure
 							time_lag_local.time_lag = shm_conn_info->stats[my_physical_channel_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
@@ -1994,10 +2025,17 @@ int res123 = 0;
                     struct timeval work_loop1, work_loop2;
                     gettimeofday(&work_loop1, NULL );
 #endif
+                    uint16_t my_miss_packets[] = { 0, 0 };
+                    int another_chan = (my_physical_channel_num == 0) ? 1: 0;
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
-                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].physical_channel_num != my_physical_channel_num) {
-                        my_miss_packets = incomplete_seq_len;
+                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].physical_channel_num
+                            != my_physical_channel_num) {
+                        my_miss_packets[my_physical_channel_num] = incomplete_seq_len;
+                        my_miss_packets[another_chan] = 0;
+                    } else {
+                        my_miss_packets[my_physical_channel_num] = 0;
+                        my_miss_packets[another_chan] = incomplete_seq_len;
                     }
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
@@ -2005,6 +2043,12 @@ int res123 = 0;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
                     }
                     sem_post(write_buf_sem);
+                    my_miss_packets_max[my_physical_channel_num] =
+                            my_miss_packets[my_physical_channel_num] > my_miss_packets_max[my_physical_channel_num] ?
+                                    my_miss_packets[my_physical_channel_num] : my_miss_packets_max[my_physical_channel_num];
+                    my_miss_packets_max[another_chan] =
+                            my_miss_packets[another_chan] > my_miss_packets_max[another_chan] ?
+                                    my_miss_packets[another_chan] : my_miss_packets_max[another_chan];
 #ifdef DEBUGG
                     gettimeofday(&work_loop2, NULL );
                     vtun_syslog(LOG_INFO, "write_buf_add time: %lu us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
