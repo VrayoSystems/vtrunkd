@@ -119,7 +119,7 @@ uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 uint16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
 uint16_t miss_packets_max[] = {0,0}; // get from another side
-uint32_t send_q_limit = 55000;
+uint32_t send_q_limit;
 int proto_err_cnt = 0;
 
 /* Host we are working with.
@@ -1057,7 +1057,7 @@ int lfd_linker(void)
     int fprev = -1;
     int fold = -1;
     unsigned long incomplete_seq_buf[FRAME_BUF_SIZE];
-
+    send_q_limit = 55000;
     
     unsigned short tmp_s;
     unsigned long tmp_l;
@@ -1532,6 +1532,11 @@ int res123 = 0;
 				} else if (miss_packets_max[my_physical_channel_num]  < 5 ) {
 				    send_q_limit = send_q_limit + (send_q_limit >> 3);
 				}
+            if (send_q_limit < 20000) {
+                send_q_limit = 20000;
+            } else if (send_q_limit > 100000) {
+                send_q_limit = 100000;
+            }
 				sem_post(&(shm_conn_info->stats_sem));
 
 //            }
