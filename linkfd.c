@@ -1023,7 +1023,7 @@ int ag_switcher() {
             "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets_max_get_from_remote\":%i,\"my_miss_packets_max_calculated_here\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
             my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-            my_miss_packets_max[my_physical_channel_num], my_miss_packets_max[my_physical_channel_num], chan_info[my_max_send_q_chan_num]->send,
+            miss_packets_max[my_physical_channel_num], my_miss_packets_max[my_physical_channel_num], chan_info[my_max_send_q_chan_num]->send,
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
 #endif
@@ -1471,7 +1471,7 @@ int res123 = 0;
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i, channel_ports[i]);
             }
             vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
-               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
+//               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
             	   // calculate mean value and send time_lag to another side
@@ -1525,14 +1525,16 @@ int res123 = 0;
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                 }
 				sem_wait(&(shm_conn_info->stats_sem));
-				if( shm_conn_info->stats[my_physical_channel_num].miss_packets_max > 15 ) {
+				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
+				sem_post(&(shm_conn_info->stats_sem));
+				if( miss_packets_max[my_physical_channel_num] > 15 ) {
 				    send_q_limit = send_q_limit - (send_q_limit >> 2);
-				} else if (shm_conn_info->stats[my_physical_channel_num].miss_packets_max  < 5 ) {
+				} else if (miss_packets_max[my_physical_channel_num]  < 5 ) {
 				    send_q_limit = send_q_limit + (send_q_limit >> 3);
 				}
 				sem_post(&(shm_conn_info->stats_sem));
 
-            }
+//            }
 
 
 
@@ -1891,7 +1893,9 @@ int res123 = 0;
                                     sizeof(shm_conn_info->miss_packets_max_recv_counter));
                             miss_packets_max_recv_counter = ntohl(miss_packets_max_recv_counter);
 							sem_wait(&(shm_conn_info->stats_sem));
-                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
+							vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
+							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
+//                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
                                 shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
@@ -1908,7 +1912,7 @@ int res123 = 0;
                                     vtun_syslog(LOG_INFO, "Miss packets for pid: %i is %u", time_lag_local.pid, miss_packets_max_tmp);
                                 }
 #endif
-                            }
+//                            }
 							time_lag_local.time_lag = shm_conn_info->stats[my_physical_channel_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[my_physical_channel_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
