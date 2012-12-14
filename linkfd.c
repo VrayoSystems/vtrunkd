@@ -1420,17 +1420,6 @@ int res123 = 0;
             sem_post(&(shm_conn_info->AG_flags_sem));
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
-            if (timercmp_result) {
-                vtun_syslog(LOG_INFO, "PING ...");
-                // ping ALL channels!
-                for (i = 0; i < chan_amt; i++) { // TODO: remove ping DUP code
-                    if ((len1 = proto_write(channels[i], buf, VTUN_ECHO_REQ)) < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
-                        break;
-                    }
-                    shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
-                }
-            }
         }
         /* TODO write function for lws sending*/
         for (i = 0; i < chan_amt; i++) {
