@@ -938,7 +938,6 @@ int ag_switcher() {
     } else {
         my_max_speed_chan = max_speed_chan;
     }
-    vtun_syslog(LOG_INFO, "get_format_tcp_info() is calling by %i", my_physical_channel_num);
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -974,65 +973,25 @@ int ag_switcher() {
         }
     }
     sem_post(&(shm_conn_info->stats_sem));
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "my_max_send_q byte - %u packets - %u max_reorder % i packets_skip %i ", my_max_send_q, my_max_send_q/1300, lfd_host->MAX_REORDER, (int)(((float)(lfd_host->MAX_REORDER)) * 0.6));
-#endif
-    uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
-    uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
-    int send_q_delta = my_max_send_q - min_of_max_send_q;
-    if (send_q_delta < 0) {
-        send_q_delta = 0;
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "send_q_delta zeroing");
-#endif
-    }
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "logical_chanel num - %i MAX_REORDER * mss - %u mss - %u cwnd - %u send_q_c - %u send_q_m - %u",my_max_send_q_chan_num, max_reorder_byte, chan_info[my_max_send_q_chan_num]->mss, chan_info[my_max_send_q_chan_num]->cwnd, send_q_c, my_max_send_q);
-    vtun_syslog(LOG_INFO, "logical_chanel num - %i send_q_delta - %i , max_logic_speed %i kb/s min_of_max_send_q - %u",my_max_send_q_chan_num, send_q_delta, max_of_max_speed, min_of_max_send_q);
-    vtun_syslog(LOG_INFO, "logical_chanel num - %i last hold_mode - %i",my_max_send_q_chan_num, hold_mode);
-#endif
-    vtun_syslog(LOG_INFO, "channel magic speed %u KB/s max speed - %u , port %d AG_FLOW_FACTOR - %f", chan_info[my_max_send_q_chan_num]->send / 1000, max_speed, channel_ports[max_speed_chan], AG_FLOW_FACTOR);
-    if (max_speed == 0) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "max_speed == 0");
-#endif
-        hold_mode = 0;
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "hold_mode - %i", hold_mode);
-#endif
-        return 0;
-    }
-    int32_t window_overrun = (int32_t) my_max_send_q - (int32_t) send_q_c;
-    if (window_overrun < 0) {
-        window_overrun = 0;
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "window_overrun zeroing");
-#endif
-    }
+
     uint32_t send_q_limit;
     if(my_physical_channel_num){
         send_q_limit = 55000;
     } else {
         send_q_limit = 55000;
     }
-//    uint32_t result = (send_q_delta + sendbuff) + ((window_overrun / max_speed) * max_of_max_speed) + ((int32_t) (chan_info[my_max_send_q_chan_num]->rtt_var)) * max_speed + 7000;
-//    uint32_t result = (send_q_delta + sendbuff) + max_of_max_speed*chan_info[my_max_send_q_chan_num]->rtt_var + ((window_overrun / max_speed) * max_of_max_speed);
-    uint32_t result = my_max_send_q;// + (chan_info[my_max_send_q_chan_num]->rtt_var/max_speed);
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
-#endif
-#ifdef JSON
-    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
-                my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
-#endif
+
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
     }
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "hold_mode - %i", hold_mode);
+    uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
+    uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
+#ifdef JSON
+    vtun_syslog(LOG_INFO, "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode:%i\"}",
+                my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+                chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,chan_info[my_max_send_q_chan_num]->send,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed,hold_mode);
 #endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
