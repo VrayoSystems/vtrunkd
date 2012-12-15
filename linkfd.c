@@ -1380,6 +1380,7 @@ int res123 = 0;
     get_info_time.tv_usec = 50000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
+    int dirty_seq_num_checked_flag = 0;
 
 /**
  * Main program loop
@@ -1391,7 +1392,14 @@ int res123 = 0;
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
-        if (( timercmp_result) | ((dirty_seq_num % 5) == 0)) {
+        int ag_switch_flag = 0;
+        if ((dirty_seq_num % 5) == 0) {
+            if (!dirty_seq_num_checked_flag) {
+                ag_switch_flag = 1;
+            }
+        }
+        if ((timercmp_result) | (ag_switch_flag)) {
+            dirty_seq_num_checked_flag = 0;
             tmp_flags = ag_switcher();
             sem_wait(&(shm_conn_info->AG_flags_sem));
             if (tmp_flags == 1) {
