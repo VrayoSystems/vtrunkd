@@ -120,8 +120,8 @@ int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0; // in ms
 int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
-struct timeval send_q_read_time;
-uint32_t sended_bytes = 0, send_q_full = 0, ACK_coming_speed = 0;
+struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000};
+uint32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0, speed_avg[] = {0,0,0}, speed_avg_count;
 
 
 /* Host we are working with.
@@ -949,7 +949,7 @@ int ag_switcher() {
     memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
     gettimeofday(&send_q_read_time, NULL);
     timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
-    uint32_t send_q_read_time_lag_ms = (send_q_read_time_lag.tv_sec * 1000 + send_q_read_time_lag.tv_usec / 1000);
+    timeradd(&send_q_read_timer, &send_q_read_time_lag, &send_q_read_timer);
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -962,8 +962,6 @@ int ag_switcher() {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
 #endif
-    uint32_t send_q_full_old = send_q_full;
-    send_q_full = 0;
     for (int i = 1; i < chan_amt; i++) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
@@ -974,13 +972,23 @@ int ag_switcher() {
         }
         send_q_full += chan_info[i]->send_q;
     }
-    if (send_q_read_time_lag_ms != 0) {
-        ACK_coming_speed = (1000 * ((int) sended_bytes - ((int) send_q_full - (int) send_q_full_old))) / send_q_read_time_lag_ms;
-        vtun_syslog(LOG_INFO,"sended_bytes - %u send_q_full - %u send_q_full_old - %u send_q_read_time_lag_ms - %u",sended_bytes,send_q_full,send_q_full_old,send_q_read_time_lag_ms);
-    } else {
-        ACK_coming_speed = 123;
+    if (timercmp(&send_q_read_timer, &send_q_read_drop_time,>)) {
+        int ACK_left = (int) sended_bytes - ((int) send_q_full - (int) send_q_full_old);
+        ACK_left = ACK_left < 0 ? 0 : ACK_left;
+        ACK_coming_speed = (1000 * ACK_left) / (send_q_read_timer.tv_usec);
+        vtun_syslog(LOG_INFO, "sended_bytes - %u send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %ul", sended_bytes, send_q_full,
+                send_q_full_old, send_q_read_timer.tv_usec);
+//        int i;
+//        speed_avg_count = speed_avg_count >= 3 ? 0 : speed_avg_count;
+//        switch(speed_avg_count) {
+//        case 0:
+//        }
+        /*Clean and update values*/
+        send_q_full_old = send_q_full;
+        sended_bytes = 0;
+        send_q_full = 0;
+        timerclear(&send_q_read_timer);
     }
-    sended_bytes = 0;
     /*store my max send_q in shm and find another max send_q*/
     uint32_t min_of_max_send_q = ((uint32_t)-1);
     uint32_t max_of_max_speed = 0;
