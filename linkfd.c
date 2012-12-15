@@ -1398,9 +1398,11 @@ int res123 = 0;
             if (!dirty_seq_num_checked_flag) {
                 ag_switch_flag = 1;
             }
+        } else {
+            dirty_seq_num_checked_flag = 0;
         }
         if ((timercmp_result) | (ag_switch_flag)) {
-            dirty_seq_num_checked_flag = 0;
+            dirty_seq_num_checked_flag = 1;
             tmp_flags = ag_switcher();
             sem_wait(&(shm_conn_info->AG_flags_sem));
             if (tmp_flags == 1) {
