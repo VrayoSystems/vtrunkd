@@ -976,6 +976,7 @@ int ag_switcher() {
     }
     if (send_q_read_time_lag_ms != 0) {
         ACK_coming_speed = (1000 * ((int) sended_bytes - ((int) send_q_full - (int) send_q_full_old))) / send_q_read_time_lag_ms;
+        vtun_syslog(LOG_INFO,"sended_bytes - %u send_q_full - %u send_q_full_old - %u send_q_read_time_lag_ms - %u",sended_bytes,send_q_full,send_q_full_old,send_q_read_time_lag_ms);
     } else {
         ACK_coming_speed = 123;
     }
