@@ -111,6 +111,8 @@ char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
 
+#define START_SQL 5000
+
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
@@ -1018,20 +1020,23 @@ int ag_switcher() {
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "left result - %i max_reorder_byte - %u, window_overrun - %i, rtt - %f rtt_var - %f",result,max_reorder_byte,window_overrun,chan_info[my_max_send_q_chan_num]->rtt, chan_info[my_max_send_q_chan_num]->rtt_var);
 #endif
-#ifdef JSON
-    vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets_max_get_from_remote\":%i,\"my_miss_packets_max_calculated_here\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i}",
-            my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-            miss_packets_max[my_physical_channel_num], my_miss_packets_max[my_physical_channel_num], chan_info[my_max_send_q_chan_num]->send,
-            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed);
-#endif
+
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
     }
+
+
+#ifdef JSON
+    vtun_syslog(LOG_INFO,
+            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"my_miss_packets_max_get_from_remote\":%i,\"my_miss_packets_max_calculated_here\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i, \"hold_mode\":%i}",
+            my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+            miss_packets_max[my_physical_channel_num], my_miss_packets_max[my_physical_channel_num], chan_info[my_max_send_q_chan_num]->send,
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode);
+#endif
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "hold_mode - %i", hold_mode);
 #endif
@@ -1057,7 +1062,7 @@ int lfd_linker(void)
     int fprev = -1;
     int fold = -1;
     unsigned long incomplete_seq_buf[FRAME_BUF_SIZE];
-    send_q_limit = 55000;
+    send_q_limit = START_SQL; // was 55000
     
     unsigned short tmp_s;
     unsigned long tmp_l;
@@ -1394,7 +1399,7 @@ int res123 = 0;
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
-    get_info_time.tv_usec = 50000;
+    get_info_time.tv_usec = 10000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
     timer_resolution.tv_sec = 1;
@@ -1408,7 +1413,7 @@ int res123 = 0;
         errno = 0;
         gettimeofday(&cur_time, NULL);
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
-        if (( timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=)) | ((dirty_seq_num % (lfd_host->MAX_REORDER / 10)) == 0)) {
+        if (( timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=)) | ((dirty_seq_num % 5) == 0)) {
             tmp_flags = ag_switcher();
             sem_wait(&(shm_conn_info->AG_flags_sem));
             if (tmp_flags == 1) {
@@ -1527,16 +1532,23 @@ int res123 = 0;
 				sem_wait(&(shm_conn_info->stats_sem));
 				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
 				sem_post(&(shm_conn_info->stats_sem));
-				if( miss_packets_max[my_physical_channel_num] > 15 ) {
-				    send_q_limit = send_q_limit - (send_q_limit >> 2);
-				} else if (miss_packets_max[my_physical_channel_num]  < 5 ) {
-				    send_q_limit = send_q_limit + (send_q_limit >> 3);
+				if( miss_packets_max[my_physical_channel_num] > 17 ) {
+				    send_q_limit = send_q_limit - (send_q_limit >> 3);
+				} else if (miss_packets_max[my_physical_channel_num]  < 8 ) {
+				    send_q_limit = send_q_limit + (send_q_limit >> 4);
 				}
-            if (send_q_limit < 20000) {
-                send_q_limit = 20000;
-            } else if (send_q_limit > 100000) {
-                send_q_limit = 100000;
+
+            //uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
+            uint32_t max_reorder_byte = lfd_host->MAX_REORDER * 1400;
+            if (send_q_limit < 5000) {
+                send_q_limit = 5000;
+            } else if (send_q_limit > max_reorder_byte) {
+                send_q_limit = max_reorder_byte;
             }
+
+            //if ( my_physical_channel_num == 0) send_q_limit = 7000;
+
+
 				sem_post(&(shm_conn_info->stats_sem));
 
 //            }
@@ -1925,12 +1937,22 @@ int res123 = 0;
 						} else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
+                    
+                        if(hold_mode) {
+                            vtun_syslog(LOG_ERR, "Resend blocked due to hold_mode = 1: seq %lu; rxm_notf %d chan %d", ntohl(*((unsigned long *)buf)), statb.rxmits_notfound, chan_num);
+                            continue;
+                        }
+
+
 
                         sem_wait(resend_buf_sem);
                         len=get_resend_frame(chan_num, ntohl(*((unsigned long *)buf)), &out2, &sender_pid);
                         sem_post(resend_buf_sem);
+                        
+                        // drop the SQL
+                        send_q_limit = START_SQL;
 
-                        if(len <= 0) {
+                                                if(len <= 0) {
                             statb.rxmits_notfound++;
                             vtun_syslog(LOG_ERR, "Cannot resend frame: not found %lu; rxm_notf %d chan %d", ntohl(*((unsigned long *)buf)), statb.rxmits_notfound, chan_num);
                             // this usually means that this link is slow to get resend request; the data is writen ok and wiped out
@@ -1947,6 +1969,7 @@ int res123 = 0;
 
                         lfd_host->stat.byte_out += len;
                         statb.rxmits++;
+
                         
                         // now set which channel it belongs to...
                         // TODO: this in fact rewrites CHANNEL_MODE making MODE_RETRANSMIT completely useless

@@ -130,7 +130,7 @@ if [ $EXEC = "1" ]; then
 fi
 echo "Worcking..."
 echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
-ssh user@cli-32 'cat /tmp/${PREFIX}speed' >> /tmp/"$PREFIX".nojson
+ssh user@cli-32 'cat /tmp/${PREFIX}speed | grep speed' >> /tmp/"$PREFIX".nojson
 ssh user@cli-32 'echo "" >>  /tmp/${PREFIX}speed'
 ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed"
 echo "killall vtrunkd"
@@ -176,7 +176,7 @@ grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
 echo "Uploading logs..."
 scp -P $DBOXHOST_PORT /tmp/${PREFIX}*json $DBOXHOST:~/Dropbox/alarm_logs/
-#rm /tmp/${PREFIX}syslog*
+rm /tmp/${PREFIX}syslog*
 echo "Drawing graphs"
 ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
 echo "Clear syslog"
