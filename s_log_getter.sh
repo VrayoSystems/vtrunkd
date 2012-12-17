@@ -7,8 +7,9 @@
 
 DBOXHOST=grandrew@alternet.homelinux.net # host to upload JSON logs to and parse them on
 DBOXHOST_PORT=10023
-VTRUNKD_L_ROOT=~/sandbox/vtrunkd
-VTRUNKD_V_ROOT=/home/user/sandbox/vtrunkd_test1
+LOGS_FOLDER=~/sandbox/alarm_logs
+VTRUNKD_L_ROOT=~/workspace-cpp/vtrunkd
+VTRUNKD_V_ROOT=/home/user/sandbox/test_folder
 LCNT=~/log_getter.counter
 
 VSRV_ETH1_IP=192.168.57.101
@@ -19,10 +20,14 @@ VCLI_ETH1_IP=192.168.57.100
 VCLI_ETH2_IP=192.168.58.100
 VCLI_ETH3_IP=192.168.59.100
 
-NTP_SERVER="0.ubuntu.pool.ntp.org"
+SRV_MACHINE="user@srv-32"
+CLI_MACHINE="user@cli-32"
 
-if [ ! -f $LCNT ]; then i
-    RND=$(($RANDOM % 99))
+#NTP_SERVER="0.ubuntu.pool.ntp.org"
+NTP_SERVER="192.168.0.101"
+
+if [ ! -f $LCNT ]; then
+    RND=`$(($RANDOM % 99))`
     echo -n "$RND"00 > $LCNT
 fi
 
@@ -44,7 +49,7 @@ do
   TEST="1"
   ;;
  p) echo "Prefix set $OPTARG"
-  PREFIX=$OPTARG
+  PREFIX="$OPTARG"+"$COUNT_"
   ;;
  :)
   echo "Option -$OPTARG requires an argument." >&2
@@ -56,29 +61,33 @@ done
 echo "Doing with prefix $PREFIX"
 echo "Starting..."
 echo "killall vtrunkd ... "
-ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
-ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
+ssh user@srv-32 "sudo killall -9 vtrunkd 2> /dev/null && sudo ipcrm -M 567888"
+ssh user@cli-32 "sudo killall -9 vtrunkd 2> /dev/null && sudo ipcrm -M 567888"
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
 echo "Copying vtrunkd sources ..."
-ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT"
-ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT"
+ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT 2> /dev/null"
+ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT 2> /dev/null"
 scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/
 scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/
 echo "Compiling vtrunkd ..."
-if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then 
+if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make"; then 
     echo "OK"
 else
-    echo "Compile Error!"
-    exit 0;
+    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json"
+    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make"
+#    echo "Compile Error!"
+#    exit 0;
 fi
 echo "Compiling ..."
-if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then
+if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make"; then
     echo "OK"
 else
-    echo "Compile Error!"
-    exit 0;
+    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json"
+    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make"
+#    echo "Compile Error!"
+#    exit 0;
 fi
 
 echo "NTP sync..."
@@ -106,6 +115,7 @@ ssh user@srv-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -s -f $VTRUNKD_V_ROOT/test/vtrunkd
 sleep 5
 echo "Starting client 1..."
 ssh user@cli-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -f $VTRUNKD_V_ROOT/test/vtrunkd-cli.test.conf atest1 $VSRV_ETH1_IP -P 5003"
+sleep 1
 echo "Starting client 2..."
 ssh user@cli-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -f $VTRUNKD_V_ROOT/test/vtrunkd-cli.test.conf atest2 $VSRV_ETH2_IP -P 5003"
 sleep 8
@@ -115,7 +125,7 @@ if [ $EXEC = "1" ]; then
     exit 0;
 fi
 echo "Worcking..."
-echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
+echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 10 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
 ssh user@cli-32 'echo "" >>  /tmp/${PREFIX}speed'
 ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed"
 echo "killall vtrunkd"
@@ -124,8 +134,8 @@ ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 # NOT WORKING CODE -->>>>>>>>>>>>>>>
 if [ $TEST = "1" ]; then
  echo "Speed testing..."
- echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://192.168.57.101/u -o /dev/null -w @- > /tmp/${PREFIX}speed_eth1
- echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://192.168.58.101/u -o /dev/null -w @- > /tmp/${PREFIX}speed_eth2
+ echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh $CLI_MACHINE curl -m 30 --connect-timeout 4 http://192.168.57.101/u -o /dev/null -w @- > /tmp/${PREFIX}speed_eth1
+ echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh $CLI_MACHINE curl -m 30 --connect-timeout 4 http://192.168.58.101/u -o /dev/null -w @- > /tmp/${PREFIX}speed_eth2
  echo "" >> /tmp/${PREFIX}speed_eth1
  echo "" >> /tmp/${PREFIX}speed_eth2
  SPEED_ETH1=`cat /tmp/${PREFIX}speed_eth1 | awk {'print $6'} | awk -F. {'print $1'}`
@@ -159,11 +169,15 @@ grep "{\"p_" /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
+grep speed /tmp/${PREFIX}speed >> /tmp/"$PREFIX".nojson
 echo "Uploading logs..."
-scp -P $DBOXHOST_PORT /tmp/${PREFIX}*json $DBOXHOST:~/Dropbox/alarm_logs/
+cp /tmp/${PREFIX}* $LOGS_FOLDER
+cp $VTRUNKD_L_ROOT/speed_parse_json_fusion.py $LOGS_FOLDER
+cd $LOGS_FOLDER; python ./speed_parse_json_fusion.py $COUNT
+#scp -P $DBOXHOST_PORT /tmp/${PREFIX}*json $DBOXHOST:~/Dropbox/alarm_logs/
 #rm /tmp/${PREFIX}syslog*
 echo "Drawing graphs"
-ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
+#ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
