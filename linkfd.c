@@ -121,8 +121,8 @@ int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000};
-uint32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
-
+int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
+int32_t send_q_limit = 7000;
 
 /* Host we are working with.
  * Used by signal handlers that's why it is global.
@@ -985,12 +985,6 @@ int ag_switcher() {
     }
     sem_post(&(shm_conn_info->stats_sem));
 
-    uint32_t send_q_limit;
-    if(my_physical_channel_num){
-        send_q_limit = 7000;//55000;
-    } else {
-        send_q_limit = 87000;//55000;
-    }
     int hold_mode_previous = hold_mode;
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1001,7 +995,7 @@ int ag_switcher() {
             timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
             int ACK_left = send_q_full_old - (int) send_q_full;
             ACK_left = ACK_left < 0 ? 0 : ACK_left;
-            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
+//            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
             ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) / 1000 : ACK_left * 1000;
             ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
             speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
@@ -1009,11 +1003,12 @@ int ag_switcher() {
             ACK_coming_speed_avg = 0;
             for (int i = 0; i < 10; i++) {
                 ACK_coming_speed_avg += speed_avg[i]/10;
-                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %uACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
+//                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
             }
-            vtun_syslog(LOG_INFO,
-                    "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i",
-                    send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
+            send_q_limit += (ACK_coming_speed_avg * 720 - send_q_limit)/2;
+//            vtun_syslog(LOG_INFO,
+//                    "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i",
+//                    send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
         }
     } else {
         hold_mode = 1;
