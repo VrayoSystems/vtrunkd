@@ -43,8 +43,14 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     DNAME='my_max_send_q'
     plotAX3 = plt.subplot(rowNum,1,1)
     plt.title(DNAME)
-    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-")
-    
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="my_max_send_q_1")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="my_max_send_q_1")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, 'send_q_limit'), "-", label="limit_1")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, 'send_q_limit'), "-", label="limit_2")
+    plt.plot(zipj(data_s1, "ts"), numpy.array(zipj(data_s1, "hold_mode"))*10000, ".", label="hold_1")
+    plt.plot(zipj(data_s2, "ts"), numpy.array(zipj(data_s2, "hold_mode"))*120000, ".", label="hold_2")
+    plt.legend()
+
     DNAME='ACK_coming_speed'
     plotAX3 = plt.subplot(rowNum,1,2)
     plt.title(DNAME)
