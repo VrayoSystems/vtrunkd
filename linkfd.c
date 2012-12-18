@@ -945,7 +945,8 @@ int ag_switcher() {
     } else {
         my_max_speed_chan = max_speed_chan;
     }
-    gettimeofday(&send_q_read_time, NULL);
+    struct timeval get_format_tcp_info_call;
+    gettimeofday(&get_format_tcp_info_call, NULL);
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -996,7 +997,7 @@ int ag_switcher() {
         if (hold_mode_previous == 1) {
             struct timeval send_q_read_time_old, send_q_read_time_lag;
             memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
-            gettimeofday(&send_q_read_time, NULL);
+            memcpy(&send_q_read_time, &get_format_tcp_info_call, sizeof(send_q_read_time));
             timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
             int ACK_left = send_q_full_old - (int) send_q_full;
             ACK_left = ACK_left < 0 ? 0 : ACK_left;
@@ -1018,7 +1019,7 @@ int ag_switcher() {
         hold_mode = 1;
         if (hold_mode_previous == 0) {
             send_q_full_old = send_q_full;
-            gettimeofday(&send_q_read_time, NULL);
+            memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
         }
 
 
