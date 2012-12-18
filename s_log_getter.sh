@@ -8,7 +8,7 @@
 DBOXHOST=grandrew@alternet.homelinux.net # host to upload JSON logs to and parse them on
 DBOXHOST_PORT=10023
 LOGS_FOLDER=~/sandbox/alarm_logs
-VTRUNKD_L_ROOT=~/workspace-cpp/vtrunkd
+VTRUNKD_L_ROOT=/home/andrey/workspace-cpp/vtrunkd
 VTRUNKD_V_ROOT=/home/user/sandbox/test_folder
 LCNT=~/log_getter.counter
 
@@ -67,25 +67,27 @@ echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
 echo "Copying vtrunkd sources ..."
+ssh user@cli-32 "rm -r -f $VTRUNKD_V_ROOT 2> /dev/null"
+ssh user@srv-32 "rm -r -f $VTRUNKD_V_ROOT 2> /dev/null"
 ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT 2> /dev/null"
 ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT 2> /dev/null"
-scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/
-scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/
+scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/ > /dev/null
+scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/ > /dev/null
 echo "Compiling vtrunkd ..."
-if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make"; then 
+if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make 2>dev/null"; then 
     echo "OK"
 else
-    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json"
-    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make"
+    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json" > /dev/null
+    ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make 2>/dev/null 1>/dev/null"
 #    echo "Compile Error!"
 #    exit 0;
 fi
 echo "Compiling ..."
-if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make"; then
+if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make 2>/dev/null"; then
     echo "OK"
 else
-    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json"
-    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make"
+    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; ./configure --prefix= --enable-json 2>/dev/null 1>/dev/null"
+    ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make 2>/dev/null 1>/dev/null"
 #    echo "Compile Error!"
 #    exit 0;
 fi
@@ -108,7 +110,7 @@ else
     exit 0
 fi
 echo "Applying emulation TC rules"
-ssh user@srv-32 "sudo $VTRUNKD_V_ROOT/test/srv_emulate_2.sh"
+ssh user@srv-32 "sudo $VTRUNKD_V_ROOT/test/srv_emulate_2.sh > /dev/null"
 
 echo "Starting server..."
 ssh user@srv-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -s -f $VTRUNKD_V_ROOT/test/vtrunkd-srv.test.conf -P 5003"
@@ -125,7 +127,7 @@ if [ $EXEC = "1" ]; then
     exit 0;
 fi
 echo "Worcking..."
-echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 10 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
+ssh user@cli-32 'echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed'
 ssh user@cli-32 'echo "" >>  /tmp/${PREFIX}speed'
 ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed"
 echo "killall vtrunkd"

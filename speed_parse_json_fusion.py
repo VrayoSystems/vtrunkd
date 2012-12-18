@@ -38,32 +38,33 @@ def main():
 
 def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     figurePlot = plt.figure(figsize=(23.5, 18.0))
+    rowNum = 5
 
     DNAME='my_max_send_q'
-    plotAX3 = plt.subplot(411)
+    plotAX3 = plt.subplot(rowNum,1,1)
     plt.title(DNAME)
     plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-")
     
-    DNAME='upload'
-    plotAX3 = plt.subplot(412)
+    DNAME='ACK_coming_speed'
+    plotAX3 = plt.subplot(rowNum,1,2)
     plt.title(DNAME)
     plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-")#,
 #             zipj(data_s1, "ts"), zipj(data_s1, 'my_rtt'), "-", zipj(data_s2, "ts"), zipj(data_s2, 'my_rtt'), "-")
 
     DNAME="buf_len"    
-    plotAX1 = plt.subplot(413)
+    plotAX1 = plt.subplot(rowNum,1,3)
     plt.title(DNAME)
     plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-")
     
     DNAME='incomplete_seq_len'
-    plotAX2 = plt.subplot(414)
+    plotAX2 = plt.subplot(rowNum,1,4)
     plt.title(DNAME)
     plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-")
 
-#    DNAME='rtt'
-#    plotAX5 = plt.subplot(415)
-#    plt.title(DNAME)
-#    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-")    
+    DNAME='my_rtt'
+    plotAX5 = plt.subplot(rowNum,1,5)
+    plt.title(DNAME)
+    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-")    
     
     figurePlot.savefig(fn+".png", dpi=100)
     
