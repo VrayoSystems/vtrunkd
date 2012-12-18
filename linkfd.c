@@ -36,8 +36,6 @@
  *
  */
 
-#define JSON
-
 #define _GNU_SOURCE
 #include "config.h"
 
@@ -123,7 +121,7 @@ int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000};
-uint32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0, speed_avg[] = {0,0,0}, speed_avg_count;
+uint32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
 
 
 /* Host we are working with.
@@ -947,11 +945,7 @@ int ag_switcher() {
     } else {
         my_max_speed_chan = max_speed_chan;
     }
-    struct timeval send_q_read_time_old, send_q_read_time_lag;
-    memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
     gettimeofday(&send_q_read_time, NULL);
-    timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
-    timeradd(&send_q_read_timer, &send_q_read_time_lag, &send_q_read_timer);
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -964,6 +958,7 @@ int ag_switcher() {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
 #endif
+    send_q_full = 0;
     for (int i = 1; i < chan_amt; i++) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
@@ -973,23 +968,6 @@ int ag_switcher() {
             my_max_send_q_chan_num = i;
         }
         send_q_full += chan_info[i]->send_q;
-    }
-    if (timercmp(&send_q_read_timer, &send_q_read_drop_time,>)) {
-        int ACK_left = (int) sended_bytes - ((int) send_q_full - (int) send_q_full_old);
-        ACK_left = ACK_left < 0 ? 0 : ACK_left;
-        ACK_coming_speed = (1000 * ACK_left) / (send_q_read_timer.tv_usec);
-        vtun_syslog(LOG_INFO, "sended_bytes - %u send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %ul", sended_bytes, send_q_full,
-                send_q_full_old, send_q_read_timer.tv_usec);
-//        int i;
-//        speed_avg_count = speed_avg_count >= 3 ? 0 : speed_avg_count;
-//        switch(speed_avg_count) {
-//        case 0:
-//        }
-        /*Clean and update values*/
-        send_q_full_old = send_q_full;
-        sended_bytes = 0;
-        send_q_full = 0;
-        timerclear(&send_q_read_timer);
     }
     /*store my max send_q in shm and find another max send_q*/
     uint32_t min_of_max_send_q = ((uint32_t)-1);
@@ -1008,16 +986,44 @@ int ag_switcher() {
 
     uint32_t send_q_limit;
     if(my_physical_channel_num){
-        send_q_limit = 20000;//55000;
+        send_q_limit = 7000;//55000;
     } else {
-        send_q_limit = 80000;//55000;
+        send_q_limit = 87000;//55000;
     }
-
+    int hold_mode_previous = hold_mode;
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
+        if (hold_mode_previous == 1) {
+            struct timeval send_q_read_time_old, send_q_read_time_lag;
+            memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
+            gettimeofday(&send_q_read_time, NULL);
+            timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
+            int ACK_left = send_q_full_old - (int) send_q_full;
+            ACK_left = ACK_left < 0 ? 0 : ACK_left;
+            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
+            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) / 1000 : ACK_left * 1000;
+            ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
+            speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
+            speed_avg[speed_avg_count++] = ACK_coming_speed;
+            ACK_coming_speed_avg = 0;
+            for (int i = 0; i < 10; i++) {
+                ACK_coming_speed_avg += speed_avg[i]/10;
+                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %uACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
+            }
+            vtun_syslog(LOG_INFO,
+                    "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i",
+                    send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
+        }
     } else {
         hold_mode = 1;
+        if (hold_mode_previous == 0) {
+            send_q_full_old = send_q_full;
+            gettimeofday(&send_q_read_time, NULL);
+        }
+
+
     }
+
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef JSON
@@ -1027,7 +1033,7 @@ int ag_switcher() {
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num]->send,
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed);
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg);
 #endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         return 1;
@@ -1388,7 +1394,7 @@ int res123 = 0;
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
-    get_info_time.tv_usec = 50000;
+    get_info_time.tv_usec = 15000;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
     int dirty_seq_num_checked_flag = 0;
