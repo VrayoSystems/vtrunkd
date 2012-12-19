@@ -38,8 +38,7 @@ def main():
 
 def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     figurePlot = plt.figure(figsize=(23.5, 18.0))
-    nojson_file = open(fn+"_.nojson")
-    figurePlot.text(.5, .95, nojson_file.read(), horizontalalignment='center')
+    figurePlot.text(.5, .94, open(fn+"_speed").read(), horizontalalignment='center')
     rowNum = 5
 
     DNAME='my_max_send_q'
@@ -55,9 +54,10 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
 
     DNAME='ACK_coming_speed'
     plotAX3 = plt.subplot(rowNum,1,2)
-    plt.title(DNAME)
-    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-")#,
-#             zipj(data_s1, "ts"), zipj(data_s1, 'my_rtt'), "-", zipj(data_s2, "ts"), zipj(data_s2, 'my_rtt'), "-")
+    plt.title(DNAME+"_avg")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="ACK_coming_speed_avg_1")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="ACK_coming_speed_avg_2")
+    plt.legend()
 
     DNAME="buf_len"    
     plotAX1 = plt.subplot(rowNum,1,3)
@@ -72,8 +72,9 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     DNAME='my_rtt'
     plotAX5 = plt.subplot(rowNum,1,5)
     plt.title(DNAME)
-    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-")    
-    
+    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", label="rtt_1")
+    plt.plot(zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-", label="rtt_2")    
+    plt.legend()
     figurePlot.savefig(fn+".png", dpi=100)
     
 def zipj(l_json, name):
