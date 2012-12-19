@@ -38,18 +38,25 @@ COUNT=$((`cat $LCNT`+1));
 echo -n $COUNT > $LCNT
 
 PREFIX="$COUNT"_
-
-while getopts :tp: OPTION
+TITLE=""
+ONE=""
+while getopts :oetpT: OPTION
 do
  case $OPTION in
+ o) echo "One thread"
+  ONE="1111"
+  ;;
  e) echo "Execute vtrunkd only"
   EXEC="1"
   ;;
  t) echo "Full speed test"
   TEST="1"
   ;;
+ T) echo "Set title"
+  TITLE="$OPTARG"
+  ;;
  p) echo "Prefix set $OPTARG"
-  PREFIX="$OPTARG"+"$COUNT_"
+  PREFIX="$OPTARG""_$PREFIX"
   ;;
  :)
   echo "Option -$OPTARG requires an argument." >&2
@@ -59,6 +66,9 @@ do
 done
 
 echo "Doing with prefix $PREFIX"
+if [ $TITLE ]; then
+    echo "Title is $TITLE"
+fi
 echo "Starting..."
 echo "killall vtrunkd ... "
 ssh user@srv-32 "sudo killall -9 vtrunkd 2> /dev/null && sudo ipcrm -M 567888"
@@ -117,16 +127,21 @@ ssh user@srv-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -s -f $VTRUNKD_V_ROOT/test/vtrunkd
 sleep 5
 echo "Starting client 1..."
 ssh user@cli-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -f $VTRUNKD_V_ROOT/test/vtrunkd-cli.test.conf atest1 $VSRV_ETH1_IP -P 5003"
-sleep 1
-echo "Starting client 2..."
-ssh user@cli-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -f $VTRUNKD_V_ROOT/test/vtrunkd-cli.test.conf atest2 $VSRV_ETH2_IP -P 5003"
+if [ -z $ONE ]; then
+    sleep 1
+    echo "Starting client 2..."
+    ssh user@cli-32 "sudo $VTRUNKD_V_ROOT/vtrunkd -f $VTRUNKD_V_ROOT/test/vtrunkd-cli.test.conf atest2 $VSRV_ETH2_IP -P 5003"
+fi
 sleep 8
 echo "Full started"
 if [ $EXEC = "1" ]; then
     "Execute only!"
     exit 0;
 fi
-git branch -a | grep \*  | tr -d '\n' > /tmp/${PREFIX}speed
+if [ $TITLE ]; then
+    echo "$TITLE" > /tmp/${PREFIX}speed
+fi
+git branch -a | grep \*  | tr -d '\n' >> /tmp/${PREFIX}speed
 git log --oneline -1 >> /tmp/${PREFIX}speed
 echo "Worcking..."
 ssh user@cli-32 'echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @-' >> /tmp/${PREFIX}speed
@@ -136,7 +151,6 @@ cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} | tr -d '\n' >> /t
 echo "" >> /tmp/${PREFIX}speed
 cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n' >> /tmp/${PREFIX}speed
 echo "" >> /tmp/${PREFIX}speed
-
 echo "killall vtrunkd"
 ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
