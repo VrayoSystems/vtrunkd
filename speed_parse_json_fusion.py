@@ -38,6 +38,8 @@ def main():
 
 def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     figurePlot = plt.figure(figsize=(23.5, 18.0))
+    nojson_file = open(fn+"_.nojson")
+    figurePlot.text(.5, .95, nojson_file.read(), horizontalalignment='center')
     rowNum = 5
 
     DNAME='my_max_send_q'

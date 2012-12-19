@@ -126,10 +126,15 @@ if [ $EXEC = "1" ]; then
     "Execute only!"
     exit 0;
 fi
+git branch -a | grep \*  | tr -d '\n' > /tmp/${PREFIX}speed
+git log --oneline -1 >> /tmp/${PREFIX}speed 
 echo "Worcking..."
-ssh user@cli-32 'echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed'
-ssh user@cli-32 'echo "" >>  /tmp/${PREFIX}speed'
-ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed"
+ssh user@cli-32 'echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @-' >> /tmp/${PREFIX}speed
+echo "" >>  /tmp/${PREFIX}speed
+ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31" | tail -1 >> /tmp/${PREFIX}speed
+cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} >> /tmp/${PREFIX}speed
+cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} >> /tmp/${PREFIX}speed
+
 echo "killall vtrunkd"
 ssh user@srv-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
