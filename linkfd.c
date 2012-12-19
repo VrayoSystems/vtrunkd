@@ -985,6 +985,11 @@ int ag_switcher() {
     }
     sem_post(&(shm_conn_info->stats_sem));
 
+    if(my_physical_channel_num){
+//        send_q_limit = 110000;
+    } else {
+//        send_q_limit = 33000;
+    }
     int hold_mode_previous = hold_mode;
     if (my_max_send_q < send_q_limit) {
         hold_mode = 0;
@@ -1005,7 +1010,10 @@ int ag_switcher() {
                 ACK_coming_speed_avg += speed_avg[i]/10;
 //                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
             }
-            send_q_limit += (ACK_coming_speed_avg * 720 - send_q_limit)/2;
+            int32_t send_q_limit_grow = (ACK_coming_speed_avg * 400 - send_q_limit)/2;
+            send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
+            send_q_limit += send_q_limit_grow;
+
             vtun_syslog(LOG_INFO,
                     "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
                     send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
@@ -1015,6 +1023,7 @@ int ag_switcher() {
         if (hold_mode_previous == 0) {
             send_q_full_old = send_q_full;
             memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
+            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
         }
 
 
