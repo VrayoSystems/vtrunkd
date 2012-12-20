@@ -1013,6 +1013,7 @@ int ag_switcher() {
             int32_t send_q_limit_grow = (ACK_coming_speed_avg * 400 - send_q_limit)/2;
             send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
             send_q_limit += send_q_limit_grow;
+            send_q_limit += rtt < 1100 ? 10000 : 0;
 
             vtun_syslog(LOG_INFO,
                     "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
