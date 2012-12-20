@@ -45,6 +45,7 @@ do
  case $OPTION in
  o) echo "One thread"
   ONE="1111"
+  TITLE = "One_thread"
   ;;
  e) echo "Execute vtrunkd only"
   EXEC="1"
@@ -66,7 +67,7 @@ do
 done
 
 echo "Doing with prefix $PREFIX"
-if [ $TITLE ]; then
+if [ -z "$TITLE" ]; then
     echo "Title is $TITLE"
 fi
 echo "Starting..."
