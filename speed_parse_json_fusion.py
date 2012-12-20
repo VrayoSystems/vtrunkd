@@ -40,16 +40,16 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     figurePlot = plt.figure(figsize=(23.5, 18.0))
     figurePlot.text(.5, .94, open(fn+"_speed").read(), horizontalalignment='center')
     rowNum = 5
-
+    brownColor='#792200'
     DNAME='my_max_send_q'
     plotAX3 = plt.subplot(rowNum,1,1)
     plt.title(DNAME)
-    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="my_max_send_q_1")
-    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="my_max_send_q_1")
-    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, 'send_q_limit'), "-", label="limit_1")
-    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, 'send_q_limit'), "-", label="limit_2")
-    plt.plot(zipj(data_s1, "ts"), numpy.array(zipj(data_s1, "hold_mode"))*10000, ".", label="hold_1")
-    plt.plot(zipj(data_s2, "ts"), numpy.array(zipj(data_s2, "hold_mode"))*120000, ".", label="hold_2")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="my_max_send_q_1", color="b")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="my_max_send_q_1", color="g")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, 'send_q_limit'), "-", label="limit_1", color="r")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, 'send_q_limit'), "-", label="limit_2", color="k")
+#    plt.plot(zipj(data_s1, "ts"), numpy.array(zipj(data_s1, "hold_mode"))*10000, ".", label="hold_1")
+#    plt.plot(zipj(data_s2, "ts"), numpy.array(zipj(data_s2, "hold_mode"))*120000, ".", label="hold_2")
     plt.legend()
 
     DNAME='ACK_coming_speed'
@@ -62,7 +62,10 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     DNAME="buf_len"    
     plotAX1 = plt.subplot(rowNum,1,3)
     plt.title(DNAME)
-    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-")
+    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", label="client buf_len", c="b")
+    plt.plot(zipj(data_s1, "ts"), numpy.array(zipj(data_s1, "hold_mode"))*100, ".", label="hold_1", c="y")
+    plt.plot(zipj(data_s2, "ts"), numpy.array(zipj(data_s2, "hold_mode"))*90, ".", label="hold_2", c="c")
+    plt.legend()
     
     DNAME='incomplete_seq_len'
     plotAX2 = plt.subplot(rowNum,1,4)
@@ -72,8 +75,10 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     DNAME='my_rtt'
     plotAX5 = plt.subplot(rowNum,1,5)
     plt.title(DNAME)
-    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", label="rtt_1")
-    plt.plot(zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-", label="rtt_2")    
+    plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", label="rtt_1(cli)", c="b")
+    plt.plot(zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-", label="rtt_2(cli)", c="g")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="rtt_1(srv)", c="r")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="rtt_2(srv)", c="k")    
     plt.legend()
     figurePlot.savefig(fn+".png", dpi=100)
     
