@@ -31,7 +31,7 @@ do
        ;;
        3)f2="$f2 $DIR/$i"
        ;;
-       4)f3="$f2 $DIR/$i"
+       4)f3="$f3 $DIR/$i"
        ;;
        5)count=0
        esac

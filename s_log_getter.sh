@@ -203,42 +203,7 @@ cp $VTRUNKD_L_ROOT/speed_parse_json_fusion.py $LOGS_FOLDER
 cd $LOGS_FOLDER; python ./speed_parse_json_fusion.py $COUNT
 #ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
 echo "Compressing logs in background"
-f1=""
-f2=""
-f3=""
-f0=""
-count=0
-DIR=""
-
-for logFiles in `ls $LOGS_FOLDER/$PREFIX* --hide=*.png* --hide=*.lzma* --hide=*.py* --hide=*.sh*`
-do
-#   echo "dir $logFiles ?"
-   if [ -d $logFiles ]; then
-#       echo "$logFiles is dir"
-       continue
-   fi
-   count=`expr $count + 1`
-   case $count in
-   1)f0="$f0 $logFiles"
-   ;;
-   2)f1="$f1 $logFiles"
-   ;;
-   3)f2="$f2 $logFiles"
-   ;;
-   4)f3="$f3 $logFiles"
-   ;;
-   5)count=0
-   esac
-done
-#echo "f0 $f0"
-#echo "f1 $f1"
-##echo "f2 $f2"
-#echo "f3 $f3"
-lzma -9e $f0 &
-lzma -9e $f1 &
-lzma -9e $f2 &
-lzma -9e $f3 &
-
+sh $VTRUNKD_L_ROOT/files_thread_compress.sh -d $LOGS_FOLDER &
 echo "Clear syslog"
 rm /tmp/${PREFIX}*
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
