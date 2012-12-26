@@ -33,6 +33,7 @@
 #include <sys/shm.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <time.h>
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -338,7 +339,55 @@ struct conn_stats {
     int32_t ACK_speed;
 };
 
+/**
+ * Structure for garbage statistic and information
+ * about logical channels. Include service channel[0]
+ */
+struct logical_status {
+    /** Information about tcp connection */
+    int rport;  /**< remote(dst) tcp port */
+    int lport;  /**< local(src) tcp port */
+    int descriptor; /** file descriptor associated with this connection*/
 
+    /** AVG measuring speed */
+    uint32_t upload;    /**< upload speed */
+    uint32_t up_len;    /**< how much bytes are uploaded */
+    uint32_t download;  /**< download speed */
+    uint32_t down_len;    /**< how much bytes are downloaded */
+    uint32_t rtt;       /**< rtt is measured by vtrunkd */
+    uint32_t tcp_rtt;   /**< rtt is said by @see get_format_tcp_info() */
+
+    /** TCP queue control information */
+    uint32_t send_q;    /**< current send_q value */
+    uint32_t send_q_old;    /**< previous send_q value */
+    uint32_t send_q_limit;  /**< current send_q_limit value */
+    int32_t ACK_speed[10];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
+    int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
+    uint avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
+
+};
+
+/**
+ * Structure for storing all information about
+ * physical channel
+ */
+struct phisical_status {
+    /** Common information */
+    int my_phisical_channel_num;    /**< Current physical channel's number */
+    int pid; /**< Our pid is got on this side by getpid()  */
+    int remote_pid; /**< Pid is got from another side by net */
+    int tun_device; /**< /dev/tun descriptor */
+    int srv; /**< 1 - if I'm server and 0 - if I'm client */
+
+    /** Garbage statistic*/
+    int mode;   /**< can be AG_MODE and RETRANSMIT_MODE */
+    struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
+    struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
+
+    /** Logical channels information and statistic*/
+    int channel_amount;   /**< Number elements in @see channel array */
+    struct logical_status *channel; /**< Array for all logical channels */
+};
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname

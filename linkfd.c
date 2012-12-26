@@ -1524,7 +1524,9 @@ int res123 = 0;
     }
           // do an expensive thing
           timersub(&cur_time, &last_timing, &tv_tmp);
-          //this is Tick module
+          /**
+           * This is the Tick module
+           */
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
 
             for (int i = 0; i < chan_amt; i++) {
