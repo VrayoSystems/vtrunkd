@@ -114,13 +114,13 @@ int sendbuff;
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
-int hold_mode; // 1 - hold 0 - normal
+int hold_mode = 0; // 1 - hold 0 - normal
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0; // in ms;
 int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
-struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000};
+struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
 int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
 int32_t send_q_limit = 7000;
 
@@ -1014,11 +1014,19 @@ int ag_switcher() {
             send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
             send_q_limit += send_q_limit_grow;
             send_q_limit += rtt < 1100 ? 10000 : 0;
-
+            gettimeofday(&send_q_mode_switch_time, NULL);
             vtun_syslog(LOG_INFO,
                     "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
                     send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
         }
+        /*send_q_limit overgrow test*/
+        struct timeval curr_time, send_q_mode_switch_time_lag;
+        gettimeofday(&curr_time, NULL);
+        timersub(&curr_time, &send_q_mode_switch_time, &send_q_mode_switch_time_lag);
+        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
+            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
+        }
+
     } else {
         hold_mode = 1;
         if (hold_mode_previous == 0) {
