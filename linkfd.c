@@ -139,10 +139,11 @@ int32_t magic_rtt_avg = 0, magic_rtt[] = {0,0,0,0,0,0,0,0,0,0};
  */
 struct vtun_host *lfd_host;
 struct conn_info *shm_conn_info;
-int srv;
 
 struct lfd_mod *lfd_mod_head = NULL, *lfd_mod_tail = NULL;
 struct channel_info **chan_info = NULL;
+
+struct phisical_status info; /**< We store here all process closed information */
 
 struct {
     int bytes_sent_norm;
@@ -934,7 +935,7 @@ int sem_wait_tw(sem_t *sem) {
  * @return - 0 for R_MODE and 1 for AG_MODE
  */
 int ag_switcher() {
-    if (srv) {
+    if (info.srv) {
 #ifdef TRACE
         vtun_syslog(LOG_INFO, "Server %i is calling ag_switcher()", my_physical_channel_num);
 #endif
@@ -1273,7 +1274,7 @@ int lfd_linker(void)
     linker_term = 0;
     srand((unsigned int) time(NULL ));
 
-    if(srv) {
+    if(info.srv) {
         // now read one single byte
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
 
@@ -2476,7 +2477,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     int old_prio;
 
     lfd_host = host;
-    srv = ss;
+    info.srv = ss;
     shm_conn_info = ci;
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
