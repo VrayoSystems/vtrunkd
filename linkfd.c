@@ -171,7 +171,6 @@ struct timeval cur_time; // current time source
 struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
 
 fd_set fdset, fdset_w, *pfdset_w;
-int tun_device;
 int channels[MAX_TCP_LOGICAL_CHANNELS];
 int channel_ports[MAX_TCP_LOGICAL_CHANNELS]; // client's side port num
 int delay_acc; // accumulated send delay
@@ -592,19 +591,19 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     sem_post(&(shm_conn_info->resend_buf_sem));
     if (idx == -1) {
-        if (!FD_ISSET(tun_device, &fdset)) {
+        if (!FD_ISSET(info.tun_device, &fdset)) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
 #endif
             return TRYWAIT_NOTIFY;
         }
         FD_ZERO(&fdset_tun);
-        FD_SET(tun_device, &fdset_tun);
+        FD_SET(info.tun_device, &fdset_tun);
         int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
         if (try_flag != 0) { // if semaphore is locked then go out
             return TRYWAIT_NOTIFY;
         }
-        select_ret = select(tun_device + 1, &fdset_tun, NULL, NULL, &tv);
+        select_ret = select(info.tun_device + 1, &fdset_tun, NULL, NULL, &tv);
         if (select_ret < 0) {
             if (errno != EAGAIN && errno != EINTR) {
                 sem_post(&(shm_conn_info->tun_device_sem));
@@ -627,13 +626,13 @@ int select_devread_send(char *buf, char *out2, int mypid) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
 #endif
-        if (FD_ISSET(tun_device, &fdset_tun)) {
+        if (FD_ISSET(info.tun_device, &fdset_tun)) {
         } else {
             sem_post(&(shm_conn_info->tun_device_sem));
             return CONTINUE_ERROR;
         }
         // we aren't checking FD_ISSET because we did select one descriptor
-        len = dev_read(tun_device, buf, VTUN_FRAME_SIZE - 11);
+        len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
@@ -1122,7 +1121,7 @@ int ag_switcher() {
 int lfd_linker(void)
 {
     int service_channel = lfd_host->rmt_fd; //aka channel 0
-    tun_device = lfd_host->loc_fd; // virtual tun device
+    info.tun_device = lfd_host->loc_fd; // virtual tun device
     int len, len1, fl;
     int err=0;
     struct timeval tv;
@@ -1268,7 +1267,7 @@ int lfd_linker(void)
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
     }
-    maxfd = (service_channel > tun_device ? service_channel : tun_device);
+    maxfd = (service_channel > info.tun_device ? service_channel : info.tun_device);
 
     linker_term = 0;
     srand((unsigned int) time(NULL ));
@@ -1702,13 +1701,13 @@ int res123 = 0;
         FD_ZERO(&fdset_w);
         if (get_write_buf_wait_data()) {
             pfdset_w = &fdset_w;
-            FD_SET(tun_device, pfdset_w);
+            FD_SET(info.tun_device, pfdset_w);
         } else {
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
         if (hold_mode == 0) {
-            FD_SET(tun_device, &fdset);
+            FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
             tv.tv_usec = 200000;
         } else {
@@ -2273,7 +2272,7 @@ int res123 = 0;
         }
 #endif
         acnt = 0;
-        while ((fprev > -1) && FD_ISSET(tun_device, &fdset_w)) {
+        while ((fprev > -1) && FD_ISSET(info.tun_device, &fdset_w)) {
             int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1) ? 1 : 0;
             if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
                 struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
@@ -2281,7 +2280,7 @@ int res123 = 0;
                 struct timeval work_loop1, work_loop2;
                 gettimeofday(&work_loop1, NULL );
 #endif
-                if ((len = dev_write(tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
+                if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                     vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
                         vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
