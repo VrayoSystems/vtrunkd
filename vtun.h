@@ -385,7 +385,7 @@ struct phisical_status {
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
 
     /** Logical channels information and statistic*/
-    int channel_amount;   /**< Number elements in @see channel array */
+    int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */
 };
 
