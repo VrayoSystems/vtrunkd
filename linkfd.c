@@ -1532,9 +1532,9 @@ int res123 = 0;
 				sem_wait(&(shm_conn_info->stats_sem));
 				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
 				sem_post(&(shm_conn_info->stats_sem));
-				if( miss_packets_max[my_physical_channel_num] > 17 ) {
+				if( miss_packets_max[my_physical_channel_num] > 60 ) {
 				    send_q_limit = send_q_limit - (send_q_limit >> 3);
-				} else if (miss_packets_max[my_physical_channel_num]  < 8 ) {
+				} else if (miss_packets_max[my_physical_channel_num]  < 40 ) {
 				    send_q_limit = send_q_limit + (send_q_limit >> 4);
 				}
 
@@ -2063,11 +2063,13 @@ int res123 = 0;
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
                     if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_tail].physical_channel_num
                             != my_physical_channel_num) {
-                        my_miss_packets[my_physical_channel_num] = incomplete_seq_len;
+                        //my_miss_packets[my_physical_channel_num] = incomplete_seq_len;
+                        my_miss_packets[my_physical_channel_num] = buf_len;
                         my_miss_packets[another_chan] = 0;
                     } else {
                         my_miss_packets[my_physical_channel_num] = 0;
-                        my_miss_packets[another_chan] = incomplete_seq_len;
+                        //my_miss_packets[another_chan] = incomplete_seq_len;
+                        my_miss_packets[another_chan] = buf_len;
                     }
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
