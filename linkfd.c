@@ -115,6 +115,7 @@ int sendbuff;
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
+int force_hold_mode = 1;
 uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0; // in ms;
 int proto_err_cnt = 0;
@@ -991,7 +992,7 @@ int ag_switcher() {
 //        send_q_limit = 33000;
     }
     int hold_mode_previous = hold_mode;
-    if (my_max_send_q < send_q_limit) {
+    if ((my_max_send_q < send_q_limit) && (force_hold_mode == 0)) {
         hold_mode = 0;
         if (hold_mode_previous == 1) {
             struct timeval send_q_read_time_old, send_q_read_time_lag;
@@ -1024,11 +1025,12 @@ int ag_switcher() {
         gettimeofday(&curr_time, NULL);
         timersub(&curr_time, &send_q_mode_switch_time, &send_q_mode_switch_time_lag);
         if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
-            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
+//            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
         }
 
     } else {
         hold_mode = 1;
+        force_hold_mode = 0;
         if (hold_mode_previous == 0) {
             send_q_full_old = send_q_full;
             memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
@@ -1430,6 +1432,11 @@ int res123 = 0;
             }
         } else {
             dirty_seq_num_checked_flag = 0;
+        }
+        if ((dirty_seq_num % 50) == 0 && hold_mode == 0) {
+            dirty_seq_num++;
+            ag_switch_flag = 1;
+            force_hold_mode = 1;
         }
         if ((timercmp_result) | (ag_switch_flag)) {
             dirty_seq_num_checked_flag = 1;
