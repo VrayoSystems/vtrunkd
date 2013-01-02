@@ -282,6 +282,7 @@ struct _write_buf {
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
     uint16_t complete_seq_quantity;
+    int top_packet_physical_channel_num;
 };
 
 /**
@@ -332,6 +333,8 @@ struct conn_stats {
     struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
     uint32_t max_upload_speed;
     uint32_t max_send_q;
+    uint32_t send_q_limit;
+    uint16_t miss_packets_max; // get from another side
 };
 
 
@@ -359,6 +362,8 @@ struct conn_info {
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
+    uint32_t miss_packets_max_recv_counter; // sync on stats_sem
+    uint32_t miss_packets_max_send_counter; // sync on stats_sem
     //int broken_cnt;
     long int lock_time;
     long int alive;
