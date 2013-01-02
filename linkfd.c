@@ -1569,22 +1569,8 @@ int res123 = 0;
 				sem_post(&(shm_conn_info->stats_sem));
 				if( miss_packets_max[my_physical_channel_num] > 60 ) {
 				    send_q_limit = send_q_limit - (send_q_limit >> 3);
-				} else if (miss_packets_max[my_physical_channel_num]  < 40 ) {
-				    send_q_limit = send_q_limit + (send_q_limit >> 4);
 				}
-
-            //uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
-            uint32_t max_reorder_byte = lfd_host->MAX_REORDER * 1400;
-            if (send_q_limit < 5000) {
-                send_q_limit = 5000;
-            } else if (send_q_limit > max_reorder_byte) {
-                send_q_limit = max_reorder_byte;
-            }
-
-            //if ( my_physical_channel_num == 0) send_q_limit = 7000;
-
-
-				sem_post(&(shm_conn_info->stats_sem));
+            sem_post(&(shm_conn_info->stats_sem));
 
 //            }
 
