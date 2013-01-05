@@ -1017,16 +1017,19 @@ int ag_switcher() {
                 ACK_coming_speed_avg += speed_avg[i]/10;
 //                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
             }
+            sem_wait(&(shm_conn_info->stats_sem));
+            shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
+            sem_post(&(shm_conn_info->stats_sem));
             magic_rtt[speed_avg_count-1] = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
             magic_rtt_avg = 0;
             for (int i = 0; i < 10; i++) {
                 magic_rtt_avg += magic_rtt[i]/10;
             }
-            send_q_limit += rtt < 1100 ? 10000 : 0;
+//            send_q_limit += rtt < 1100 ? 10000 : 0;
             int32_t send_q_limit_grow = (ACK_coming_speed_avg * 400 - send_q_limit)/2;
             send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
-            send_q_limit += send_q_limit_grow;
-            send_q_limit += rtt < 1100 ? 10000 : 0;
+//            send_q_limit += send_q_limit_grow;
+//            send_q_limit += rtt < 1100 ? 10000 : 0;
             gettimeofday(&send_q_mode_switch_time, NULL);
             vtun_syslog(LOG_INFO,
                     "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
@@ -1573,11 +1576,22 @@ int res123 = 0;
                 }
 				sem_wait(&(shm_conn_info->stats_sem));
 				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
-				sem_post(&(shm_conn_info->stats_sem));
-				if( miss_packets_max[my_physical_channel_num] > 60 ) {
-				    send_q_limit = send_q_limit - (send_q_limit >> 3);
+				int another_chan = my_physical_channel_num == 0 ? 1 : 0;
+				int send_q_limit_grow;
+				if (shm_conn_info->stats[my_physical_channel_num].ACK_speed > shm_conn_info->stats[another_chan].ACK_speed){
+				    send_q_limit_grow = ((90 - miss_packets_max[my_physical_channel_num])*1300 - send_q_limit)/2;
+				} else {
+                shm_conn_info->stats[another_chan].ACK_speed =
+                        shm_conn_info->stats[another_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[another_chan].ACK_speed;
+                send_q_limit_grow = ((90 - miss_packets_max[my_physical_channel_num]) * 1300
+                        * (shm_conn_info->stats[my_physical_channel_num].ACK_speed / shm_conn_info->stats[another_chan].ACK_speed) - send_q_limit)/2;
 				}
-            sem_post(&(shm_conn_info->stats_sem));
+				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
+				send_q_limit += send_q_limit_grow;
+	            sem_post(&(shm_conn_info->stats_sem));
+				    if( miss_packets_max[my_physical_channel_num] > 60 ) {
+				    //send_q_limit = send_q_limit - (send_q_limit >> 3);
+				}
 
 //            }
 
