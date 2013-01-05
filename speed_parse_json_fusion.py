@@ -78,7 +78,9 @@ def plot_data(fn, data_c1, data_c2, data_s1,  data_s2):
     plt.plot(zipj(data_c1, "ts"), zipj(data_c1, DNAME), "-", label="rtt_1(cli)", c="b")
     plt.plot(zipj(data_c2, "ts"), zipj(data_c2, DNAME), "-", label="rtt_2(cli)", c="g")
     plt.plot(zipj(data_s1, "ts"), zipj(data_s1, DNAME), "-", label="rtt_1(srv)", c="r")
-    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="rtt_2(srv)", c="k")    
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, DNAME), "-", label="rtt_2(srv)", c="k")
+    plt.plot(zipj(data_s1, "ts"), zipj(data_s1, 'magic_rtt'), "-", label="magic_rtt_1(srv)", c="m")
+    plt.plot(zipj(data_s2, "ts"), zipj(data_s2, 'magic_rtt'), "-", label="magic_rtt_2(srv)", c="y")    
     plt.legend()
     figurePlot.savefig(fn+".png", dpi=100)
     
