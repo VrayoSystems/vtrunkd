@@ -1583,8 +1583,9 @@ int res123 = 0;
 				} else {
                 shm_conn_info->stats[another_chan].ACK_speed =
                         shm_conn_info->stats[another_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[another_chan].ACK_speed;
-                send_q_limit_grow = ((90 - miss_packets_max[my_physical_channel_num]) * 1300
-                        * (shm_conn_info->stats[my_physical_channel_num].ACK_speed / shm_conn_info->stats[another_chan].ACK_speed) - send_q_limit)/2;
+                // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
+                send_q_limit_grow = ( ( (90 - miss_packets_max[my_physical_channel_num]) * 1300
+                        * ( (shm_conn_info->stats[my_physical_channel_num].ACK_speed * 100) / shm_conn_info->stats[another_chan].ACK_speed) ) / 100 - send_q_limit)/2;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
