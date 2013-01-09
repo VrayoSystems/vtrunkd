@@ -1049,7 +1049,7 @@ int ag_switcher() {
         if (hold_mode_previous == 0) {
             send_q_full_old = send_q_full;
             memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
-            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
+//            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
         }
 
 
