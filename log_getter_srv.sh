@@ -40,7 +40,7 @@ echo -n $COUNT > $CFILE
 
 PREFIX="$COUNT"_
 
-while getopts :tp: OPTION
+while getopts :tp:nf OPTION
 do
  case $OPTION in
  e) echo "Execute vtrunkd only"
@@ -48,6 +48,12 @@ do
   ;;
  t) echo "Full speed test"
   TEST="1"
+  ;;
+ n) echo "No compile mode"
+  NOCOMPILE=true
+  ;;
+ f) echo "Fast test mode"
+  FASTT=true
   ;;
  p) echo "Prefix set $OPTARG"
   PREFIX=$OPTARG
@@ -59,6 +65,20 @@ do
  esac
 done
 
+echo $NOCOMPILE $FASTT
+
+if [[ ! -v NOCOMPILE ]]
+then
+  NOCOMPILE=false   # Initialize it to zero!
+fi
+
+if [[ ! -v FASTT ]]
+then
+  FASTT=false   # Initialize it to zero!
+fi
+
+
+echo $NOCOMPILE $FASTT
 
 SPD=`cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} | tr -d '\n'`
 DELAY=`cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n'`
@@ -75,25 +95,36 @@ ssh user@cli-32 "sudo killall -9 vtrunkd && sudo ipcrm -M 567888"
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
-echo "Copying vtrunkd sources ..."
-ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT"
-ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT"
-scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/
-scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/
-echo "Compiling vtrunkd ..."
-if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then 
-    echo "OK"
+
+
+TCRULES=/tmp/tcrules.sh
+if $NOCOMPILE; then
+        echo "-- Not compiling sources!!"
+        echo "Copying TC rules from $TCRULES"
+        scp $TCRULES user@srv-32:$VTRUNKD_V_ROOT/test/srv_emulate_2.sh
 else
-    echo "Compile Error!"
-    exit 0;
+        echo "Copying vtrunkd sources ..."
+        ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT"
+        ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT"
+        scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/
+        scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/
+        echo "Compiling vtrunkd ..."
+        if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then 
+            echo "OK"
+        else
+            echo "Compile Error!"
+            exit 0;
+        fi
+        echo "Compiling ..."
+        if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then
+            echo "OK"
+        else
+            echo "Compile Error!"
+            exit 0;
+        fi
 fi
-echo "Compiling ..."
-if ssh user@cli-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then
-    echo "OK"
-else
-    echo "Compile Error!"
-    exit 0;
-fi
+
+
 
 echo "NTP sync..."
 ssh user@cli-32 "sudo ntpdate $NTP_SERVER" &
@@ -128,9 +159,16 @@ if [ $EXEC = "1" ]; then
     "Execute only!"
     exit 0;
 fi
-echo "Worcking..."
-echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 150 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
-ssh user@cli-32 'cat /tmp/${PREFIX}speed | grep speed' >> /tmp/"$PREFIX".nojson
+if $FASTT; then
+    echo "Worcking fsat1..."
+    echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 20 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
+else
+    echo "Worcking..."
+    echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 90 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
+fi
+sleep 1
+ssh user@cli-32 "sync"
+ssh user@cli-32 "cat /tmp/${PREFIX}speed | grep speed" >> /tmp/"$PREFIX".nojson
 ssh user@cli-32 'echo "" >>  /tmp/${PREFIX}speed'
 ssh user@cli-32 "ping -c 10 -q -a 10.200.1.31 | tail -3 >> /tmp/${PREFIX}speed"
 echo "killall vtrunkd"
@@ -174,11 +212,20 @@ grep "{\"p_" /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
+tar cvfj /tmp/${COUNT}.tbz /tmp/${PREFIX}*
 echo "Uploading logs..."
-scp -P $DBOXHOST_PORT /tmp/${PREFIX}*json $DBOXHOST:~/Dropbox/alarm_logs/
+scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-1_cli_json $DBOXHOST:~/Dropbox/alarm_logs/
+scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-2_cli_json $DBOXHOST:~/Dropbox/alarm_logs/
+scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-1_srv_json $DBOXHOST:~/Dropbox/alarm_logs/
+scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-2_srv_json $DBOXHOST:~/Dropbox/alarm_logs/
+scp -P $DBOXHOST_PORT /tmp/${PREFIX}.nojson $DBOXHOST:~/Dropbox/alarm_logs/
+echo "Uploading tbz..."
+scp -P $DBOXHOST_PORT /tmp/${COUNT}.tbz $DBOXHOST:~/Dropbox/alarm_logs/
 rm /tmp/${PREFIX}syslog*
 echo "Drawing graphs"
 ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
+echo "Clear alarm_logs..."
+ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; rm *json"
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
