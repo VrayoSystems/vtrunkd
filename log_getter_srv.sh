@@ -83,7 +83,7 @@ echo $NOCOMPILE $FASTT
 SPD=`cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} | tr -d '\n'`
 DELAY=`cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n'`
 
-DOCS="`git branch -a | grep \*` - `git log --oneline -1` - $SPD / $DELAY"
+DOCS="$COUNT `git branch -a | grep \*` - `git log --oneline -1` - $SPD / $DELAY"
 echo "Creating stat docstring... $DOCS"
 echo "$DOCS" > /tmp/"$PREFIX".nojson
 
