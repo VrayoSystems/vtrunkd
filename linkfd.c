@@ -340,10 +340,6 @@ int fix_free_writebuf() {
     return 0;
 }
 
-void gg(){
-    return;
-}
-
 int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sender_pid) {
     int i, len = -1;
     // TODO: we should be searching from most probable start place
@@ -481,11 +477,28 @@ int get_fast_resend_frame(int *conn_num, char *buf, int *len, unsigned long *seq
 }
 
 /**
+ *
+ * @return 0 if buffer blank
+ */
+int check_fast_resend() {
+    if (shm_conn_info->fast_resend_buf_idx == 0) {
+        return 0; // buffer is blank
+    }
+    return 1;
+}
+
+/**
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
     int len = 0, send_counter = 0;
     unsigned long top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
+    sem_wait(&(shm_conn_info->resend_buf_sem));
+    if (check_fast_resend()){
+        sem_post(&(shm_conn_info->resend_buf_sem));
+        return HAVE_FAST_RESEND_FRAME;
+    }
+    sem_post(&(shm_conn_info->resend_buf_sem));
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->common_sem));
         top_seq_num = shm_conn_info->seq_counter[i];
@@ -501,7 +514,7 @@ int retransmit_send(char *out2, int mypid) {
         }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %lu top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
@@ -671,7 +684,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
+        vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
         return NET_WRITE_BUSY_NOTIFY;
     }
@@ -2344,8 +2357,11 @@ int res123 = 0;
 #endif
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
+#endif
                 len = 0;
-            } else if (len == LASTPACKETMY_NOTIFY) { // if this physical channel had sent last packet
+            } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
