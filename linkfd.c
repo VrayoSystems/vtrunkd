@@ -98,6 +98,7 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
+#define SEND_Q_LIMIT_MINIMAL 2000
 // flags:
 uint8_t time_lag_ready;
 
@@ -118,7 +119,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
+uint16_t tmp_flags = 0, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 uint16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
 uint16_t miss_packets_max[] = {0,0}; // get from another side
@@ -1052,9 +1053,9 @@ int ag_switcher() {
         struct timeval curr_time, send_q_mode_switch_time_lag;
         gettimeofday(&curr_time, NULL);
         timersub(&curr_time, &send_q_mode_switch_time, &send_q_mode_switch_time_lag);
-        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
+//        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
 //            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
-        }
+//        }
 
     } else {
         hold_mode = 1;
@@ -1080,7 +1081,9 @@ int ag_switcher() {
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg);
 #endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
-        return 1;
+        if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -2351,7 +2354,7 @@ int res123 = 0;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (0) { // it is RETRANSMIT_MODE(R_MODE)
+        if (tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
