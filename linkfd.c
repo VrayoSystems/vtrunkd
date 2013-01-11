@@ -98,6 +98,7 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
+#define SEND_Q_LIMIT_MINIMAL 2000
 // flags:
 uint8_t time_lag_ready;
 
@@ -118,7 +119,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-uint16_t tmp_flags, tmp_channels_mask, tmp_AG;
+uint16_t tmp_flags = 0, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 uint16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
 uint16_t miss_packets_max[] = {0,0}; // get from another side
@@ -340,10 +341,6 @@ int fix_free_writebuf() {
     return 0;
 }
 
-void gg(){
-    return;
-}
-
 int get_resend_frame(int conn_num, unsigned long seq_num, char **out, int *sender_pid) {
     int i, len = -1;
     // TODO: we should be searching from most probable start place
@@ -481,11 +478,28 @@ int get_fast_resend_frame(int *conn_num, char *buf, int *len, unsigned long *seq
 }
 
 /**
+ *
+ * @return 0 if buffer blank
+ */
+int check_fast_resend() {
+    if (shm_conn_info->fast_resend_buf_idx == 0) {
+        return 0; // buffer is blank
+    }
+    return 1;
+}
+
+/**
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
     int len = 0, send_counter = 0;
     unsigned long top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
+    sem_wait(&(shm_conn_info->resend_buf_sem));
+    if (check_fast_resend()){
+        sem_post(&(shm_conn_info->resend_buf_sem));
+        return HAVE_FAST_RESEND_FRAME;
+    }
+    sem_post(&(shm_conn_info->resend_buf_sem));
     for (int i = 1; i <= chan_amt; i++) {
         sem_wait(&(shm_conn_info->common_sem));
         top_seq_num = shm_conn_info->seq_counter[i];
@@ -501,7 +515,7 @@ int retransmit_send(char *out2, int mypid) {
         }
         last_sent_packet_num[i].seq_num++;
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: logical channel #%i top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
+            vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %lu top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
@@ -671,7 +685,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
+        vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
         return NET_WRITE_BUSY_NOTIFY;
     }
@@ -1039,9 +1053,9 @@ int ag_switcher() {
         struct timeval curr_time, send_q_mode_switch_time_lag;
         gettimeofday(&curr_time, NULL);
         timersub(&curr_time, &send_q_mode_switch_time, &send_q_mode_switch_time_lag);
-        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
+//        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
 //            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
-        }
+//        }
 
     } else {
         hold_mode = 1;
@@ -1067,7 +1081,9 @@ int ag_switcher() {
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg);
 #endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
-        return 1;
+        if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -1579,16 +1595,17 @@ int res123 = 0;
 				int another_chan = my_physical_channel_num == 0 ? 1 : 0;
 				int send_q_limit_grow;
 				if (shm_conn_info->stats[my_physical_channel_num].ACK_speed > shm_conn_info->stats[another_chan].ACK_speed){
-				    send_q_limit_grow = ((90 - miss_packets_max[my_physical_channel_num])*1300 - send_q_limit)/2;
+				    send_q_limit_grow = ((90 - (int)miss_packets_max[my_physical_channel_num])*1300 - send_q_limit)/2;
 				} else {
                 shm_conn_info->stats[another_chan].ACK_speed =
                         shm_conn_info->stats[another_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[another_chan].ACK_speed;
                 // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-                send_q_limit_grow = ( ( (90 - miss_packets_max[my_physical_channel_num]) * 1300
-                        * ( (shm_conn_info->stats[my_physical_channel_num].ACK_speed * 100) / shm_conn_info->stats[another_chan].ACK_speed) ) / 100 - send_q_limit)/2;
+                send_q_limit_grow = ((((90 - (int)miss_packets_max[my_physical_channel_num]) * 1300
+                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / shm_conn_info->stats[another_chan].ACK_speed) - send_q_limit)/2;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
+				send_q_limit = send_q_limit < 0 ? 0 : send_q_limit;
 	            sem_post(&(shm_conn_info->stats_sem));
 				    if( miss_packets_max[my_physical_channel_num] > 60 ) {
 				    //send_q_limit = send_q_limit - (send_q_limit >> 3);
@@ -2338,14 +2355,17 @@ int res123 = 0;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (0) { // it is RETRANSMIT_MODE(R_MODE)
+        if (tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
             len = retransmit_send(out2, mypid);
             if (len == CONTINUE_ERROR) {
+#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
+#endif
                 len = 0;
-            } else if (len == LASTPACKETMY_NOTIFY) { // if this physical channel had sent last packet
+            } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif

@@ -12,7 +12,7 @@ def parse_file(fn):
     f = open(fn)
     for l in f:
         dl = l.split(" ");
-        sdtime = dl[3];
+        sdtime = dl[2];
         try:
             dt = time.strptime("14/09/12 %s000" % sdtime, '%d/%m/%y %H:%M:%S.%f');
         except:
