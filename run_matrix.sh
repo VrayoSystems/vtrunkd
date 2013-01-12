@@ -43,7 +43,7 @@ TCRULES=/tmp/tcrules.sh
 LCNT=~/log_getter.counter
 COUNT=$((`cat $LCNT`+1));
 CSV=~/result${COUNT}${OPTARG}.csv
-echo "rate1,delay1,jit1,percent1,rate2,delay2,jit2,percent2,rate3,delay3,jit3,percent3,SPEED,AG_EFF,C_GROW,TOTAG,prefix" >> $CSV
+echo "rate1,delay1,jit1,percent1,rate2,delay2,jit2,percent2,rate3,delay3,jit3,percent3,SPEED,AG_EFF,C_GROW,C_USE,prefix" >> $CSV
 
 re="([A-Za-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9\%]+)\s+([A-Za-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9\%]+)\s+([A-Za-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9]+)\s+([a-z0-9\%]+)$"
 
