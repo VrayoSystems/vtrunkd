@@ -121,8 +121,8 @@ int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
 uint16_t tmp_flags = 0, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
-uint16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
-uint16_t miss_packets_max[] = {0,0}; // get from another side
+int16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
+int16_t miss_packets_max[] = {0,0}; // get from another side
 int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
@@ -1012,7 +1012,7 @@ int ag_switcher() {
 //        send_q_limit = 33000;
     }
     int hold_mode_previous = hold_mode;
-    if ((my_max_send_q < send_q_limit) && (force_hold_mode == 0)) {
+    if ((((int)my_max_send_q) < send_q_limit) && (force_hold_mode == 0)) {
         hold_mode = 0;
         if (hold_mode_previous == 1) {
             struct timeval send_q_read_time_old, send_q_read_time_lag;
@@ -1031,6 +1031,7 @@ int ag_switcher() {
                 ACK_coming_speed_avg += speed_avg[i]/10;
 //                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
             }
+            ACK_coming_speed_avg = ACK_coming_speed_avg < 1 ? 1 : ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
@@ -1073,7 +1074,7 @@ int ag_switcher() {
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef JSON
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%u,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u}",
+            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u}",
             my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num]->send,
@@ -1605,7 +1606,7 @@ int res123 = 0;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
-				send_q_limit = send_q_limit < 0 ? 0 : send_q_limit;
+				send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
 	            sem_post(&(shm_conn_info->stats_sem));
 				    if( miss_packets_max[my_physical_channel_num] > 60 ) {
 				    //send_q_limit = send_q_limit - (send_q_limit >> 3);
@@ -2339,6 +2340,8 @@ int res123 = 0;
             break;
         }
         sem_post(write_buf_sem);
+
+        if(hold_mode){continue;}
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
