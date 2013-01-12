@@ -2352,7 +2352,7 @@ int res123 = 0;
              *
              * */
         sem_wait(&(shm_conn_info->AG_flags_sem));
-        tmp_flags = shm_conn_info->AG_ready_flags ^ shm_conn_info->channels_mask;
+        //tmp_flags = shm_conn_info->AG_ready_flags ^ shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
 #ifdef DEBUGG
