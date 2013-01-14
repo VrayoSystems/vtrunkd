@@ -1022,7 +1022,7 @@ int ag_switcher() {
             int ACK_left = send_q_full_old - (int) send_q_full;
             ACK_left = ACK_left < 0 ? 0 : ACK_left;
 //            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
-            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) / 1000 : ACK_left * 1000;
+            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) * 1000 : ACK_left * 1000;
             ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
             speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
             speed_avg[speed_avg_count++] = ACK_coming_speed;
@@ -1065,6 +1065,34 @@ int ag_switcher() {
             send_q_full_old = send_q_full;
             memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
 //            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
+        }
+        struct timeval send_q_read_time_lag;
+        timersub(&get_format_tcp_info_call, &send_q_read_time, &send_q_read_time_lag);
+        if (timercmp(&send_q_read_time_lag, &((struct timeval) {0, 20}), >)) {
+            struct timeval send_q_read_time_old;
+            memcpy(&send_q_read_time, &get_format_tcp_info_call, sizeof(send_q_read_time));
+            int ACK_left = send_q_full_old - (int) send_q_full;
+            send_q_full_old = send_q_full;
+            ACK_left = ACK_left < 0 ? 0 : ACK_left;
+//            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
+            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left * 1000) / send_q_read_time_lag.tv_sec : ACK_left * 1000;
+            ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
+            speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
+            speed_avg[speed_avg_count++] = ACK_coming_speed;
+            ACK_coming_speed_avg = 0;
+            for (int i = 0; i < 10; i++) {
+                ACK_coming_speed_avg += speed_avg[i]/10;
+//                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
+            }
+            ACK_coming_speed_avg = ACK_coming_speed_avg < 1 ? 1 : ACK_coming_speed_avg;
+            sem_wait(&(shm_conn_info->stats_sem));
+            shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
+            sem_post(&(shm_conn_info->stats_sem));
+            magic_rtt[speed_avg_count-1] = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
+            magic_rtt_avg = 0;
+            for (int i = 0; i < 10; i++) {
+                magic_rtt_avg += magic_rtt[i]/10;
+            }
         }
 
 
