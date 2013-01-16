@@ -1619,18 +1619,28 @@ int res123 = 0;
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                     sended_bytes += len1;
                 }
+                sem_wait(&(shm_conn_info->AG_flags_sem));
+                uint32_t chan_mask = shm_conn_info->channels_mask;
+                sem_post(&(shm_conn_info->AG_flags_sem));
 				sem_wait(&(shm_conn_info->stats_sem));
 				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
-				int another_chan = my_physical_channel_num == 0 ? 1 : 0;
 				int send_q_limit_grow;
-				if (shm_conn_info->stats[my_physical_channel_num].ACK_speed > shm_conn_info->stats[another_chan].ACK_speed){
+                int high_speed_chan = 0;
+				/* find high speed channel */
+                for (int i = 0; i < 32; i++) {
+                    /* check alive channel*/
+                    if (chan_mask & (1 < i)) {
+                        high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
+                    }
+                }
+				if (high_speed_chan == my_physical_channel_num){
 				    send_q_limit_grow = ((90 - (int)miss_packets_max[my_physical_channel_num])*1300 - send_q_limit)/2;
 				} else {
-                shm_conn_info->stats[another_chan].ACK_speed =
-                        shm_conn_info->stats[another_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[another_chan].ACK_speed;
+                shm_conn_info->stats[high_speed_chan].ACK_speed =
+                        shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
                 // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
                 send_q_limit_grow = ((((90 - (int)miss_packets_max[my_physical_channel_num]) * 1300
-                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / shm_conn_info->stats[another_chan].ACK_speed) - send_q_limit)/2;
+                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / shm_conn_info->stats[high_speed_chan].ACK_speed) - send_q_limit)/2;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
