@@ -17,6 +17,9 @@ do
  esac
 done
 echo "Starting..."
+echo "killall vtrunkd"
+ssh user@srv-32 "sudo killall -9 vtrunkd 2>/dev/null && sudo ipcrm -M 567888"
+ssh user@cli-32 "sudo killall -9 vtrunkd 2>/dev/null && sudo ipcrm -M 567888"
 echo "Clear syslog"
 ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
@@ -30,7 +33,11 @@ sleep 5
 echo "Starting client 1..."
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest1 192.168.57.101 -P 5003"
 echo "Starting client 2..."
+sleep 1
 ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest2 192.168.58.101 -P 5003"
+echo "Starting client 3..."
+sleep 1
+ssh user@cli-32 "sudo /home/user/sandbox/vtrunkd_test1/vtrunkd -f /home/user/sandbox/vtrunkd_test1/test/vtrunkd-cli.test.conf atest3 192.168.59.101 -P 5003"
 sleep 8
 echo "Full started"
 echo "Worcking..."
@@ -66,9 +73,11 @@ echo "Transfer syslogs"
 scp user@cli-32:/var/log/syslog /tmp/${PREFIX}syslog-cli
 scp user@srv-32:/var/log/syslog /tmp/${PREFIX}syslog-srv
 grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F] {'print $1'} | head -1` /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-1_cli
-grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-2_cli
-grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | head -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-1_srv  
-grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-2_srv
+grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -2 | head -1` /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-2_cli
+grep `grep " Session " /tmp/${PREFIX}syslog-cli | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-3_cli
+grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | head -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-1_srv
+grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -2 | head -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-2_srv
+grep `grep " Session " /tmp/${PREFIX}syslog-srv | awk -F[ {'print $2'} | awk -F] {'print $1'} | tail -1` /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-3_srv
 grep "First select time" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-1_cli_select_time
 grep "{\"p_" /tmp/${PREFIX}syslog-srv > /tmp/${PREFIX}syslog-srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-cli > /tmp/${PREFIX}syslog-cli_json
@@ -76,6 +85,8 @@ grep "{\"p_" /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
+grep "{\"p_" /tmp/${PREFIX}syslog-3_srv > /tmp/${PREFIX}syslog-3_srv_json
+grep "{\"p_" /tmp/${PREFIX}syslog-3_cli > /tmp/${PREFIX}syslog-3_cli_json
 scp /tmp/${PREFIX}* andrey@bonanza:~/sandbox/alarm_logs/
 rm /tmp/${PREFIX}syslog*
 echo "Clear syslog"
