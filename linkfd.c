@@ -1021,6 +1021,9 @@ int ag_switcher() {
             timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
             int ACK_left = send_q_full_old - (int) send_q_full;
             ACK_left = ACK_left < 0 ? 0 : ACK_left;
+            if (ACK_left <5) {
+                goto ack_hack1;
+            }
 //            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
             ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) * 1000 : ACK_left * 1000;
             ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
@@ -1049,6 +1052,8 @@ int ag_switcher() {
             vtun_syslog(LOG_INFO,
                     "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
                     send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
+            ack_hack1:
+            ACK_left = 0;
         }
         /*send_q_limit overgrow test*/
         struct timeval curr_time, send_q_mode_switch_time_lag;
@@ -1074,6 +1079,9 @@ int ag_switcher() {
             int ACK_left = send_q_full_old - (int) send_q_full;
             send_q_full_old = send_q_full;
             ACK_left = ACK_left < 0 ? 0 : ACK_left;
+            if (ACK_left <5) {
+                goto ack_hack;
+            }
 //            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
             ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left * 1000) / send_q_read_time_lag.tv_sec : ACK_left * 1000;
             ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
@@ -1093,11 +1101,12 @@ int ag_switcher() {
             for (int i = 0; i < 10; i++) {
                 magic_rtt_avg += magic_rtt[i]/10;
             }
+            ack_hack:
+            ACK_left = 0;
         }
 
 
     }
-
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef JSON
