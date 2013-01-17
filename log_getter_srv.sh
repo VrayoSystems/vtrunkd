@@ -78,10 +78,16 @@ then
 fi
 
 
+TCRULES=/tmp/tcrules.sh
 echo $NOCOMPILE $FASTT
 
-SPD=`cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} | tr -d '\n'`
-DELAY=`cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n'`
+if $NOCOMPILE; then
+    SPD=`cat $TCRULES | grep ceil | awk {'print$12" "'} | tr -d '\n'`
+    DELAY=`cat $TCRULES | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n'`
+else
+    SPD=`cat ./test/srv_emulate_2.sh | grep ceil | awk {'print$12" "'} | tr -d '\n'`
+    DELAY=`cat ./test/srv_emulate_2.sh | grep delay | grep -v "#" | awk {'print$10" "$11" "$12";"'} | tr -d '\n'`
+fi
 
 DOCS="$COUNT `git branch -a | grep \*` `git log --oneline -1` \n $SPD \n $DELAY"
 echo "Creating stat docstring... $DOCS"
@@ -97,7 +103,6 @@ ssh user@cli-32 "cat /dev/null | sudo tee /var/log/syslog"
 ssh user@srv-32 "cat /dev/null | sudo tee /var/log/syslog"
 
 
-TCRULES=/tmp/tcrules.sh
 if $NOCOMPILE; then
         echo "-- Not compiling sources!!"
         echo "Copying TC rules from $TCRULES"
@@ -159,6 +164,7 @@ if [ $EXEC = "1" ]; then
     "Execute only!"
     exit 0;
 fi
+
 if $FASTT; then
     echo "Worcking fsat1..."
     echo "time_starttransfer %{time_starttransfer} time_total %{time_total} speed_download %{speed_download}" | ssh user@cli-32 "curl -m 20 --connect-timeout 4 http://10.200.1.31/u -o /dev/null -w @- > /tmp/${PREFIX}speed"
@@ -212,7 +218,8 @@ grep "{\"p_" /tmp/${PREFIX}syslog-1_srv > /tmp/${PREFIX}syslog-1_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-1_cli > /tmp/${PREFIX}syslog-1_cli_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_srv > /tmp/${PREFIX}syslog-2_srv_json
 grep "{\"p_" /tmp/${PREFIX}syslog-2_cli > /tmp/${PREFIX}syslog-2_cli_json
-tar cvfj /tmp/${COUNT}.tbz /tmp/${PREFIX}*
+#tar cvfj /tmp/${COUNT}.tbz /tmp/${PREFIX}*
+tar cvf /tmp/${COUNT}.tbz --use-compress-prog=pbzip2 /tmp/${PREFIX}*
 echo "Uploading logs..."
 scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-1_cli_json $DBOXHOST:~/Dropbox/alarm_logs/
 scp -P $DBOXHOST_PORT /tmp/${PREFIX}syslog-2_cli_json $DBOXHOST:~/Dropbox/alarm_logs/
