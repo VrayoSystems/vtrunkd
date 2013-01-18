@@ -121,8 +121,8 @@ int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
 uint16_t tmp_flags = 0, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
-int16_t my_miss_packets_max[] = {0, 0}; // in ms; calculated here
-int16_t miss_packets_max[] = {0,0}; // get from another side
+int16_t my_miss_packets_max = 0; // in ms; calculated here
+int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
@@ -1607,8 +1607,8 @@ int res123 = 0;
 					time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
                     /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
                     time_lag_remote &= 0xFFFFF; // shrink to 20bit
-                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max[i] << 20);
-                    my_miss_packets_max[i] = 0;
+                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
+                    my_miss_packets_max = 0;
 					pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t miss_packet_counter_h = htonl(shm_conn_info->miss_packets_max_send_counter++);
 					sem_post(&(shm_conn_info->stats_sem));
@@ -1632,7 +1632,7 @@ int res123 = 0;
                 uint32_t chan_mask = shm_conn_info->channels_mask;
                 sem_post(&(shm_conn_info->AG_flags_sem));
 				sem_wait(&(shm_conn_info->stats_sem));
-				miss_packets_max[my_physical_channel_num] = shm_conn_info->stats[my_physical_channel_num].miss_packets_max;
+				miss_packets_max = shm_conn_info->miss_packets_max;
 				int send_q_limit_grow;
                 int high_speed_chan = 0;
 				/* find high speed channel */
@@ -1643,25 +1643,18 @@ int res123 = 0;
                     }
                 }
 				if (high_speed_chan == my_physical_channel_num){
-				    send_q_limit_grow = ((90 - (int)miss_packets_max[my_physical_channel_num])*1300 - send_q_limit)/2;
+				    send_q_limit_grow = ((90 - (int)miss_packets_max)*1300 - send_q_limit)/2;
 				} else {
                 shm_conn_info->stats[high_speed_chan].ACK_speed =
                         shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
                 // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-                send_q_limit_grow = ((((90 - (int)miss_packets_max[my_physical_channel_num]) * 1300
+                send_q_limit_grow = ((((90 - (int)miss_packets_max) * 1300
                         *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / shm_conn_info->stats[high_speed_chan].ACK_speed) - send_q_limit)/2;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
 				send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
 	            sem_post(&(shm_conn_info->stats_sem));
-				    if( miss_packets_max[my_physical_channel_num] > 60 ) {
-				    //send_q_limit = send_q_limit - (send_q_limit >> 3);
-				}
-
-//            }
-
-
 
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
@@ -2028,8 +2021,8 @@ int res123 = 0;
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
                                         shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
-                                        miss_packets_max[i] = miss_packets_max_tmp;
-                                        shm_conn_info->stats[i].miss_packets_max = miss_packets_max[i];
+                                        miss_packets_max = miss_packets_max_tmp;
+                                        shm_conn_info->miss_packets_max = miss_packets_max;
                                         recv_lag = 1;
                                         break;
                                     }
@@ -2170,32 +2163,17 @@ int res123 = 0;
                     struct timeval work_loop1, work_loop2;
                     gettimeofday(&work_loop1, NULL );
 #endif
-                    uint16_t my_miss_packets[] = { 0, 0 };
+                    uint16_t my_miss_packets = 0;
                     int another_chan = (my_physical_channel_num == 0) ? 1: 0;
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, mypid, &succ_flag);
-                    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_tail].physical_channel_num
-                            != my_physical_channel_num) {
-                        //my_miss_packets[my_physical_channel_num] = incomplete_seq_len;
-                        my_miss_packets[my_physical_channel_num] = buf_len;
-                        my_miss_packets[another_chan] = 0;
-                    } else {
-                        my_miss_packets[my_physical_channel_num] = 0;
-                        //my_miss_packets[another_chan] = incomplete_seq_len;
-                        my_miss_packets[another_chan] = buf_len;
-                    }
+                    my_miss_packets = buf_len;
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
                     }
                     sem_post(write_buf_sem);
-                    my_miss_packets_max[my_physical_channel_num] =
-                            my_miss_packets[my_physical_channel_num] > my_miss_packets_max[my_physical_channel_num] ?
-                                    my_miss_packets[my_physical_channel_num] : my_miss_packets_max[my_physical_channel_num];
-                    my_miss_packets_max[another_chan] =
-                            my_miss_packets[another_chan] > my_miss_packets_max[another_chan] ?
-                                    my_miss_packets[another_chan] : my_miss_packets_max[another_chan];
 #ifdef DEBUGG
                     gettimeofday(&work_loop2, NULL );
                     vtun_syslog(LOG_INFO, "write_buf_add time: %lu us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));

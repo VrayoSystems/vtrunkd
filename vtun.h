@@ -362,6 +362,7 @@ struct conn_info {
     char normal_senders;
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
+    uint16_t miss_packets_max; // get from another side sync on stats_sem
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
