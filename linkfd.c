@@ -1638,7 +1638,7 @@ int res123 = 0;
 				/* find high speed channel */
                 for (int i = 0; i < 32; i++) {
                     /* check alive channel*/
-                    if (chan_mask & (1 < i)) {
+                    if (chan_mask & (1 << i)) {
                         high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
                     }
                 }
