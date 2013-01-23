@@ -1030,6 +1030,7 @@ int ag_switcher() {
             for (int i = 0; i < SPEED_AVG_ARR; i++) {
                 magic_rtt_avg += magic_speed_rtt_avg[i].rtt / SPEED_AVG_ARR;
             }
+            send_q_full_old = send_q_full;
             gettimeofday(&send_q_mode_switch_time, NULL);
         }
         /*send_q_limit overgrow test*/
@@ -1064,6 +1065,7 @@ int ag_switcher() {
             for (int i = 0; i < SPEED_AVG_ARR; i++) {
                 magic_rtt_avg += magic_speed_rtt_avg[i].rtt / SPEED_AVG_ARR;
             }
+            send_q_full_old = send_q_full;
         }
 
 
@@ -2345,7 +2347,7 @@ int res123 = 0;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (1) { // it is RETRANSMIT_MODE(R_MODE)
+        if (0) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif

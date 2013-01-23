@@ -10,7 +10,7 @@
 
 #include <sys/time.h>
 
-#define SPEED_AVG_ARR 15
+#define SPEED_AVG_ARR 40
 
 struct speed_algo_rtt{
     int rtt;

@@ -32,7 +32,7 @@ int speed_algo_weighed_speed_avg(struct speed_algo_rtt *arr, int arr_size) {
         }
         weight_amount += arr[i].weight;
     }
-    if (simple_avg_flag) {
+    if (1) {
         for (int i = 0; i < arr_size; i++) {
             speed += (arr[i].speed * 10) / arr_size;
         }
