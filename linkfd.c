@@ -119,7 +119,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-uint16_t tmp_flags = 0, tmp_channels_mask = 0, tmp_AG = 0;
+uint16_t tmp_flags = 1, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
@@ -1083,10 +1083,10 @@ int ag_switcher() {
 #endif
     if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
         if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
-            return 1;
+            return 0;
         }
     }
-    return 0;
+    return 1;
 }
 
 int lfd_linker(void)
