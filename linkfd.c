@@ -80,7 +80,6 @@
 #include "net_structs.h"
 #include "netlib.h"
 #include "netlink_socket_info.h"
-#include "speed_algo.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -128,10 +127,9 @@ int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
-int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0, ACK_coming_speed_avg = 0, speed_avg_count = 0;
+int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
 int32_t send_q_limit = 7000;
-int32_t magic_rtt_avg = 0;
-struct speed_algo_rtt magic_speed_rtt_avg[SPEED_AVG_ARR];
+int32_t magic_rtt_avg = 0, magic_rtt[] = {0,0,0,0,0,0,0,0,0,0};
 
 /* Host we are working with.
  * Used by signal handlers that's why it is global.
@@ -1017,21 +1015,40 @@ int ag_switcher() {
     if ((((int)my_max_send_q) < send_q_limit) && (force_hold_mode == 0)) {
         hold_mode = 0;
         if (hold_mode_previous == 1) {
-            speed_avg_count = speed_avg_count >= SPEED_AVG_ARR ? 0 : speed_avg_count;
-            speed_algo_ack_speed_hold(&send_q_read_time, &get_format_tcp_info_call, send_q_full_old, (int) send_q_full,
-                    &(magic_speed_rtt_avg[speed_avg_count++]));
+            struct timeval send_q_read_time_old, send_q_read_time_lag;
+            memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
             memcpy(&send_q_read_time, &get_format_tcp_info_call, sizeof(send_q_read_time));
-            ACK_coming_speed_avg = speed_algo_weighed_speed_avg(magic_speed_rtt_avg, SPEED_AVG_ARR);
+            timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
+            int ACK_left = send_q_full_old - (int) send_q_full;
+            ACK_left = ACK_left < 0 ? 0 : ACK_left;
+//            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
+            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) / 1000 : ACK_left * 1000;
+            ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
+            speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
+            speed_avg[speed_avg_count++] = ACK_coming_speed;
+            ACK_coming_speed_avg = 0;
+            for (int i = 0; i < 10; i++) {
+                ACK_coming_speed_avg += speed_avg[i]/10;
+//                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
+            }
+            ACK_coming_speed_avg = ACK_coming_speed_avg < 1 ? 1 : ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
-            magic_speed_rtt_avg[speed_avg_count - 1].rtt = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
+            magic_rtt[speed_avg_count-1] = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
             magic_rtt_avg = 0;
-            for (int i = 0; i < SPEED_AVG_ARR; i++) {
-                magic_rtt_avg += magic_speed_rtt_avg[i].rtt / SPEED_AVG_ARR;
+            for (int i = 0; i < 10; i++) {
+                magic_rtt_avg += magic_rtt[i]/10;
             }
-            send_q_full_old = send_q_full;
+//            send_q_limit += rtt < 1100 ? 10000 : 0;
+            int32_t send_q_limit_grow = (ACK_coming_speed_avg * 400 - send_q_limit)/2;
+            send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
+//            send_q_limit += send_q_limit_grow;
+//            send_q_limit += rtt < 1100 ? 10000 : 0;
             gettimeofday(&send_q_mode_switch_time, NULL);
+            vtun_syslog(LOG_INFO,
+                    "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
+                    send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
         }
         /*send_q_limit overgrow test*/
         struct timeval curr_time, send_q_mode_switch_time_lag;
@@ -1049,27 +1066,10 @@ int ag_switcher() {
             memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
 //            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
         }
-        struct timeval send_q_read_time_lag;
-        timersub(&get_format_tcp_info_call, &send_q_read_time, &send_q_read_time_lag);
-        if (timercmp(&send_q_read_time_lag, &((struct timeval) {0, 20}), >)) {
-            speed_avg_count = speed_avg_count >= SPEED_AVG_ARR ? 0 : speed_avg_count;
-            speed_algo_ack_speed_hold(&send_q_read_time, &get_format_tcp_info_call, send_q_full_old, (int) send_q_full,
-                    &(magic_speed_rtt_avg[speed_avg_count++]));
-            memcpy(&send_q_read_time, &get_format_tcp_info_call, sizeof(send_q_read_time));
-            ACK_coming_speed_avg = speed_algo_weighed_speed_avg(magic_speed_rtt_avg, SPEED_AVG_ARR);
-            sem_wait(&(shm_conn_info->stats_sem));
-            shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
-            sem_post(&(shm_conn_info->stats_sem));
-            magic_speed_rtt_avg[speed_avg_count - 1].rtt = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
-            magic_rtt_avg = 0;
-            for (int i = 0; i < SPEED_AVG_ARR; i++) {
-                magic_rtt_avg += magic_speed_rtt_avg[i].rtt / SPEED_AVG_ARR;
-            }
-            send_q_full_old = send_q_full;
-        }
 
 
     }
+
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef JSON
@@ -1233,7 +1233,6 @@ int lfd_linker(void)
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
-    memset(magic_speed_rtt_avg, 0, sizeof(struct speed_algo_rtt) * SPEED_AVG_ARR);
     my_max_speed_chan = 0;
     dirty_seq_num = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
@@ -2347,7 +2346,7 @@ int res123 = 0;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (0) { // it is RETRANSMIT_MODE(R_MODE)
+        if (tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
