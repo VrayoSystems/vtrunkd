@@ -113,6 +113,8 @@ EOF
 
 # TODO: dynamic tests!
 
+chmod 777 $TCRULES
+
 #done rules
 
 # run log_getter_srv.sh
@@ -158,4 +160,7 @@ echo "Uploading result..."
 DBOXHOST=grandrew@alternet.homelinux.net # host to upload JSON logs to and parse them on
 DBOXHOST_PORT=10023
 scp -P $DBOXHOST_PORT $CSV $DBOXHOST:~/Dropbox/alarm_logs/
+
+
+rm $TCRULES
 
