@@ -2329,7 +2329,9 @@ int res123 = 0;
         }
         sem_post(write_buf_sem);
 
-        if(hold_mode){continue;}
+        if (hold_mode && tmp_flags) {
+            continue;
+        }
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
