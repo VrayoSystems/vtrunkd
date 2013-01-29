@@ -80,6 +80,7 @@
 #include "net_structs.h"
 #include "netlib.h"
 #include "netlink_socket_info.h"
+#include "speed_algo.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -126,8 +127,10 @@ int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
 
 /*Variables for the exact way of measuring speed*/
+struct timeval get_format_tcp_info_call = {0, 0}, get_format_tcp_info_call_old = {0, 0};
+struct speed_algo_rtt_speed rtt_speed_arr[SPEED_AVG_ARR] = { [0 ... SPEED_AVG_ARR - 1].speed = 0, [0 ... SPEED_AVG_ARR - 1].rtt = 0 };
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
-int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed = 0,ACK_coming_speed_avg = 0, speed_avg[] = {0,0,0,0,0,0,0,0,0,0}, speed_avg_count = 0;
+int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed_avg = 0, speed_avg_count = 0;
 int32_t send_q_limit = 7000;
 int32_t magic_rtt_avg = 0, magic_rtt[] = {0,0,0,0,0,0,0,0,0,0};
 
@@ -966,7 +969,6 @@ int ag_switcher() {
         my_max_speed_chan = max_speed_chan;
     }
 
-    struct timeval get_format_tcp_info_call;
     gettimeofday(&get_format_tcp_info_call, NULL);
     if(!get_format_tcp_info(chan_info, chan_amt)) {
         /*TODO may be need add error counter, because if we have one error
@@ -1011,63 +1013,38 @@ int ag_switcher() {
     } else {
 //        send_q_limit = 33000;
     }
-    int hold_mode_previous = hold_mode;
-    if ((((int)my_max_send_q) < send_q_limit) && (force_hold_mode == 0)) {
-        hold_mode = 0;
-        if (hold_mode_previous == 1) {
-            struct timeval send_q_read_time_old, send_q_read_time_lag;
-            memcpy(&send_q_read_time_old, &send_q_read_time, sizeof(send_q_read_time));
-            memcpy(&send_q_read_time, &get_format_tcp_info_call, sizeof(send_q_read_time));
-            timersub(&send_q_read_time, &send_q_read_time_old, &send_q_read_time_lag);
-            int ACK_left = send_q_full_old - (int) send_q_full;
-            ACK_left = ACK_left < 0 ? 0 : ACK_left;
-//            vtun_syslog(LOG_INFO,"send_q_read_time_lag.tv_usec - %lu",send_q_read_time_lag.tv_usec);
-            ACK_left = send_q_read_time_lag.tv_sec > 0 ? (ACK_left / send_q_read_time_lag.tv_sec) / 1000 : ACK_left * 1000;
-            ACK_coming_speed = (ACK_left) / (send_q_read_time_lag.tv_usec);
-            speed_avg_count = speed_avg_count >= 10 ? 0 : speed_avg_count;
-            speed_avg[speed_avg_count++] = ACK_coming_speed;
-            ACK_coming_speed_avg = 0;
-            for (int i = 0; i < 10; i++) {
-                ACK_coming_speed_avg += speed_avg[i]/10;
-//                vtun_syslog(LOG_INFO,"speed_avg[%i] - %u speed_avg[%i]/10 - %u ACK_coming_speed_avg - %u",i,speed_avg[i],i,speed_avg[i]/10,ACK_coming_speed_avg);
-            }
-            ACK_coming_speed_avg = ACK_coming_speed_avg < 1 ? 1 : ACK_coming_speed_avg;
+
+    /* ACK_coming_speed recalculation */
+    if ((send_q_full_old + sended_bytes - send_q_full) > 2000) {
+        int ACK_coming_speed = speed_algo_ack_speed(&get_format_tcp_info_call_old, &get_format_tcp_info_call, send_q_full_old, send_q_full,
+                sended_bytes);
+        memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
+        send_q_full_old = send_q_full;
+        sended_bytes = 0;
+        if (ACK_coming_speed > 0) {
+            ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
-            magic_rtt[speed_avg_count-1] = ACK_coming_speed_avg == 0 ? 0 : my_max_send_q / ACK_coming_speed_avg;
-            magic_rtt_avg = 0;
-            for (int i = 0; i < 10; i++) {
-                magic_rtt_avg += magic_rtt[i]/10;
-            }
-//            send_q_limit += rtt < 1100 ? 10000 : 0;
-            int32_t send_q_limit_grow = (ACK_coming_speed_avg * 400 - send_q_limit)/2;
-            send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
-//            send_q_limit += send_q_limit_grow;
-//            send_q_limit += rtt < 1100 ? 10000 : 0;
-            gettimeofday(&send_q_mode_switch_time, NULL);
-            vtun_syslog(LOG_INFO,
-                    "send_q_full - %u send_q_full_old - %u send_q_read_time_lag_us - %lu send_q_read_time_lag_s - %lu, ACK_coming - %i, ACK_coming_avg - %i - help!!!!!!!!",
-                    send_q_full, send_q_full_old, send_q_read_time_lag.tv_usec,send_q_read_time_lag.tv_sec, ACK_coming_speed, ACK_coming_speed_avg);
+        } else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
+            vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
+        } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
+            vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
+            ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, /*ACK_coming_speed = */0, &speed_avg_count);
+            sem_wait(&(shm_conn_info->stats_sem));
+            shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
+            sem_post(&(shm_conn_info->stats_sem));
+        } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
+            vtun_syslog(LOG_WARNING, "ERROR - speed very high, need to wait more time");
         }
-        /*send_q_limit overgrow test*/
-        struct timeval curr_time, send_q_mode_switch_time_lag;
-        gettimeofday(&curr_time, NULL);
-        timersub(&curr_time, &send_q_mode_switch_time, &send_q_mode_switch_time_lag);
-//        if (timercmp(&send_q_mode_switch_time_lag, &((struct timeval) {0, 50000}), >) & (send_q_limit > my_max_send_q)) {
-//            send_q_limit = my_max_send_q > 7000 ? send_q_limit - (send_q_limit - my_max_send_q) / 2 : send_q_limit - (send_q_limit - 7000) / 2;
-//        }
+    }
 
+    int hold_mode_previous = hold_mode;
+    if ((((int) my_max_send_q) < send_q_limit) && (force_hold_mode == 0)) {
+        hold_mode = 0;
     } else {
         hold_mode = 1;
         force_hold_mode = 0;
-        if (hold_mode_previous == 0) {
-            send_q_full_old = send_q_full;
-            memcpy(&send_q_read_time,&get_format_tcp_info_call,sizeof(send_q_read_time));
-//            send_q_limit = (my_max_send_q+20000) < send_q_limit ? my_max_send_q+20000 : send_q_limit;
-        }
-
-
     }
 
     uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
@@ -1608,11 +1585,10 @@ int res123 = 0;
 				if (high_speed_chan == my_physical_channel_num){
 				    send_q_limit_grow = ((90 - (int)miss_packets_max)*1300 - send_q_limit)/2;
 				} else {
-                shm_conn_info->stats[high_speed_chan].ACK_speed =
-                        shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
+                int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
                 // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
                 send_q_limit_grow = ((((90 - (int)miss_packets_max) * 1300
-                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / shm_conn_info->stats[high_speed_chan].ACK_speed) - send_q_limit)/2;
+                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / ACK_speed_high_speed) - send_q_limit)/2;
 				}
 				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
 				send_q_limit += send_q_limit_grow;
