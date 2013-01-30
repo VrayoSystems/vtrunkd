@@ -1085,7 +1085,7 @@ int ag_switcher() {
     }
 
     int hold_mode_previous = hold_mode;
-    if ((((int) my_max_send_q) < send_q_limit) && (force_hold_mode == 0)) {
+    if ((((int) my_max_send_q) < send_q_limit)) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
@@ -2011,7 +2011,7 @@ int res123 = 0;
                         sem_post(resend_buf_sem);
                         
                         // drop the SQL
-                        send_q_limit = START_SQL;
+                        //send_q_limit = START_SQL;
 
                                                 if(len <= 0) {
                             statb.rxmits_notfound++;
