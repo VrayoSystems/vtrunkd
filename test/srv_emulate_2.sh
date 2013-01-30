@@ -4,8 +4,8 @@
 echo "eth1 - bad yota:"
 tc qdisc del dev eth1 root
 tc qdisc add dev eth1 root handle 1: htb default 12
-tc class add dev eth1 parent 1:1 classid 1:12 htb rate 5000kbit ceil 5000kbit
-tc qdisc add dev eth1 parent 1:12 netem delay 10ms 10ms 50%
+tc class add dev eth1 parent 1:1 classid 1:12 htb rate 600kbit ceil 600kbit
+tc qdisc add dev eth1 parent 1:12 netem delay 100ms 50ms 50%
 #tc qdisc add dev eth1 root handle 1:0 netem delay 60ms 5ms 25%
 #tc qdisc add dev eth1 parent 1:1 handle 10: tbf rate 20mbit buffer 100kb limit 3000
 tc -s qdisc ls dev eth1

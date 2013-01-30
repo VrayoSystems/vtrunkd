@@ -1014,29 +1014,66 @@ int ag_switcher() {
 //        send_q_limit = 33000;
     }
 
+    int speed_success = 0;
+
     /* ACK_coming_speed recalculation */
+    vtun_syslog(LOG_INFO,"sended_bytes - %u send_q_full - %u send_q_full_old - %u",sended_bytes,send_q_full,send_q_full_old);
     if ((send_q_full_old + sended_bytes - send_q_full) > 2000) {
         int ACK_coming_speed = speed_algo_ack_speed(&get_format_tcp_info_call_old, &get_format_tcp_info_call, send_q_full_old, send_q_full,
                 sended_bytes);
-        memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
-        send_q_full_old = send_q_full;
-        sended_bytes = 0;
-        if (ACK_coming_speed > 0) {
+        if (ACK_coming_speed >= 0) {
+            memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
+            send_q_full_old = send_q_full;
+            sended_bytes = 0;
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
+            speed_success = 1;
         } else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
             vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
         } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
+            memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
+            send_q_full_old = send_q_full;
+            sended_bytes = 0;
             vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, /*ACK_coming_speed = */0, &speed_avg_count);
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
+            speed_success = 1;
         } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
             vtun_syslog(LOG_WARNING, "ERROR - speed very high, need to wait more time");
         }
+    }
+
+    if (speed_success) {
+        sem_wait(&(shm_conn_info->AG_flags_sem));
+        uint32_t chan_mask = shm_conn_info->channels_mask;
+        sem_post(&(shm_conn_info->AG_flags_sem));
+        sem_wait(&(shm_conn_info->stats_sem));
+        miss_packets_max = shm_conn_info->miss_packets_max;
+        int send_q_limit_grow;
+        int high_speed_chan = 0;
+        /* find high speed channel */
+        for (int i = 0; i < 32; i++) {
+            /* check alive channel*/
+            if (chan_mask & (1 << i)) {
+                high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
+            }
+        }
+        if (high_speed_chan == my_physical_channel_num) {
+            send_q_limit_grow = ((90 - (int) miss_packets_max) * 1300 - send_q_limit) / 2;
+        } else {
+            int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
+            // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
+            send_q_limit_grow = ((((90 - (int) miss_packets_max) * 1300 * (shm_conn_info->stats[my_physical_channel_num].ACK_speed))
+                    / ACK_speed_high_speed) - send_q_limit) / 2;
+        }
+        sem_post(&(shm_conn_info->stats_sem));
+        send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
+        send_q_limit += send_q_limit_grow;
+        send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
     }
 
     int hold_mode_previous = hold_mode;
@@ -1568,33 +1605,6 @@ int res123 = 0;
                     shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_data_len_amt += len1;
                     sended_bytes += len1;
                 }
-                sem_wait(&(shm_conn_info->AG_flags_sem));
-                uint32_t chan_mask = shm_conn_info->channels_mask;
-                sem_post(&(shm_conn_info->AG_flags_sem));
-				sem_wait(&(shm_conn_info->stats_sem));
-				miss_packets_max = shm_conn_info->miss_packets_max;
-				int send_q_limit_grow;
-                int high_speed_chan = 0;
-				/* find high speed channel */
-                for (int i = 0; i < 32; i++) {
-                    /* check alive channel*/
-                    if (chan_mask & (1 << i)) {
-                        high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
-                    }
-                }
-				if (high_speed_chan == my_physical_channel_num){
-				    send_q_limit_grow = ((90 - (int)miss_packets_max)*1300 - send_q_limit)/2;
-				} else {
-                int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-                // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-                send_q_limit_grow = ((((90 - (int)miss_packets_max) * 1300
-                        *  (shm_conn_info->stats[my_physical_channel_num].ACK_speed)) / ACK_speed_high_speed) - send_q_limit)/2;
-				}
-				send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
-				send_q_limit += send_q_limit_grow;
-				send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
-	            sem_post(&(shm_conn_info->stats_sem));
-
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
                    vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm,  statb.bytes_rcvd_norm,  statb.bytes_sent_rx,  statb.pkts_dropped, statb.rxmit_req_rx,  statb.rxmits,  statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, chan_amt, std_dev(statb.bytes_sent_chan, chan_amt), std_dev(&statb.bytes_rcvd_chan[1], (chan_amt-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
@@ -2324,7 +2334,7 @@ int res123 = 0;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
+        if (0) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif

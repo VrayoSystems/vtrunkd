@@ -6,11 +6,13 @@
  */
 
 #include <sys/time.h>
+#include <syslog.h>
 #include "speed_algo.h"
+#include "lib.h"
 
 /**
- * Function for ACK_coming_speed = bytes_left/time.
- * Idea - was + more = now + left --> left = was + more - now
+ * Function for ACK_coming_speed = bytes_acked/time.
+ * Idea - was + more = now + acked --> acked = was + more - now
  *
  * @param time_start
  * @param time_stop
@@ -21,21 +23,24 @@
  */
 int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, int byte_was, int byte_now, int byte_more) {
     int speed = 0;
-    struct timeval time_left;
+    struct timeval time_passed;
+    timersub(time_stop, time_start, &time_passed);
+    vtun_syslog(LOG_INFO,"was %i + more %i == acked %i + now %i  / time_passed - %ul s %ul us ", byte_was, byte_more,byte_was + byte_more - byte_now, byte_now, time_passed.tv_sec, time_passed.tv_usec);
     if (byte_more < 0) {
-        return SPEED_ALGO_SLOW_SPEED;
-    }
-    int byte_left = byte_was + byte_more - byte_now;
-    if (byte_left <= 0) {
         return SPEED_ALGO_OVERFLOW;
     }
-    timersub(time_stop, time_start, &time_left);
-    if (timercmp(&time_left, &((struct timeval) {0, 200}), <)) {
+    int byte_acked = byte_was + byte_more - byte_now;
+    if (byte_acked == 0) {
+        return SPEED_ALGO_SLOW_SPEED;
+    }
+//    timersub(time_stop, time_start, &time_passed);
+    if (timercmp(&time_passed, &((struct timeval) {0, 200}), <)) {
         return SPEED_ALGO_HIGH_SPEED;
     }
-    int time_left_ms = time_left.tv_sec * 10000; // in ms*10
-    time_left_ms += time_left.tv_usec / 100;
-    speed = (byte_left * 10) / time_left_ms;
+    int time_passed_ms = time_passed.tv_sec * (1000000/100); // in ms*10
+    time_passed_ms += time_passed.tv_usec / 100;
+    speed = (byte_acked * 10) / time_passed_ms;
+    vtun_syslog(LOG_INFO,"speed_moment - %i", speed);
     return speed;
 }
 
@@ -49,11 +54,13 @@ int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, 
  */
 int speed_algo_avg_speed(struct speed_algo_rtt_speed *arr, int arr_size, int new_speed, int *counter) {
     int speed_avg = 0;
-    arr[*counter++].speed = new_speed;
+    vtun_syslog(LOG_INFO,"new_speed - %i counter - %i",new_speed, *counter);
+    arr[(*counter)++].speed = new_speed;
     for (int i = 0; i < arr_size; i++) {
-        speed_avg += arr[i].speed * 10 / arr_size;
+        vtun_syslog(LOG_INFO,"speed[%i] - %i",i, arr[i].speed );
+        speed_avg += arr[i].speed * 100 / arr_size;
     }
     *counter = *counter == arr_size ? 0 : *counter;
-    return speed_avg / 10;
+    return speed_avg / 100;
 }
 
