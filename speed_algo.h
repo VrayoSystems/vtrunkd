@@ -20,7 +20,7 @@ struct speed_algo_rtt_speed {
     int speed;
 };
 
-int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, int byte_was, int byte_now, int byte_more);
+int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, int byte_was, int byte_now, int byte_more, int min_time_usec);
 int speed_algo_avg_speed(struct speed_algo_rtt_speed *arr, int arr_size, int new_speed, int *counter);
 
 #endif /* SPEED_ALGO_H_ */

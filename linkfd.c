@@ -1019,13 +1019,17 @@ int ag_switcher() {
     /* ACK_coming_speed recalculation */
     vtun_syslog(LOG_INFO,"sended_bytes - %u send_q_full - %u send_q_full_old - %u",sended_bytes,send_q_full,send_q_full_old);
     if ((send_q_full_old + sended_bytes - send_q_full) > 2000) {
+        int skip_time_usec = magic_rtt_avg / 10 * 1000;
+        skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
+        skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
         int ACK_coming_speed = speed_algo_ack_speed(&get_format_tcp_info_call_old, &get_format_tcp_info_call, send_q_full_old, send_q_full,
-                sended_bytes);
+                sended_bytes, skip_time_usec);
         if (ACK_coming_speed >= 0) {
             memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
             send_q_full_old = send_q_full;
             sended_bytes = 0;
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
+            magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1: my_max_send_q / ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
@@ -1038,6 +1042,7 @@ int ag_switcher() {
             sended_bytes = 0;
             vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, /*ACK_coming_speed = */0, &speed_avg_count);
+            magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1: my_max_send_q / ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
             sem_post(&(shm_conn_info->stats_sem));
@@ -1062,12 +1067,15 @@ int ag_switcher() {
                 high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
             }
         }
+        int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
+        int EBL = ACK_speed_high_speed * 2000;
+        int max_EBL = (90 - (int) miss_packets_max) * 1300;
+        EBL = EBL > max_EBL ? max_EBL : EBL;
         if (high_speed_chan == my_physical_channel_num) {
-            send_q_limit_grow = ((90 - (int) miss_packets_max) * 1300 - send_q_limit) / 2;
+            send_q_limit_grow = (EBL - send_q_limit) / 2;
         } else {
-            int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
             // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-            send_q_limit_grow = ((((90 - (int) miss_packets_max) * 1300 * (shm_conn_info->stats[my_physical_channel_num].ACK_speed))
+            send_q_limit_grow = (((EBL * (shm_conn_info->stats[my_physical_channel_num].ACK_speed))
                     / ACK_speed_high_speed) - send_q_limit) / 2;
         }
         sem_post(&(shm_conn_info->stats_sem));

@@ -21,11 +21,11 @@
  * @param byte_more
  * @return speed or error -1 - byte_more overflow, -2 - bad measure or speed --> 0, -3 - high speed, need wait one more time
  */
-int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, int byte_was, int byte_now, int byte_more) {
+int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, int byte_was, int byte_now, int byte_more, int min_time_usec) {
     int speed = 0;
     struct timeval time_passed;
     timersub(time_stop, time_start, &time_passed);
-    vtun_syslog(LOG_INFO,"was %i + more %i == acked %i + now %i  / time_passed - %ul s %ul us ", byte_was, byte_more,byte_was + byte_more - byte_now, byte_now, time_passed.tv_sec, time_passed.tv_usec);
+    vtun_syslog(LOG_INFO,"was %i + more %i == acked %i + now %i  / time_passed - %ul s %ul us, min_time_usec = %i", byte_was, byte_more,byte_was + byte_more - byte_now, byte_now, time_passed.tv_sec, time_passed.tv_usec, min_time_usec);
     if (byte_more < 0) {
         return SPEED_ALGO_OVERFLOW;
     }
@@ -34,7 +34,7 @@ int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, 
         return SPEED_ALGO_SLOW_SPEED;
     }
 //    timersub(time_stop, time_start, &time_passed);
-    if (timercmp(&time_passed, &((struct timeval) {0, 200}), <)) {
+    if (timercmp(&time_passed, &((struct timeval) {0, min_time_usec}), <)) {
         return SPEED_ALGO_HIGH_SPEED;
     }
     int time_passed_ms = time_passed.tv_sec * (1000000/100); // in ms*10
