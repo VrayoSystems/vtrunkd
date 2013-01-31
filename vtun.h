@@ -371,7 +371,7 @@ struct conn_info {
     long int alive;
     int rdy; /* ready flag */
     sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
-    uint32_t AG_ready_flags; // contain flags for all physical channels 1 - retransmit mode, 0 - ready to aggregation
+    uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable
     uint32_t channels_mask; // 1 - channel is working 0 - channel is dead
 };
 

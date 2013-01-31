@@ -1067,6 +1067,13 @@ int ag_switcher() {
                 high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
             }
         }
+        /*ag switching enable*/
+        if (high_speed_chan == my_physical_channel_num) {
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000) ? 0 : 1;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+        }
+
         int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
         int EBL = ACK_speed_high_speed * 2000; // max allowed latency (ping) for our system in ms for best results
         int max_EBL = (90 - (int) miss_packets_max) * 1300;
@@ -1499,15 +1506,6 @@ int res123 = 0;
         if ((timercmp_result) | (ag_switch_flag)) {
             dirty_seq_num_checked_flag = 1;
             tmp_flags = ag_switcher();
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            if (tmp_flags == 1) {
-                shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num);
-            } else {
-                shm_conn_info->AG_ready_flags &= ~(1 << my_physical_channel_num);
-            }
-            tmp_AG = shm_conn_info->AG_ready_flags;
-            tmp_channels_mask = shm_conn_info->channels_mask;
-            sem_post(&(shm_conn_info->AG_flags_sem));
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
         }
@@ -2342,13 +2340,13 @@ int res123 = 0;
              *
              * */
         sem_wait(&(shm_conn_info->AG_flags_sem));
-        //tmp_flags = shm_conn_info->AG_ready_flags ^ shm_conn_info->channels_mask;
+        uint32_t AG_ready_flag_tmp = shm_conn_info->AG_ready_flag;
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
 #endif
-        if (0) { // it is RETRANSMIT_MODE(R_MODE)
+        if (AG_ready_flag_tmp | tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
@@ -2486,7 +2484,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_physical_channel_num = physical_channel_num;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << my_physical_channel_num); // add channel num to binary mask
-    shm_conn_info->AG_ready_flags |= (1 << my_physical_channel_num); // start with disable AG mode
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, my_physical_channel_num);
 #endif
