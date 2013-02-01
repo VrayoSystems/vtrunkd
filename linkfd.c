@@ -1711,8 +1711,8 @@ int res123 = 0;
         FD_ZERO(&fdset);
         if (hold_mode == 0) {
             FD_SET(tun_device, &fdset);
-            tv.tv_sec = timer_resolution.tv_sec;
-            tv.tv_usec = timer_resolution.tv_usec;
+            tv.tv_sec = 0;
+            tv.tv_usec = 200000;
         } else {
             tv.tv_sec = get_info_time.tv_sec;
             tv.tv_usec = get_info_time.tv_usec;
