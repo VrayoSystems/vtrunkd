@@ -1075,7 +1075,7 @@ int ag_switcher() {
         }
 
         int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-        int EBL = ACK_speed_high_speed * 2000; // max allowed latency (ping) for our system in ms for best results
+        int EBL = ACK_speed_high_speed * 2000;
         int max_EBL = (90 - (int) miss_packets_max) * 1300;
         EBL = EBL > max_EBL ? max_EBL : EBL;
         if (high_speed_chan == my_physical_channel_num) {
@@ -1470,21 +1470,19 @@ int res123 = 0;
     
     alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
+    get_info_time.tv_sec = 0;
+    get_info_time.tv_usec = 10000;
     int dirty_seq_num_checked_flag = 0;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
     timer_resolution.tv_sec = 1;
     timer_resolution.tv_usec = 0;
-    get_info_time.tv_sec = 0;
-    get_info_time.tv_usec = 5000; // hold mode resolution in usec
-
 
 /**
  * Main program loop
  */
     while( !linker_term ) {
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
-
         errno = 0;
         gettimeofday(&cur_time, NULL);
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
@@ -1711,22 +1709,18 @@ int res123 = 0;
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
-       
         if (hold_mode == 0) {
             FD_SET(tun_device, &fdset);
-            //tv.tv_sec = timer_resolution.tv_sec;
-            //tv.tv_usec = timer_resolution.tv_usec;
-            tv.tv_sec = 0;
-            tv.tv_usec = 200000;
+            tv.tv_sec = timer_resolution.tv_sec;
+            tv.tv_usec = timer_resolution.tv_usec;
         } else {
-            //tv.tv_sec = get_info_time.tv_sec;
-            //tv.tv_usec = get_info_time.tv_usec;
+            tv.tv_sec = get_info_time.tv_sec;
+            tv.tv_usec = get_info_time.tv_usec;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "tun read select skip");
             vtun_syslog(LOG_INFO, "debug: HOLD_MODE");
 #endif
         }
-        
         for(i=0; i<chan_amt; i++) {
             FD_SET(channels[i], &fdset);
         }
