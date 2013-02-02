@@ -107,12 +107,15 @@ if $NOCOMPILE; then
         echo "-- Not compiling sources!!"
         echo "Copying TC rules from $TCRULES"
         scp $TCRULES user@srv-32:$VTRUNKD_V_ROOT/test/srv_emulate_2.sh
+        ssh user@srv-32 "sync"
 else
         echo "Copying vtrunkd sources ..."
         ssh user@cli-32 "mkdir -p $VTRUNKD_V_ROOT"
         ssh user@srv-32 "mkdir -p $VTRUNKD_V_ROOT"
         scp -r $VTRUNKD_L_ROOT/* user@srv-32:$VTRUNKD_V_ROOT/
         scp -r $VTRUNKD_L_ROOT/* user@cli-32:$VTRUNKD_V_ROOT/
+        ssh user@srv-32 "sync"
+        ssh user@cli-32 "sync"
         echo "Compiling vtrunkd ..."
         if ssh user@srv-32 "cd $VTRUNKD_V_ROOT; make clean; make"; then 
             echo "OK"

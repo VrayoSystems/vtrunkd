@@ -702,7 +702,7 @@ int select_devread_send(char *buf, char *out2, int mypid) {
     statb.bytes_sent_norm += len;
 
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num);
+    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
     vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %lu len %d", chan_num, tmp_seq_counter, len);
 #endif
     struct timeval send1; // need for mean_delay calculation (legacy)
@@ -1029,6 +1029,7 @@ int ag_switcher() {
             send_q_full_old = send_q_full;
             sended_bytes = 0;
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
+            ACK_coming_speed_avg = ACK_coming_speed_avg == 0 ? 1 : ACK_coming_speed_avg;
             magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1: my_max_send_q / ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
@@ -1042,6 +1043,7 @@ int ag_switcher() {
             sended_bytes = 0;
             vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
             ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, /*ACK_coming_speed = */0, &speed_avg_count);
+            ACK_coming_speed_avg = ACK_coming_speed_avg == 0 ? 1 : ACK_coming_speed_avg;
             magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1: my_max_send_q / ACK_coming_speed_avg;
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[my_physical_channel_num].ACK_speed = ACK_coming_speed_avg;
@@ -1075,9 +1077,7 @@ int ag_switcher() {
         }
 
         int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-        int EBL = ACK_speed_high_speed * 2000;
-        int max_EBL = (90 - (int) miss_packets_max) * 1300;
-        EBL = EBL > max_EBL ? max_EBL : EBL;
+        int EBL = (90 - (int) miss_packets_max) * 1300;
         if (high_speed_chan == my_physical_channel_num) {
             send_q_limit_grow = (EBL - send_q_limit) / 2;
         } else {
@@ -1472,7 +1472,6 @@ int res123 = 0;
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
     get_info_time.tv_usec = 10000;
-    int dirty_seq_num_checked_flag = 0;
     get_info_time_last.tv_sec = 0;
     get_info_time_last.tv_usec = 0;
     timer_resolution.tv_sec = 1;
@@ -1489,20 +1488,13 @@ int res123 = 0;
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
         int ag_switch_flag = 0;
-        if ((dirty_seq_num % 5) == 0) {
-            if (!dirty_seq_num_checked_flag) {
-                ag_switch_flag = 1;
-            }
-        } else {
-            dirty_seq_num_checked_flag = 0;
-        }
-        if ((dirty_seq_num % 50) == 0 && hold_mode == 0) {
+        
+        if ((dirty_seq_num % 6) == 0) {
             dirty_seq_num++;
             ag_switch_flag = 1;
-            force_hold_mode = 1;
         }
-        if ((timercmp_result) | (ag_switch_flag)) {
-            dirty_seq_num_checked_flag = 1;
+        
+        if ( timercmp_result || ag_switch_flag ) {
             tmp_flags = ag_switcher();
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
@@ -2355,7 +2347,9 @@ int res123 = 0;
             vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 len = select_devread_send(buf, out2, mypid);
-                if (len == BREAK_ERROR) {
+                if (len > 0) {
+                    dirty_seq_num++;
+                } else if (len == BREAK_ERROR) {
                     vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                     break;
                 } else if (len == CONTINUE_ERROR) {
