@@ -395,60 +395,75 @@ int tunnel(struct vtun_host *host, int srv)
 
 	   case VTUN_TUN:
 	      if( (fd[0]=tun_open(dev)) < 0 ){ // 
-                    if(srv) {
-                         vtun_syslog(LOG_INFO,"vtrunkd SERVER: trying to attach to running server");
-                         if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
-                              vtun_syslog(LOG_ERR,"shmget 3");
-                              return -1;
-                         }
-                         if ((shm_conn_info = shmat(shmid, NULL, 0)) == ((struct conn_info *) -1)) {
-                              vtun_syslog(LOG_ERR,"shmat 3");
-                              return -1;
-                         }
-                         // now scan for names, only fail if no found
-                         for(i=0; i<vtun.MAX_TUNNELS_NUM;i++) {
-                              if(strcmp(shm_conn_info[i].devname, dev) == 0) {
-                                   connid = i;
-                                   break;
-                              }
-                         }
-                         if(connid < 0) {
-                              vtun_syslog(LOG_ERR,"Can't allocate tun device %s. %s(%d) - did not find master server shm", dev, strerror(errno), errno);
-                              return 0;
-                         }
-                         if(!shm_conn_info[connid].rdy) {
-                              vtun_syslog(LOG_ERR, "SHM not ready yet; try again");
-                              return 0;
-                         }
+                int while_end = 1;
+                for (int i = 0; while_end; i++) {
+                    if (srv) {
+                        vtun_syslog(LOG_INFO, "vtrunkd SERVER: trying to attach to running server");
+                        if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
+                            vtun_syslog(LOG_ERR, "shmget 3");
+                            return -1;
+                        }
+                        if ((shm_conn_info = shmat(shmid, NULL, 0)) == ((struct conn_info *) -1)) {
+                            vtun_syslog(LOG_ERR, "shmat 3");
+                            return -1;
+                        }
+                        // now scan for names, only fail if no found
+                        for (i = 0; i < vtun.MAX_TUNNELS_NUM; i++) {
+                            if (strcmp(shm_conn_info[i].devname, dev) == 0) {
+                                connid = i;
+                                break;
+                            }
+                        }
+                        if (connid < 0) {
+                            vtun_syslog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find master server shm", dev, strerror(errno),
+                                    errno);
+                            return 0;
+                        }
+                        if (!shm_conn_info[connid].rdy) {
+                            if (i == 20) {
+                                vtun_syslog(LOG_ERR, "SHM not ready EXIT");
+                                return 0;
+                            }
+                            vtun_syslog(LOG_WARNING, "SHM not ready yet; I'll try again");
+                            usleep(200000);
+                            continue;
+                        }
                     } else {
-                         vtun_syslog(LOG_INFO,"vtrunkd CLIENT: trying to attach to running buddy");
-                         // match only first conn...
-                         // here comes the play. !. detect whether we are server or client??
-                         if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info), 0666)) < 0) {
-                              vtun_syslog(LOG_ERR,"shmget 4");
-                              return -1;
-                         }
-                         if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) -1) {
-                              vtun_syslog(LOG_ERR,"shmat 4"); // FAULT HERE
-                              return -1;
-                         }
-                         
-                         // now see if it is available.. only exit if not available
-                         // never reaches here if not available...
-                         if(strcmp(shm_conn_info[0].devname, dev) == 0) {
-                              // ok
-                              connid = 0;
-                         } else {
-                              vtun_syslog(LOG_ERR,"Can't allocate tun device %s. %s(%d) - did not find running buddy shm %s != %s",
-                                          dev, strerror(errno), errno, shm_conn_info[0].devname, dev);
-                              return 0;
-                         }
-                         if(!shm_conn_info[connid].rdy) {
-                              vtun_syslog(LOG_ERR, "SHM not ready yet; try again");
-                              return 0;
-                         }
+                        vtun_syslog(LOG_INFO, "vtrunkd CLIENT: trying to attach to running buddy");
+                        // match only first conn...
+                        // here comes the play. !. detect whether we are server or client??
+                        if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info), 0666)) < 0) {
+                            vtun_syslog(LOG_ERR, "shmget 4");
+                            return -1;
+                        }
+                        if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) -1) {
+                            vtun_syslog(LOG_ERR, "shmat 4"); // FAULT HERE
+                            return -1;
+                        }
+
+                        // now see if it is available.. only exit if not available
+                        // never reaches here if not available...
+                        if (strcmp(shm_conn_info[0].devname, dev) == 0) {
+                            // ok
+                            connid = 0;
+                        } else {
+                            vtun_syslog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find running buddy shm %s != %s", dev,
+                                    strerror(errno), errno, shm_conn_info[0].devname, dev);
+                            return 0;
+                        }
+                        if (!shm_conn_info[connid].rdy) {
+                            if (i == 20) {
+                                vtun_syslog(LOG_ERR, "SHM not ready EXIT");
+                                return 0;
+                            }
+                            vtun_syslog(LOG_WARNING, "SHM not ready yet; I'll try again");
+                            usleep(200000);
+                            continue;
+                        }
 
                     }
+                    break;
+                }
 
                     
                     // in either case, try to read
