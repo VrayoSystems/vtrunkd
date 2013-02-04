@@ -1,9 +1,0 @@
-break main.c:main
-run -f /etc/vtrunkd-cli.test.conf atest2 192.168.58.101 -P 5003
-
-set follow-fork-mode child
-break tunnel.c:tunnel
-continue
-
-set follow-fork-mode parent
-continue
