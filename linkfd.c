@@ -495,6 +495,9 @@ int check_fast_resend() {
  * Function for trying resend
  */
 int retransmit_send(char *out2, int mypid) {
+    if (hold_mode) {
+        return CONTINUE_ERROR;
+    }
     int len = 0, send_counter = 0;
     unsigned long top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
     sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -2313,9 +2316,6 @@ int res123 = 0;
         }
         sem_post(write_buf_sem);
 
-        if (hold_mode && tmp_flags) {
-            continue;
-        }
 
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
