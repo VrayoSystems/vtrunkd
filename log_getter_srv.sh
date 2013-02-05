@@ -234,6 +234,8 @@ scp -P $DBOXHOST_PORT /tmp/${COUNT}.tbz $DBOXHOST:~/Dropbox/alarm_logs/
 rm /tmp/${PREFIX}syslog*
 echo "Drawing graphs"
 ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion.py $COUNT"
+echo "Drawing graphs client"
+ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; python ./parse_json_fusion_cli.py $COUNT"
 echo "Clear alarm_logs..."
 ssh -p $DBOXHOST_PORT $DBOXHOST "cd ~/Dropbox/alarm_logs/; rm *json"
 echo "Clear syslog"
