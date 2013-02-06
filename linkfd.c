@@ -1113,10 +1113,8 @@ int ag_switcher() {
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags);
 #endif
-    if (max_speed > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000)) {
-        if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
-            return 0;
-        }
+    if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
+        return 0;
     }
     return 1;
 }
