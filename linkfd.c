@@ -2430,7 +2430,7 @@ int res123 = 0;
 
     vtun_syslog(LOG_INFO, "exiting linker loop");
     if( !linker_term && errno )
-        vtun_syslog(LOG_INFO,"%s (%d)", strerror(errno), errno);
+        vtun_syslog(LOG_INFO,"Reason: %s (%d)", strerror(errno), errno);
 
     if (linker_term == VTUN_SIG_TERM) {
         lfd_host->persist = 0;
@@ -2448,7 +2448,8 @@ int res123 = 0;
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
     lfd_free(buf);
-    free(out_buf);
+
+    lfd_free(out_buf);
     unlink(pid_file);
     close(mypid_file);
 

@@ -733,7 +733,6 @@ int tunnel(struct vtun_host *host, int srv)
      }
 
      opt = linkfd(host, &(shm_conn_info[connid]), srv, my_conn_num);
-
      set_title("%s running down commands", host->host);
 
      if(srv) {
