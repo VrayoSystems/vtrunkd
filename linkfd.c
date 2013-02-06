@@ -1992,10 +1992,13 @@ int res123 = 0;
 						} else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
+                    /*
+                    // TODO: do we need to slow down here?
                         if(hold_mode) {
                             vtun_syslog(LOG_ERR, "Resend blocked due to hold_mode = 1: seq %lu; rxm_notf %d chan %d", ntohl(*((unsigned long *)buf)), statb.rxmits_notfound, chan_num);
                             continue;
                         }
+                    */
 
 
                         sem_wait(resend_buf_sem);
