@@ -935,22 +935,22 @@ int sem_wait_tw(sem_t *sem) {
  */
 int ag_switcher() {
     if (srv) {
-#ifdef DEBUGG
+#ifdef TRACE
         vtun_syslog(LOG_INFO, "Server %i is calling ag_switcher()", my_physical_channel_num);
 #endif
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->rport = channel_ports[i];
-#ifdef DEBUGG
+#ifdef TRACE
             vtun_syslog(LOG_INFO, "Server %i logic channel - %i lport - %i %i", my_physical_channel_num, i, chan_info[i]->rport, channel_ports[i]);
 #endif
         }
     } else {
-#ifdef DEBUGG
+#ifdef TRACE
         vtun_syslog(LOG_INFO, "Client %i is calling ag_switcher()", my_physical_channel_num);
 #endif
         for (int i = 0; i < chan_amt; i++) {
             chan_info[i]->lport = channel_ports[i];
-#ifdef DEBUGG
+#ifdef TRACE
             vtun_syslog(LOG_INFO, "Client %i logic channel - %i lport - %i %i", my_physical_channel_num, i, chan_info[i]->lport, channel_ports[i]);
 #endif
         }
@@ -982,12 +982,12 @@ int ag_switcher() {
     /*find my max send_q*/
     uint32_t my_max_send_q = chan_info[0]->send_q;
     int my_max_send_q_chan_num = 0;
-#ifdef DEBUGG
+#ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
 #endif
     send_q_full = 0;
     for (int i = 1; i < chan_amt; i++) {
-#ifdef DEBUGG
+#ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
 #endif
         if (my_max_send_q < chan_info[i]->send_q) {
@@ -1106,12 +1106,12 @@ int ag_switcher() {
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
 #ifdef JSON
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i}",
+            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
             my_physical_channel_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num]->send,
             shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags);
+            shm_conn_info->stats[my_physical_channel_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags, shm_conn_info->AG_ready_flag);
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return 0;
@@ -1537,17 +1537,20 @@ int res123 = 0;
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed =
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_data_len_amt = 0;
+#ifdef TRACE
                 vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].up_current_speed, my_physical_channel_num, i);
                 vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_current_speed, my_physical_channel_num, i);
-
+#endif
                 // speed in packets/sec calculation
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed =
                         (shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
                 shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packets = 0;
+#ifdef TRACE
                 vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d port %d",
                         shm_conn_info->stats[my_physical_channel_num].speed_chan_data[i].down_packet_speed, my_physical_channel_num, i, channel_ports[i]);
+#endif
             }
             vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
 //               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
@@ -1989,12 +1992,10 @@ int res123 = 0;
 						} else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
-                    
                         if(hold_mode) {
                             vtun_syslog(LOG_ERR, "Resend blocked due to hold_mode = 1: seq %lu; rxm_notf %d chan %d", ntohl(*((unsigned long *)buf)), statb.rxmits_notfound, chan_num);
                             continue;
                         }
-
 
 
                         sem_wait(resend_buf_sem);

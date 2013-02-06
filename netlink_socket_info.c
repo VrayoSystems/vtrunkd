@@ -106,7 +106,7 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f) {
                 format_info(nlh, r);
                 channel_info_ss[i]->recv_q = r->idiag_rqueue;
                 channel_info_ss[i]->send_q = r->idiag_wqueue;
-#ifdef DEBUGG
+#ifdef TRACE
                 vtun_syslog(LOG_INFO, "fss conn_counter - %i channel_amount_ss - %i send_q - %i recv_q - %i lport - %i rport - %i", i,
                         channel_amount_ss, channel_info_ss[i]->send_q, channel_info_ss[i]->recv_q, ntohs(r->id.idiag_sport),
                         ntohs(r->id.idiag_dport));
@@ -293,7 +293,7 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
         vtun_syslog(LOG_ERR, "Netlink - return error");
         return 0; // 0 - error 1 - success
     }
-#ifdef DEBUGG
+#ifdef TRACE
     for (int i = 0; i < channel_amount; i++) {
         vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i]->send_q, channel_info_vt[i]->lport,
                 channel_info_vt[i]->rport);
