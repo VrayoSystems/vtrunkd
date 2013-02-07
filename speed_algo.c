@@ -31,7 +31,11 @@ int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, 
     }
     int byte_acked = byte_was + byte_more - byte_now;
     if (byte_acked == 0) {
-        return SPEED_ALGO_SLOW_SPEED;
+        if (timercmp(&time_passed, &((struct timeval) {SPEED_ALGO_EPIC_TIME_S, SPEED_ALGO_EPIC_TIME_US}), <)) {
+            return SPEED_ALGO_SLOW_SPEED;
+        } else {
+            return 0;// TODO need to return SPEED_ALGO_EPIC_SLOW and do something
+        }
     }
 //    timersub(time_stop, time_start, &time_passed);
     if (timercmp(&time_passed, &((struct timeval) {0, min_time_usec}), <)) {

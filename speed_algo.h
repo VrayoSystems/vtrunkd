@@ -14,6 +14,10 @@
 #define SPEED_ALGO_SLOW_SPEED -1
 #define SPEED_ALGO_OVERFLOW -2
 #define SPEED_ALGO_HIGH_SPEED -3
+#define SPEED_ALGO_EPIC_SLOW -4
+
+#define SPEED_ALGO_EPIC_TIME_S 0
+#define SPEED_ALGO_EPIC_TIME_US 800000
 
 struct speed_algo_rtt_speed {
     int rtt;

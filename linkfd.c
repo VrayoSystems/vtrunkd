@@ -1054,6 +1054,8 @@ int ag_switcher() {
             speed_success = 1;
         } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
             vtun_syslog(LOG_WARNING, "ERROR - speed very high, need to wait more time");
+        } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
+            vtun_syslog(LOG_WARNING, "WARNING - speed very slow much time!!!");
         }
     }
 
