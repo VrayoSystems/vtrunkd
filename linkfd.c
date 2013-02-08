@@ -2427,6 +2427,10 @@ int res123 = 0;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << my_physical_channel_num); // del channel num from binary mask
     sem_post(&(shm_conn_info->AG_flags_sem));
+#ifdef JSON
+    vtun_syslog(LOG_INFO,
+            "{\"p_chan_num\":%i,\"l_chan_num\":0,\"max_reorder_byte\":0,\"send_q_limit\":0,\"my_max_send_q\":0,\"rtt\":0,\"rtt_var\":0,\"my_rtt\":0,\"magic_rtt\":0,\"cwnd\":0,\"incomplete_seq_len\":0,\"rxmits\":0,\"buf_len\":0,\"magic_upload\":0,\"upload\":0,\"download\":0,\"hold_mode\":0,\"ACK_coming_speed\":0,\"R_MODE\":0, \"AG_ready_flag\":0}", my_physical_channel_num);
+#endif
 
     vtun_syslog(LOG_INFO, "exiting linker loop");
     if( !linker_term && errno )
