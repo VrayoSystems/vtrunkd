@@ -8,12 +8,12 @@
  *      Author: Kuznetsov Andrey <andreykyz@gmail.com>
  */
 
+#include <sys/socket.h>
 #include <linux/inet_diag.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/socket.h>
 #include <alloca.h>
 #include <errno.h>
 #include <syslog.h>
