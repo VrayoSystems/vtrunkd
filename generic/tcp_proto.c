@@ -93,7 +93,9 @@ int tcp_read(int fd, char *buf)
 
      /* Rad frame size */
      if( (rlen = read_n(fd, (char *)&len, sizeof(short)) ) <= 0) {
-          vtun_syslog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove!
+#ifdef DEBUGG
+        vtun_syslog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove! OK on client connect error
+#endif
           return rlen;
      }
 
