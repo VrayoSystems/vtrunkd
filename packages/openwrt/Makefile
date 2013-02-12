@@ -32,12 +32,9 @@ define Package/vtrunkd/conffiles
 /etc/vtrunkd.conf
 endef
 
-#CONFIGURE_ARGS += \
-#	--enable-nosem \
-#	--enable-sysvsem \
-#	--enable-debugg \
-#	--disable-mark \
-#	--disable-o3
+CONFIGURE_ARGS += \
+	--prefix= \
+	--enable-json \
 
 # these are reserved for future use
 CONFIGURE_VARS += \
