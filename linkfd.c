@@ -123,6 +123,8 @@ int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
+int my_max_send_q_chan_num = 0;
+uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval get_format_tcp_info_call = {0, 0}, get_format_tcp_info_call_old = {0, 0};
@@ -976,8 +978,8 @@ int ag_switcher() {
         vtun_syslog(LOG_ERR, "Ag switcher - netlink return error");
     }
     /*find my max send_q*/
-    uint32_t my_max_send_q = chan_info[0]->send_q;
-    int my_max_send_q_chan_num = 0;
+    my_max_send_q = chan_info[0]->send_q;
+    my_max_send_q_chan_num = 0;
 #ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
 #endif
@@ -1098,12 +1100,12 @@ int ag_switcher() {
         force_hold_mode = 0;
     }
 
-    uint32_t max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
+    max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
-#ifdef JSON
+#if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
-            info.process_num, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
+            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num]->send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
@@ -1472,6 +1474,8 @@ int res123 = 0;
     get_info_time_last.tv_usec = 0;
     timer_resolution.tv_sec = 1;
     timer_resolution.tv_usec = 0;
+    struct timeval  json_timer;
+    gettimeofday(&json_timer, NULL);
 
 /**
  * Main program loop
@@ -1490,11 +1494,26 @@ int res123 = 0;
             ag_switch_flag = 1;
         }
         
-        if ( timercmp_result || ag_switch_flag ) {
+        if (timercmp_result || ag_switch_flag) {
             tmp_flags = ag_switcher();
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
+#if !defined(DEBUGG) && defined(JSON)
+            timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
+            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
+                vtun_syslog(LOG_INFO,
+                        "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
+                        info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
+                        chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+                        chan_info[my_max_send_q_chan_num]->send,
+                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
+                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags, shm_conn_info->AG_ready_flag);
+                json_timer.tv_sec = cur_time.tv_sec;
+                get_info_time_last.tv_usec = cur_time.tv_usec;
+            }
+#endif
         }
+
         /* TODO write function for lws sending*/
         for (i = 0; i < info.channel_amount; i++) {
         sem_wait(&(shm_conn_info->write_buf_sem));
@@ -2414,10 +2433,10 @@ int res123 = 0;
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"l_chan_num\":0,\"max_reorder_byte\":0,\"send_q_limit\":0,\"my_max_send_q\":0,\"rtt\":0,\"rtt_var\":0,\"my_rtt\":0,\"magic_rtt\":0,\"cwnd\":0,\"incomplete_seq_len\":0,\"rxmits\":0,\"buf_len\":0,\"magic_upload\":0,\"upload\":0,\"download\":0,\"hold_mode\":0,\"ACK_coming_speed\":0,\"R_MODE\":0, \"AG_ready_flag\":0}", info.process_num);
+            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":0,\"max_reorder_byte\":0,\"send_q_limit\":0,\"my_max_send_q\":0,\"rtt\":0,\"rtt_var\":0,\"my_rtt\":0,\"magic_rtt\":0,\"cwnd\":0,\"incomplete_seq_len\":0,\"rxmits\":0,\"buf_len\":0,\"magic_upload\":0,\"upload\":0,\"download\":0,\"hold_mode\":0,\"ACK_coming_speed\":0,\"R_MODE\":0, \"AG_ready_flag\":0}", info.process_num, lfd_host->host);
 #endif
 
-    vtun_syslog(LOG_INFO, "exiting linker loop");
+    vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop", lfd_host->host, info.process_num);
     if( !linker_term && errno )
         vtun_syslog(LOG_INFO,"Reason: %s (%d)", strerror(errno), errno);
 
