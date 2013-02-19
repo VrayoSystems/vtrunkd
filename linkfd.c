@@ -118,7 +118,6 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-uint16_t tmp_flags = 1, tmp_channels_mask = 0, tmp_AG = 0;
 int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
@@ -1081,7 +1080,7 @@ int ag_switcher() {
         /*ag switching enable*/
         if (high_speed_chan == info.process_num) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
-            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000) ? 0 : 1;
+            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000) ? AG_MODE : R_MODE;
             sem_post(&(shm_conn_info->AG_flags_sem));
         }
 
@@ -1117,12 +1116,12 @@ int ag_switcher() {
             chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num]->send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags, shm_conn_info->AG_ready_flag);
+            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
-        return 0;
+        return AG_MODE;
     }
-    return 1;
+    return R_MODE;
 }
 
 int lfd_linker(void)
@@ -1503,7 +1502,7 @@ int res123 = 0;
         }
         
         if (timercmp_result || ag_switch_flag) {
-            tmp_flags = ag_switcher();
+            info.mode = ag_switcher();
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
 #if !defined(DEBUGG) && defined(JSON)
@@ -1515,7 +1514,7 @@ int res123 = 0;
                         chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
                         chan_info[my_max_send_q_chan_num]->send,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, tmp_flags, shm_conn_info->AG_ready_flag);
+                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
                 json_timer.tv_sec = cur_time.tv_sec;
                 get_info_time_last.tv_usec = cur_time.tv_usec;
             }
@@ -1576,7 +1575,6 @@ int res123 = 0;
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed, info.process_num, i, info.channel[i].lport, info.channel[i].rport);
 #endif
             }
-            vtun_syslog(LOG_INFO, "Channel mode %u AG ready flags %u channels_mask %u xor result %u", tmp_flags, tmp_AG, tmp_channels_mask, (tmp_AG ^ tmp_channels_mask));
 //               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
             	   //time_lag = old last written time - new written time
@@ -2344,9 +2342,9 @@ int res123 = 0;
         sem_post(&(shm_conn_info->AG_flags_sem));
         // check for mode
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", tmp_flags);
+            vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", info.mode);
 #endif
-        if (AG_ready_flag_tmp | tmp_flags) { // it is RETRANSMIT_MODE(R_MODE)
+        if ((AG_ready_flag_tmp == R_MODE) || (info.mode == R_MODE)) { // it is RETRANSMIT_MODE(R_MODE)
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE");
 #endif
@@ -2493,6 +2491,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     shm_conn_info = ci;
     info.pid = getpid();
     info.process_num = physical_channel_num;
+    info.mode = R_MODE;
     if (info.srv) {
         info.channel_amount = 0; // first time for server, later server is getting it from client through net
     } else {

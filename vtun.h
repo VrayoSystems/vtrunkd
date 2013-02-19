@@ -272,6 +272,9 @@ struct vtun_host {
 #define TERM_NONFATAL 1000
 #define TERM_FATAL 1001
 
+#define AG_MODE 0
+#define R_MODE 1
+
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */
@@ -380,7 +383,7 @@ struct phisical_status {
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
 
     /** Garbage statistic*/
-    int mode;   /**< can be AG_MODE and RETRANSMIT_MODE */
+    int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
     struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
 
