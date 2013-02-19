@@ -931,26 +931,15 @@ int sem_wait_tw(sem_t *sem) {
  * @return - 0 for R_MODE and 1 for AG_MODE
  */
 int ag_switcher() {
-    if (info.srv) {
 #ifdef TRACE
-        vtun_syslog(LOG_INFO, "Server %i is calling ag_switcher()", info.process_num);
+    vtun_syslog(LOG_INFO, "Process %i is calling ag_switcher()", info.process_num);
 #endif
-        for (int i = 0; i < info.channel_amount; i++) {
-            chan_info[i]->rport = info.channel[i].rport;
+    for (int i = 0; i < info.channel_amount; i++) {
+        chan_info[i]->rport = info.channel[i].rport;
+        chan_info[i]->lport = info.channel[i].lport;
 #ifdef TRACE
-            vtun_syslog(LOG_INFO, "Server %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i]->rport, info.channel[i].rport);
+        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i]->rport, info.channel[i].rport);
 #endif
-        }
-    } else {
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Client %i is calling ag_switcher()", info.process_num);
-#endif
-        for (int i = 0; i < info.channel_amount; i++) {
-            chan_info[i]->lport = info.channel[i].lport;
-#ifdef TRACE
-            vtun_syslog(LOG_INFO, "Client %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i]->lport, info.channel[i].lport);
-#endif
-        }
     }
     int max_speed_chan = 0;
     uint32_t max_speed = 0;
