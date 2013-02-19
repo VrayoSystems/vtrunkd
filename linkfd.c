@@ -982,26 +982,10 @@ int ag_switcher() {
         }
         send_q_full += chan_info[i]->send_q;
     }
-    /*store my max send_q in shm and find another max send_q*/
-    uint32_t min_of_max_send_q = ((uint32_t)-1);
-    uint32_t max_of_max_speed = 0;
+    /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
-    for (int i = 0; i < 2; i++) {
-        if ((min_of_max_send_q > shm_conn_info->stats[i].max_send_q)) {
-            min_of_max_send_q = shm_conn_info->stats[i].max_send_q;
-        }
-        if ((max_of_max_speed < shm_conn_info->stats[i].max_upload_speed)) {
-            max_of_max_speed = shm_conn_info->stats[i].max_upload_speed;
-        }
-    }
     sem_post(&(shm_conn_info->stats_sem));
-
-    if(info.process_num){
-//        send_q_limit = 110000;
-    } else {
-//        send_q_limit = 33000;
-    }
 
     int speed_success = 0;
 
