@@ -549,15 +549,17 @@ int retransmit_send(char *out2) {
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        if (len && proto_write(info.channel[i].descriptor, out_buf, len) < 0) {
+        int len_ret = proto_write(info.channel[i].descriptor, out_buf, len);
+        if ((len && len_ret) < 0) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
 #endif
             return CONTINUE_ERROR;
         }
         send_counter++;
-        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len;
-        sended_bytes += len;
+        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+        sended_bytes += len_ret;
+        info.channel[i].up_len += len_ret;
     }
     if (send_counter == 0) {
         return LASTPACKETMY_NOTIFY;
@@ -708,7 +710,8 @@ int select_devread_send(char *buf, char *out2) {
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
-    if (len && proto_write(info.channel[chan_num].descriptor, buf, len) < 0) {
+    int len_ret = proto_write(info.channel[chan_num].descriptor, buf, len);
+    if ((len && len_ret) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
@@ -720,8 +723,9 @@ int select_devread_send(char *buf, char *out2) {
     if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
 #endif
 
-    shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len;
-    sended_bytes += len;
+    shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+    sended_bytes += len_ret;
+    info.channel[chan_num].up_len += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
 //    last_sent_packet_num[chan_num].num_resend = 0;
@@ -1508,12 +1512,14 @@ int res123 = 0;
             shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
             sem_post(&(shm_conn_info->write_buf_sem));
             *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-            if ((len1 = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                 linker_term = TERM_NONFATAL;
             }
-            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-            sended_bytes += len1;
+                shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                sended_bytes += len_ret;
+                info.channel[i].up_len += len_ret;
         }
     }
           // do an expensive thing
@@ -1595,12 +1601,15 @@ int res123 = 0;
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h,
                             sizeof(shm_conn_info->miss_packets_max_send_counter));
                     vtun_syslog(LOG_INFO, "Sending time lag.....");
-                    if ((len1 = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME))) < 0) {
+                int len_ret = proto_write(info.channel[0].descriptor, buf,
+                        ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME));
+                if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
                         linker_term = TERM_NONFATAL; //?????
                     }
-                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                    sended_bytes += len1;
+                shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                sended_bytes += len_ret;
+                info.channel[0].up_len += len_ret;
                 }
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
@@ -1632,12 +1641,14 @@ int res123 = 0;
                     shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
                     sem_post(&(shm_conn_info->write_buf_sem));
                     *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                    if ((len1 = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                    int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                    if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                         linker_term = TERM_NONFATAL;
                     }
-                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                    sended_bytes += len1;
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                    sended_bytes += len_ret;
+                    info.channel[i].up_len += len_ret;
                 }
             }
        
@@ -1665,12 +1676,14 @@ int res123 = 0;
                                vtun_syslog(LOG_INFO,"Requesting bad frame (MAX_LATENCY) id %lu chan %d", incomplete_seq_buf[imf], i); // TODO HERE: remove this (2 places) verbosity later!!
                                //statb.rxmit_req++;
                                statb.max_latency_hit++;
-                            if ((len1 = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                            int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                            if (len_ret < 0) {
                                    err=1;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
                                }
-                               shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                               sended_bytes += len1;
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                            sended_bytes += len_ret;
+                            info.channel[i].up_len += len_ret;
                            }
                            if(err) {
                                err = 0;
@@ -1746,12 +1759,14 @@ int res123 = 0;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                             if( (len1 = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ)) < 0 ) {
+                        int len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        if (len_ret < 0) {
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  break;
                              }
-                             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                             sended_bytes += len1;
+                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        sended_bytes += len_ret;
+                        info.channel[i].up_len += len_ret;
                          }
                          last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
                     }
@@ -2024,12 +2039,14 @@ int res123 = 0;
                         // this does not work; done in get_resend_frame
 
                         gettimeofday(&send1, NULL);
-                        if ((len1 = proto_write(info.channel[0].descriptor, out2, len)) < 0) {
+                        int len_ret = proto_write(info.channel[0].descriptor, out2, len);
+                        if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "ERROR: cannot resend frame: write to chan %d", 0);
                         }
                         gettimeofday(&send2, NULL);
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                        sended_bytes += len1;
+                        shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                        sended_bytes += len_ret;
+                        info.channel[0].up_len += len_ret;
 #ifdef DEBUGG
                         if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
 #endif
@@ -2045,13 +2062,15 @@ int res123 = 0;
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
-                        if ((len1 = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP)) < 0) {
+                        int len_ret = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
+                        if ( len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send echo reply");
                             linker_term = TERM_NONFATAL;
                             break;
                         }
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                        sended_bytes += len1;
+                        shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+                        sended_bytes += len_ret;
+                        info.channel[chan_num].up_len += len_ret;
                         continue;
                     }
                     if( fl==VTUN_ECHO_REP ) {
@@ -2162,12 +2181,14 @@ int res123 = 0;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
                         sem_post(write_buf_sem);
                         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                        if ((len1 = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                        int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
                         }
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                        sended_bytes += len1;
+                        shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
+                        sended_bytes += len_ret;
+                        info.channel[chan_num_virt].up_len += len_ret;
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
                     }
@@ -2188,13 +2209,16 @@ int res123 = 0;
                                 vtun_syslog(LOG_INFO,"Requesting bad frame MAX_REORDER incomplete_seq_len %d blen %d seq_num %lu chan %d",incomplete_seq_len, buf_len, incomplete_seq_buf[imf], chan_num_virt);
                                 //statb.rxmit_req++;
                                 statb.max_reorder_hit++;
-                                if ((len1 = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                                int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf,
+                                        ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                                if (len_ret < 0) {
                                     vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
-                                shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                                sended_bytes += len1;
+                                shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
+                                sended_bytes += len_ret;
+                                info.channel[chan_num_virt].up_len += len_ret;
                             }
                         } else {
                             if(buf_len > lfd_host->MAX_REORDER) {
@@ -2213,13 +2237,15 @@ int res123 = 0;
                         memcpy(buf, &tmp_l, sizeof(unsigned long));
                         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_MODE_NORM);
                         statb.chok_not++;
-                        if ((len1 = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME))) < 0) {
+                        int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                             linker_term = TERM_NONFATAL;
                             break;
                         }
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-                        sended_bytes += len1;
+                        shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
+                        sended_bytes += len_ret;
+                        info.channel[chan_num_virt].up_len += len_ret;
                         succ_flag = -100; // drop flag??
                         continue;
                     }
@@ -2393,12 +2419,14 @@ int res123 = 0;
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-					if ((len1 = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ)) < 0) {
+                int len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                if (len_ret < 0) {
 						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
 						break;
 					}
-					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len1;
-					sended_bytes += len1;
+					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+					sended_bytes += len_ret;
+					info.channel[i].up_len += len_ret;
 				}
 			}
 
