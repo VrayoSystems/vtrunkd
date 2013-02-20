@@ -126,7 +126,6 @@ int my_max_send_q_chan_num = 0;
 uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 
 /*Variables for the exact way of measuring speed*/
-struct timeval get_format_tcp_info_call = {0, 0}, get_format_tcp_info_call_old = {0, 0};
 struct speed_algo_rtt_speed rtt_speed_arr[SPEED_AVG_ARR] = { [0 ... SPEED_AVG_ARR - 1].speed = 0, [0 ... SPEED_AVG_ARR - 1].rtt = 0 };
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
 int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed_avg = 0, speed_avg_count = 0;
@@ -962,7 +961,7 @@ int ag_switcher() {
         my_max_speed_chan = max_speed_chan;
     }
 
-    gettimeofday(&get_format_tcp_info_call, NULL);
+    gettimeofday(&(info.get_tcp_info_time), NULL);
     if(!get_format_tcp_info(chan_info, info.channel_amount)) {
         /*TODO may be need add error counter, because if we have one error
          * we can use previos values. But if we have two error running
@@ -1000,10 +999,10 @@ int ag_switcher() {
     int skip_time_usec = magic_rtt_avg / 10 * 1000;
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
-    int ACK_coming_speed = speed_algo_ack_speed(&get_format_tcp_info_call_old, &get_format_tcp_info_call, send_q_full_old, send_q_full, sended_bytes,
+    int ACK_coming_speed = speed_algo_ack_speed(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), send_q_full_old, send_q_full, sended_bytes,
             skip_time_usec);
     if (ACK_coming_speed >= 0) {
-        memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
+        memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(struct timeval));
         send_q_full_old = send_q_full;
         sended_bytes = 0;
         ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
@@ -1018,7 +1017,7 @@ int ag_switcher() {
         vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
 #endif
     } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
-        memcpy(&get_format_tcp_info_call_old, &get_format_tcp_info_call, sizeof(struct timeval));
+        memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(struct timeval));
         send_q_full_old = send_q_full;
         sended_bytes = 0;
         vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
@@ -2505,6 +2504,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         info.channel[0].descriptor = host->rmt_fd; // service channel
     }
     info.tun_device = host->loc_fd; // virtual tun device
+    gettimeofday(&(info.get_tcp_info_time), NULL);
+    memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time_old));
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << info.process_num); // add channel num to binary mask
 #ifdef DEBUGG

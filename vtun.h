@@ -386,6 +386,8 @@ struct phisical_status {
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
     struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
+    struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
+    struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
