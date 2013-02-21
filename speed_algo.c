@@ -7,6 +7,7 @@
 
 #include <sys/time.h>
 #include <syslog.h>
+#include <stdint.h>
 #include "speed_algo.h"
 #include "lib.h"
 
@@ -59,17 +60,17 @@ int speed_algo_ack_speed(struct timeval *time_start, struct timeval *time_stop, 
  * @param counter - current pointer in *arr
  * @return speed average
  */
-int speed_algo_avg_speed(struct speed_algo_rtt_speed *arr, int arr_size, int new_speed, int *counter) {
+int speed_algo_avg_speed(int32_t *arr, int arr_size, int new_speed, int *counter) {
     int speed_avg = 0;
 #ifdef TRACE
     vtun_syslog(LOG_INFO,"new_speed - %i counter - %i",new_speed, *counter);
 #endif
-    arr[(*counter)++].speed = new_speed;
+    arr[(*counter)++] = new_speed;
     for (int i = 0; i < arr_size; i++) {
 #ifdef TRACE
         vtun_syslog(LOG_INFO,"speed[%i] - %i",i, arr[i].speed );
 #endif
-        speed_avg += arr[i].speed * 100 / arr_size;
+        speed_avg += arr[i] * 100 / arr_size;
     }
     *counter = *counter == arr_size ? 0 : *counter;
     return speed_avg / 100;

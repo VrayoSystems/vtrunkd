@@ -126,11 +126,10 @@ int my_max_send_q_chan_num = 0;
 uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 
 /*Variables for the exact way of measuring speed*/
-struct speed_algo_rtt_speed rtt_speed_arr[SPEED_AVG_ARR] = { [0 ... SPEED_AVG_ARR - 1].speed = 0, [0 ... SPEED_AVG_ARR - 1].rtt = 0 };
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
-int32_t sended_bytes = 0, send_q_full = 0, send_q_full_old = 0, ACK_coming_speed_avg = 0, speed_avg_count = 0;
+int32_t sended_bytes = 0, ACK_coming_speed_avg = 0;
 int32_t send_q_limit = 7000;
-int32_t magic_rtt_avg = 0, magic_rtt[] = {0,0,0,0,0,0,0,0,0,0};
+int32_t magic_rtt_avg = 0;
 
 /* Host we are working with.
  * Used by signal handlers that's why it is global.
@@ -969,21 +968,16 @@ int ag_switcher() {
         vtun_syslog(LOG_ERR, "Ag switcher - netlink return error");
     }
     /*find my max send_q*/
-    my_max_send_q = chan_info[0]->send_q;
-    my_max_send_q_chan_num = 0;
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[0]->recv_q, chan_info[0]->send_q, 0);
-#endif
-    send_q_full = 0;
-    for (int i = 1; i < info.channel_amount; i++) {
+    my_max_send_q = 0;
+    for (int i = 0; i < info.channel_amount; i++) {
 #ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
 #endif
-        if (my_max_send_q < chan_info[i]->send_q) {
+        if ((my_max_send_q < chan_info[i]->send_q) && (i != 0)) {
             my_max_send_q = chan_info[i]->send_q;
             my_max_send_q_chan_num = i;
         }
-        send_q_full += chan_info[i]->send_q;
+        info.channel[i].send_q = chan_info[i]->send_q;
     }
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
@@ -999,50 +993,45 @@ int ag_switcher() {
     int skip_time_usec = magic_rtt_avg / 10 * 1000;
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
-    int ACK_coming_speed = speed_algo_ack_speed(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), send_q_full_old, send_q_full, sended_bytes,
-            skip_time_usec);
-    if (ACK_coming_speed >= 0) {
-        memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(struct timeval));
-        send_q_full_old = send_q_full;
-        sended_bytes = 0;
-        ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, ACK_coming_speed, &speed_avg_count);
-        ACK_coming_speed_avg = ACK_coming_speed_avg == 0 ? 1 : ACK_coming_speed_avg;
-        magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1 : my_max_send_q / ACK_coming_speed_avg;
-        sem_wait(&(shm_conn_info->stats_sem));
-        shm_conn_info->stats[info.process_num].ACK_speed = ACK_coming_speed_avg;
-        sem_post(&(shm_conn_info->stats_sem));
-        speed_success = 1;
-    } else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
+    for (int i = 0; i < info.channel_amount; i++) {
+        int ACK_coming_speed = speed_algo_ack_speed(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), info.channel[i].send_q_old,
+                info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
+        if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW)) {
+            if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
+                vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
+                ACK_coming_speed = 0;
+            }
+            memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
+            info.channel[i].send_q_old = info.channel[i].send_q;
+            info.channel[i].up_len = 0;
+            info.channel[i].ACK_speed_avg = speed_algo_avg_speed(info.channel[i].ACK_speed, SPEED_AVG_ARR, ACK_coming_speed,
+                    &(info.channel[i].avg_count));
+            info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
+            info.channel[i].magic_rtt =
+                    info.channel[i].ACK_speed_avg == 0 ? info.channel[i].send_q / 1 : info.channel[i].send_q / info.channel[i].ACK_speed_avg;
+            if (i != 0) {
+                speed_success++;
+            }
+        }
 #ifdef DEBUGG
-        vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
-#endif
-    } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
-        memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(struct timeval));
-        send_q_full_old = send_q_full;
-        sended_bytes = 0;
-        vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
-        ACK_coming_speed_avg = speed_algo_avg_speed(rtt_speed_arr, SPEED_AVG_ARR, /*ACK_coming_speed = */0, &speed_avg_count);
-        ACK_coming_speed_avg = ACK_coming_speed_avg == 0 ? 1 : ACK_coming_speed_avg;
-        magic_rtt_avg = ACK_coming_speed_avg == 0 ? my_max_send_q / 1 : my_max_send_q / ACK_coming_speed_avg;
-        sem_wait(&(shm_conn_info->stats_sem));
-        shm_conn_info->stats[info.process_num].ACK_speed = ACK_coming_speed_avg;
-        sem_post(&(shm_conn_info->stats_sem));
-        speed_success = 1;
-    } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_WARNING, "WARNING - speed very high, need to wait more time");
-#endif
-    } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
-#ifdef DEBUGG
-        vtun_syslog(LOG_WARNING, "WARNING - speed very slow much time!!!");
+        else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
+            vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
+        } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
+            vtun_syslog(LOG_WARNING, "WARNING - speed very high, need to wait more time");
+        } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
+            vtun_syslog(LOG_WARNING, "WARNING - speed very slow much time!!!");
+        }
 #endif
     }
 
     if (speed_success) {
+        ACK_coming_speed_avg = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
+        magic_rtt_avg = info.channel[my_max_send_q_chan_num].magic_rtt;
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
         sem_wait(&(shm_conn_info->stats_sem));
+        shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
         miss_packets_max = shm_conn_info->miss_packets_max;
         int send_q_limit_grow;
         int high_speed_chan = 0;

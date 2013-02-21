@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <time.h>
+#include "speed_algo.h"
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -359,12 +360,13 @@ struct logical_status {
     uint32_t down_len;    /**< how much bytes are downloaded */
     uint32_t rtt;       /**< rtt is measured by vtrunkd */
     uint32_t tcp_rtt;   /**< rtt is said by @see get_format_tcp_info() */
+    uint32_t magic_rtt;   /**< rtt based on @see ACK_speed_avg */
 
     /** TCP queue control information */
     uint32_t send_q;    /**< current send_q value */
     uint32_t send_q_old;    /**< previous send_q value */
     uint32_t send_q_limit;  /**< current send_q_limit value */
-    int32_t ACK_speed[10];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
+    int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     uint avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
 
