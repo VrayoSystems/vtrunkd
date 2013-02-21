@@ -1225,8 +1225,8 @@ int lfd_linker(void)
         // now read one single byte
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
 		read_n(service_channel, buf, sizeof(uint16_t)+sizeof(uint16_t));
-		info.channel_amount = ntohs(*((uint16_t *) buf)); // except info chznnel
-        info.channel = calloc(info.channel_amount +1, sizeof(*(info.channel)));
+        info.channel_amount = ntohs(*((uint16_t *) buf)); // include info channel
+        info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
             return 0;
@@ -1299,9 +1299,9 @@ int res123 = 0;
 
         // now listen to socket, wait for connection
 
-        vtun_syslog(LOG_INFO,"Entering loop to create %d channels", info.channel_amount);
+        vtun_syslog(LOG_INFO,"Entering loop to create %d channels", info.channel_amount - 1);
         // TODO: how many TCP CONN AMOUNT allowed for server??
-        for (i = 1; (i <= info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
+        for (i = 1; (i < info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO,"Chan %d", i);
 #endif
@@ -1345,7 +1345,6 @@ int res123 = 0;
             info.channel[i].descriptor=fd_tmp;
         }
         info.channel[0].descriptor = service_channel;
-        info.channel_amount++;
         for (i = 0; i < info.channel_amount; i++) {
             if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
@@ -1391,7 +1390,7 @@ int res123 = 0;
 #ifdef DEBUGG
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 #endif
- 		info.channel_amount = 1;
+ 		info.channel_amount = 1; // now we'll accumulate here established logical channels
     }
 
     // we start in a normal mode...
@@ -2451,8 +2450,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     if (info.srv) {
         info.channel_amount = 0; // first time for server, later server is getting it from client through net
     } else {
-        info.channel_amount = lfd_host->TCP_CONN_AMOUNT; // current here number of channels except service_channel
-        info.channel = calloc(info.channel_amount + 1, sizeof(*(info.channel)));
+        info.channel_amount = lfd_host->TCP_CONN_AMOUNT + 1; // current here number of channels include service_channel
+        info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
             return 0;
@@ -2531,6 +2530,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     io_init();
 
     remove(pid_file_str); // rm file with my pid
+    free(info.channel);
 
     if( host->flags & VTUN_STAT ) {
         alarm(0);
