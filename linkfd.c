@@ -1159,24 +1159,7 @@ int lfd_linker(void)
     }
 #endif
     int sender_pid; // tmp var for resend detect my own pid
-    /* Create if need, pid directory*/
-    if (mkdir(LINKFD_PID_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
-        if (errno == EEXIST) {
-            vtun_syslog(LOG_INFO, "%s already  exists :)", LINKFD_PID_DIR);
-        } else {
-            vtun_syslog(LOG_ERR, "Can't create lock directory %s: %s (%d)", LINKFD_PID_DIR, strerror(errno), errno);
-        }
-    }
-    char pid_file[255], mypid_str[20];
-    sprintf(pid_file, "%s/%s", LINKFD_PID_DIR, lfd_host->host);
-    int mypid_file = open(pid_file, O_WRONLY | O_CREAT | O_TRUNC , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-    if (mypid_file < 0) {
-        vtun_syslog(LOG_ERR, "Can't create temp lock file %s", pid_file);
-    }
-    len = sprintf(mypid_str, "%d\n", info.pid);
-    if (write(mypid_file, mypid_str, len) != len) {
-        vtun_syslog(LOG_ERR, "Can't write PID %d to %s", info.pid, pid_file);
-    }
+
     unsigned long last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
@@ -2438,10 +2421,7 @@ int res123 = 0;
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
     lfd_free(buf);
-
     lfd_free(out_buf);
-    unlink(pid_file);
-    close(mypid_file);
 
     for (i = 0; i < info.channel_amount; i++) {
         close(info.channel[i].descriptor);
@@ -2482,12 +2462,36 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     info.tun_device = host->loc_fd; // virtual tun device
     gettimeofday(&(info.get_tcp_info_time), NULL);
     memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time_old));
+
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << info.process_num); // add channel num to binary mask
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, info.process_num);
 #endif
     sem_post(&(shm_conn_info->AG_flags_sem));
+
+    /* Create pid directory if need */
+    if (mkdir(LINKFD_PID_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
+        if (errno == EEXIST) {
+            vtun_syslog(LOG_INFO, "%s already  exists :)", LINKFD_PID_DIR);
+        } else {
+            vtun_syslog(LOG_ERR, "Can't create lock directory %s: %s (%d)", LINKFD_PID_DIR, strerror(errno), errno);
+        }
+    }
+
+    /* Write my pid into file */
+    char pid_file_str[30], pid_str[20];
+    sprintf(pid_file_str, "%s/%s", LINKFD_PID_DIR, lfd_host->host);
+    int pid_file_fd = open(pid_file_str, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+    if (pid_file_fd < 0) {
+        vtun_syslog(LOG_ERR, "Can't create temp lock file %s", pid_file_str);
+    }
+    int len = sprintf(pid_str, "%d\n", info.pid);
+    if (write(pid_file_fd, pid_str, len) != len) {
+        vtun_syslog(LOG_ERR, "Can't write PID %d to %s", info.pid, pid_file_str);
+    }
+    close(pid_file_fd);
+
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
 
@@ -2525,6 +2529,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     lfd_linker();
 
     io_init();
+
+    remove(pid_file_str); // rm file with my pid
 
     if( host->flags & VTUN_STAT ) {
         alarm(0);
