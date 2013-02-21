@@ -127,7 +127,7 @@ uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
-int32_t sended_bytes = 0, ACK_coming_speed_avg = 0;
+int32_t ACK_coming_speed_avg = 0;
 int32_t send_q_limit = 7000;
 int32_t magic_rtt_avg = 0;
 
@@ -556,7 +556,6 @@ int retransmit_send(char *out2) {
         }
         send_counter++;
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-        sended_bytes += len_ret;
         info.channel[i].up_len += len_ret;
     }
     if (send_counter == 0) {
@@ -722,7 +721,6 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
-    sended_bytes += len_ret;
     info.channel[chan_num].up_len += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
@@ -1506,7 +1504,6 @@ int res123 = 0;
                 linker_term = TERM_NONFATAL;
             }
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                sended_bytes += len_ret;
                 info.channel[i].up_len += len_ret;
         }
     }
@@ -1596,7 +1593,6 @@ int res123 = 0;
                         linker_term = TERM_NONFATAL; //?????
                     }
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                sended_bytes += len_ret;
                 info.channel[0].up_len += len_ret;
                 }
                    if(delay_cnt == 0) delay_cnt = 1;
@@ -1635,7 +1631,6 @@ int res123 = 0;
                         linker_term = TERM_NONFATAL;
                     }
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                    sended_bytes += len_ret;
                     info.channel[i].up_len += len_ret;
                 }
             }
@@ -1670,7 +1665,6 @@ int res123 = 0;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
                                }
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                            sended_bytes += len_ret;
                             info.channel[i].up_len += len_ret;
                            }
                            if(err) {
@@ -1753,7 +1747,6 @@ int res123 = 0;
                                  break;
                              }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                        sended_bytes += len_ret;
                         info.channel[i].up_len += len_ret;
                          }
                          last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
@@ -2033,7 +2026,6 @@ int res123 = 0;
                         }
                         gettimeofday(&send2, NULL);
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                        sended_bytes += len_ret;
                         info.channel[0].up_len += len_ret;
 #ifdef DEBUGG
                         if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
@@ -2057,7 +2049,6 @@ int res123 = 0;
                             break;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
-                        sended_bytes += len_ret;
                         info.channel[chan_num].up_len += len_ret;
                         continue;
                     }
@@ -2175,7 +2166,6 @@ int res123 = 0;
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
-                        sended_bytes += len_ret;
                         info.channel[chan_num_virt].up_len += len_ret;
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
@@ -2205,7 +2195,6 @@ int res123 = 0;
                                     break;
                                 }
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
-                                sended_bytes += len_ret;
                                 info.channel[chan_num_virt].up_len += len_ret;
                             }
                         } else {
@@ -2232,7 +2221,6 @@ int res123 = 0;
                             break;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
-                        sended_bytes += len_ret;
                         info.channel[chan_num_virt].up_len += len_ret;
                         succ_flag = -100; // drop flag??
                         continue;
@@ -2413,7 +2401,6 @@ int res123 = 0;
 						break;
 					}
 					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-					sended_bytes += len_ret;
 					info.channel[i].up_len += len_ret;
 				}
 			}
