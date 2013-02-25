@@ -296,7 +296,7 @@ int get_format_tcp_info(struct channel_info* channel_info_vt, int channel_amount
 #ifdef TRACE
     for (int i = 0; i < channel_amount; i++) {
         vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i].send_q, channel_info_vt[i].lport,
-                channel_info_vt[i]->rport);
+                channel_info_vt[i].rport);
         vtun_syslog(LOG_INFO, "fss channel_info_ss send_q %u lport - %i rport - %i", channel_info_ss[i].send_q, channel_info_ss[i].lport,
                 channel_info_ss[i].rport);
     }

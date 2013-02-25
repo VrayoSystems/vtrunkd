@@ -976,6 +976,9 @@ int ag_switcher() {
             my_max_send_q_chan_num = i;
         }
         info.channel[i].send_q = chan_info[i].send_q;
+#ifdef TRACE
+    vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
+#endif
     }
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
@@ -985,9 +988,6 @@ int ag_switcher() {
     int speed_success = 0;
 
     /* ACK_coming_speed recalculation */
-#ifdef TRACE
-    vtun_syslog(LOG_INFO,"sended_bytes - %u send_q_full - %u send_q_full_old - %u",sended_bytes,send_q_full,send_q_full_old);
-#endif
     int skip_time_usec = magic_rtt_avg / 10 * 1000;
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;

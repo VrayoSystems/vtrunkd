@@ -68,7 +68,7 @@ int speed_algo_avg_speed(int32_t *arr, int arr_size, int new_speed, int *counter
     arr[(*counter)++] = new_speed;
     for (int i = 0; i < arr_size; i++) {
 #ifdef TRACE
-        vtun_syslog(LOG_INFO,"speed[%i] - %i",i, arr[i].speed );
+        vtun_syslog(LOG_INFO,"speed[%i] - %i",i, arr[i] );
 #endif
         speed_avg += arr[i] * 100 / arr_size;
     }
