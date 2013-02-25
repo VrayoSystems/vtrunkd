@@ -1192,12 +1192,6 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
-    vtun_syslog(LOG_INFO, "Allocate memory for array of struct *chan_info");
-    if (!(chan_info = (struct channel_info *) calloc(MAX_TCP_LOGICAL_CHANNELS, sizeof(struct channel_info )))) {
-        vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
-        return 0;
-    }
-    vtun_syslog(LOG_INFO, "Memory allocated");
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(long) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
@@ -1221,6 +1215,11 @@ int lfd_linker(void)
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
+            return 0;
+        }
+        chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
+        if (chan_info == NULL ) {
+            vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
             return 0;
         }
 		sem_wait(&(shm_conn_info->stats_sem));
@@ -2446,6 +2445,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
+            return 0;
+        }
+        chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
+        if (chan_info == NULL ) {
+            vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
             return 0;
         }
         info.channel[0].descriptor = host->rmt_fd; // service channel
