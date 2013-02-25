@@ -29,6 +29,6 @@ struct channel_info {
     int rport;
 };
 
-int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amount);
+int get_format_tcp_info(struct channel_info* channel_info_vt, int channel_amount);
 
 #endif /* SOCKET_INFO_H_ */

@@ -138,7 +138,7 @@ struct vtun_host *lfd_host;
 struct conn_info *shm_conn_info;
 
 struct lfd_mod *lfd_mod_head = NULL, *lfd_mod_tail = NULL;
-struct channel_info **chan_info = NULL;
+struct channel_info *chan_info = NULL;
 
 struct phisical_status info; /**< We store here all process closed information */
 
@@ -935,10 +935,10 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "Process %i is calling ag_switcher()", info.process_num);
 #endif
     for (int i = 0; i < info.channel_amount; i++) {
-        chan_info[i]->rport = info.channel[i].rport;
-        chan_info[i]->lport = info.channel[i].lport;
+        chan_info[i].rport = info.channel[i].rport;
+        chan_info[i].lport = info.channel[i].lport;
 #ifdef TRACE
-        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i]->rport, info.channel[i].rport);
+        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i].rport, info.channel[i].rport);
 #endif
     }
     int max_speed_chan = 0;
@@ -969,13 +969,13 @@ int ag_switcher() {
     my_max_send_q = 0;
     for (int i = 0; i < info.channel_amount; i++) {
 #ifdef TRACE
-        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i]->recv_q, chan_info[i]->send_q, i);
+        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i].recv_q, chan_info[i].send_q, i);
 #endif
-        if ((my_max_send_q < chan_info[i]->send_q) && (i != 0)) {
-            my_max_send_q = chan_info[i]->send_q;
+        if ((my_max_send_q < chan_info[i].send_q) && (i != 0)) {
+            my_max_send_q = chan_info[i].send_q;
             my_max_send_q_chan_num = i;
         }
-        info.channel[i].send_q = chan_info[i]->send_q;
+        info.channel[i].send_q = chan_info[i].send_q;
     }
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
@@ -1043,7 +1043,7 @@ int ag_switcher() {
         /*ag switching enable*/
         if (high_speed_chan == info.process_num) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
-            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num]->send * (1 - AG_FLOW_FACTOR)) / 1000) ? AG_MODE : R_MODE;
+            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num].send * (1 - AG_FLOW_FACTOR)) / 1000) ? AG_MODE : R_MODE;
             sem_post(&(shm_conn_info->AG_flags_sem));
         }
 
@@ -1070,14 +1070,14 @@ int ag_switcher() {
         force_hold_mode = 0;
     }
 
-    max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num]->mss;
-    uint32_t send_q_c = chan_info[my_max_send_q_chan_num]->mss * chan_info[my_max_send_q_chan_num]->cwnd;
+    max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num].mss;
+    uint32_t send_q_c = chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd;
 #if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
             "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
-            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-            chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-            chan_info[my_max_send_q_chan_num]->send,
+            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
+            chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+            chan_info[my_max_send_q_chan_num].send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
 #endif
@@ -1193,17 +1193,9 @@ int lfd_linker(void)
         return 0;
     }
     vtun_syslog(LOG_INFO, "Allocate memory for array of struct *chan_info");
-    if (!(chan_info = (struct channel_info **) calloc(MAX_TCP_LOGICAL_CHANNELS, sizeof(struct channel_info *)))) {
+    if (!(chan_info = (struct channel_info *) calloc(MAX_TCP_LOGICAL_CHANNELS, sizeof(struct channel_info )))) {
         vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
         return 0;
-    }
-    vtun_syslog(LOG_INFO, "Allocate memory for chan_info structures");
-    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
-        if (!(chan_info[i] = (struct channel_info*) malloc(sizeof(struct channel_info)))) {
-            vtun_syslog(LOG_ERR, "Can't allocate array of struct chan_info for the linker");
-            return 0;
-        }
-        memset(chan_info[i], 0, sizeof(struct channel_info));
     }
     vtun_syslog(LOG_INFO, "Memory allocated");
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
@@ -1455,9 +1447,9 @@ int res123 = 0;
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
                         "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
-                        info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num]->rtt,
-                        chan_info[my_max_send_q_chan_num]->rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num]->cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-                        chan_info[my_max_send_q_chan_num]->send,
+                        info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
+                        chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+                        chan_info[my_max_send_q_chan_num].send,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
                 json_timer.tv_sec = cur_time.tv_sec;
@@ -2531,6 +2523,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
 
     remove(pid_file_str); // rm file with my pid
     free(info.channel);
+    free(chan_info);
 
     if( host->flags & VTUN_STAT ) {
         alarm(0);
