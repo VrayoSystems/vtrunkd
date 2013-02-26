@@ -1754,7 +1754,9 @@ int res123 = 0;
 #endif
                 if( (len=proto_read(fd0, buf)) <= 0 ) {
                     if (len == 0) {
-                        continue;
+                        vtun_syslog(LOG_INFO, "proto_read return 0, the peer has performed an orderly shutdown. TERM_NONFATAL");
+                        linker_term = TERM_NONFATAL;
+                        break;
                     }
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
