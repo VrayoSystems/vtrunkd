@@ -338,6 +338,7 @@ struct conn_stats {
     struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
     uint32_t max_upload_speed;
     uint32_t max_send_q;
+    uint32_t max_send_q_avg;
     uint32_t send_q_limit;
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
@@ -390,7 +391,9 @@ struct phisical_status {
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
     struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
-
+    uint32_t max_send_q_avg;
+    uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
+    int max_send_q_counter;
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */

@@ -980,9 +980,11 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
 #endif
     }
+    info.max_send_q_avg = speed_algo_avg_speed(info.max_send_q_avg_arr, SPEED_AVG_ARR, my_max_send_q, &(info.max_send_q_counter));
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
+    shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
     sem_post(&(shm_conn_info->stats_sem));
 
     int speed_success = 0;
@@ -1053,7 +1055,7 @@ int ag_switcher() {
             send_q_limit_grow = (EBL - send_q_limit) / 2;
         } else {
             // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-            send_q_limit_grow = (((EBL * (shm_conn_info->stats[info.process_num].ACK_speed))
+            send_q_limit_grow = (((((int) (shm_conn_info->stats[high_speed_chan].max_send_q_avg)) * shm_conn_info->stats[info.process_num].ACK_speed)
                     / ACK_speed_high_speed) - send_q_limit) / 2;
         }
         sem_post(&(shm_conn_info->stats_sem));
@@ -1074,12 +1076,12 @@ int ag_switcher() {
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd;
 #if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
+            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u}",
             info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
             chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num].send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
+            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg);
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return AG_MODE;
@@ -1445,12 +1447,12 @@ int res123 = 0;
             timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
-                        "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i}",
+                        "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u}",
                         info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
                         chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
                         chan_info[my_max_send_q_chan_num].send,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag);
+                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, shm_conn_info->stats[info.process_num].max_send_q_avg);//info.max_send_q_avg);
                 json_timer.tv_sec = cur_time.tv_sec;
                 get_info_time_last.tv_usec = cur_time.tv_usec;
             }
@@ -2390,7 +2392,7 @@ int res123 = 0;
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":0,\"max_reorder_byte\":0,\"send_q_limit\":0,\"my_max_send_q\":0,\"rtt\":0,\"rtt_var\":0,\"my_rtt\":0,\"magic_rtt\":0,\"cwnd\":0,\"incomplete_seq_len\":0,\"rxmits\":0,\"buf_len\":0,\"magic_upload\":0,\"upload\":0,\"download\":0,\"hold_mode\":0,\"ACK_coming_speed\":0,\"R_MODE\":0, \"AG_ready_flag\":0}", info.process_num, lfd_host->host);
+            "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":0,\"max_reorder_byte\":0,\"send_q_limit\":0,\"my_max_send_q\":0,\"rtt\":0,\"rtt_var\":0,\"my_rtt\":0,\"magic_rtt\":0,\"cwnd\":0,\"incomplete_seq_len\":0,\"rxmits\":0,\"buf_len\":0,\"magic_upload\":0,\"upload\":0,\"download\":0,\"hold_mode\":0,\"ACK_coming_speed\":0,\"R_MODE\":0, \"AG_ready_flag\":0, \"my_max_send_q_avg\":0}", info.process_num, lfd_host->host);
 #endif
 
     vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop", lfd_host->host, info.process_num);
@@ -2408,6 +2410,7 @@ int res123 = 0;
     shm_conn_info->stats[info.process_num].pid = 0;
     shm_conn_info->stats[info.process_num].weight = 0;
     shm_conn_info->stats[info.process_num].max_send_q = 0;
+    shm_conn_info->stats[info.process_num].max_send_q_avg = 0;
     sem_post(&(shm_conn_info->stats_sem));
 
     /* Notify other end about our close */
