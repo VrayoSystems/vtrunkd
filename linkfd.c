@@ -1004,8 +1004,7 @@ int ag_switcher() {
             memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
             info.channel[i].send_q_old = info.channel[i].send_q;
             info.channel[i].up_len = 0;
-            info.channel[i].ACK_speed_avg = speed_algo_avg_speed(info.channel[i].ACK_speed, SPEED_AVG_ARR, ACK_coming_speed,
-                    &(info.channel[i].avg_count));
+            info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 3;
             info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
             info.channel[i].magic_rtt =
                     info.channel[i].ACK_speed_avg == 0 ? info.channel[i].send_q / 1 : info.channel[i].send_q / info.channel[i].ACK_speed_avg;
