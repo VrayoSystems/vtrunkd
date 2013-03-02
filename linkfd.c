@@ -99,7 +99,7 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-#define SEND_Q_LIMIT_MINIMAL 2000
+#define SEND_Q_LIMIT_MINIMAL 10000
 // flags:
 uint8_t time_lag_ready;
 
