@@ -369,7 +369,7 @@ struct logical_status {
     uint32_t send_q_limit;  /**< current send_q_limit value */
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
-    uint avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
+    int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
 
 };
 
