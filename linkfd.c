@@ -996,15 +996,22 @@ int ag_switcher() {
     for (int i = 0; i < info.channel_amount; i++) {
         int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), info.channel[i].send_q_old,
                 info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
-        if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW)) {
-            if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
+        if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW) || (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW)) {
+            if (ACK_coming_speed >= 0) {
+                info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 4;
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "ACK_speed_avg %u logical channel %i", info.channel[i].ACK_speed_avg, i);
+#endif
+            } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
                 vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
-                ACK_coming_speed = 0;
+                info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 4;
+            } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
+                vtun_syslog(LOG_ERR, "ERROR - Speed was slow much time logical channel %i", i);
+                info.channel[i].ACK_speed_avg = 0;
             }
             memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
             info.channel[i].send_q_old = info.channel[i].send_q;
             info.channel[i].up_len = 0;
-            info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 3;
             info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
             info.channel[i].magic_rtt =
                     info.channel[i].ACK_speed_avg == 0 ? info.channel[i].send_q / 1 : info.channel[i].send_q / info.channel[i].ACK_speed_avg;
