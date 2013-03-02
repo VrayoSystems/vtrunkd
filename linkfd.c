@@ -1034,12 +1034,28 @@ int ag_switcher() {
         shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
         miss_packets_max = shm_conn_info->miss_packets_max;
         int send_q_limit_grow;
-        int high_speed_chan = 0;
+        int high_speed_chan = 31;
+        for (int i = 0; i < 32; i++) {
+            /* look for first alive channel*/
+            if (chan_mask & (1 << i)) {
+#ifdef TRACE
+            vtun_syslog(LOG_INFO, "First alive channel %i",i);
+#endif
+                high_speed_chan = i;
+                break;
+            }
+        }
         /* find high speed channel */
         for (int i = 0; i < 32; i++) {
+#ifdef TRACE
+            vtun_syslog(LOG_INFO, "Checking channel %i",i);
+#endif
             /* check alive channel*/
             if (chan_mask & (1 << i)) {
                 high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
+#ifdef TRACE
+            vtun_syslog(LOG_INFO, "Channel %i alive",i);
+#endif
             }
         }
         /*ag switching enable*/
