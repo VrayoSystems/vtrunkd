@@ -371,6 +371,7 @@ struct logical_status {
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
 
+    struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 };
 
 /**
@@ -390,7 +391,6 @@ struct phisical_status {
     struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
     struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
-    struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
     uint32_t max_send_q_avg;
     uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
     int max_send_q_counter;

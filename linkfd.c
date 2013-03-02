@@ -994,14 +994,14 @@ int ag_switcher() {
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
     for (int i = 0; i < info.channel_amount; i++) {
-        int ACK_coming_speed = speed_algo_ack_speed(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), info.channel[i].send_q_old,
+        int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), info.channel[i].send_q_old,
                 info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
         if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW)) {
             if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
                 vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
                 ACK_coming_speed = 0;
             }
-            memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
+            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
             info.channel[i].send_q_old = info.channel[i].send_q;
             info.channel[i].up_len = 0;
             info.channel[i].ACK_speed_avg = speed_algo_avg_speed(info.channel[i].ACK_speed, SPEED_AVG_ARR, ACK_coming_speed,
@@ -1377,11 +1377,12 @@ int res123 = 0;
                 maxfd = info.channel[i].descriptor;
             }
         }
-        //maxfd++;
 
-        // TODO: now close prio_s ???
-
-
+        // Server another init section
+        gettimeofday(&(info.get_tcp_info_time), NULL );
+        for (int i = 0; i < info.channel_amount; i++) {
+            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.channel[i].get_tcp_info_time_old));
+        }
     } else {
         /** Send to server information about channel amount and get and send pid */
     	*((uint16_t *) buf) = htons(info.channel_amount);
@@ -2474,11 +2475,12 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
             return 0;
         }
         info.channel[0].descriptor = host->rmt_fd; // service channel
+        gettimeofday(&(info.get_tcp_info_time), NULL );
+        for (int i = 0; i < info.channel_amount; i++) {
+            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.channel[i].get_tcp_info_time_old));
+        }
     }
     info.tun_device = host->loc_fd; // virtual tun device
-    gettimeofday(&(info.get_tcp_info_time), NULL);
-    memcpy(&(info.get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time_old));
-
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << info.process_num); // add channel num to binary mask
 #ifdef DEBUGG
