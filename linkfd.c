@@ -980,7 +980,9 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
 #endif
     }
-    info.max_send_q_avg = speed_algo_avg_speed(info.max_send_q_avg_arr, SPEED_AVG_ARR, my_max_send_q, &(info.max_send_q_counter));
+    info.max_send_q_avg =
+            info.max_send_q_avg > my_max_send_q ?
+                    info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 : info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
