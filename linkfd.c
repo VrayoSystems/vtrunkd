@@ -124,6 +124,7 @@ int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
 int my_max_send_q_chan_num = 0;
 uint32_t my_max_send_q = 0, max_reorder_byte = 0;
+uint32_t last_channels_mask = 0;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
@@ -1484,6 +1485,33 @@ int res123 = 0;
 #endif
         }
 
+        sem_wait(&(shm_conn_info->AG_flags_sem));
+        uint32_t chan_mask = shm_conn_info->channels_mask;
+        if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
+            linker_term = TERM_NONFATAL;
+            vtun_syslog(LOG_INFO, "Need to exit by peer");
+        }
+        sem_post(&(shm_conn_info->AG_flags_sem));
+        for (uint32_t i = 0; i < 32; i++) {
+            if (!(chan_mask & (1 << i))) {
+                if (last_channels_mask & (1 << i)) {
+#ifdef DEBUGG
+                    vtun_syslog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
+#endif
+                    uint32_t i_h = htonl(i);
+                    uint16_t flag_h = htons(FRAME_DEAD_CHANNEL);
+                    memcpy(buf, &i_h, sizeof(uint32_t));
+                    memcpy(buf, &flag_h, sizeof(uint16_t));
+                    int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                    if (len_ret < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
+                        linker_term = TERM_NONFATAL;
+                    }
+                }
+            }
+        }
+        last_channels_mask = chan_mask;
+
         /* TODO write function for lws sending*/
         for (i = 0; i < info.channel_amount; i++) {
         sem_wait(&(shm_conn_info->write_buf_sem));
@@ -1978,7 +2006,13 @@ int res123 = 0;
 							time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
 							continue;
-						} else {
+                        } else if (flag_var == FRAME_DEAD_CHANNEL) {
+                            uint32_t chan_mask_h;
+                            memcpy(&chan_mask_h, buf, sizeof(uint32_t));
+                            sem_wait(&(shm_conn_info->AG_flags_sem));
+                            shm_conn_info->channels_mask = ntohl(chan_mask_h);
+                            sem_post(&(shm_conn_info->AG_flags_sem));
+                        } else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
                     /*
@@ -2414,6 +2448,7 @@ int res123 = 0;
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask
+    shm_conn_info->need_to_exit &= ~(1 << info.process_num);
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
     vtun_syslog(LOG_INFO,
@@ -2491,6 +2526,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     info.tun_device = host->loc_fd; // virtual tun device
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << info.process_num); // add channel num to binary mask
+    shm_conn_info->need_to_exit &= ~(1 << info.process_num);
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, info.process_num);
 #endif

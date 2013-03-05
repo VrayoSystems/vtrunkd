@@ -267,6 +267,7 @@ struct vtun_host {
 #define FRAME_PRIO_PORT_NOTIFY 3
 #define FRAME_LAST_WRITTEN_SEQ 4
 #define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
+#define FRAME_DEAD_CHANNEL 6
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
@@ -430,8 +431,9 @@ struct conn_info {
     long int alive;
     int rdy; /* ready flag */
     sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
-    uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable
-    uint32_t channels_mask; // 1 - channel is working 0 - channel is dead
+    uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable sync by AG_flags_sem
+    uint32_t channels_mask; // 1 - channel is working 0 - channel is dead sync by AG_flags_sem
+    uint32_t need_to_exit; // sync by AG_flags_sem
 };
 
 struct resent_chk {
