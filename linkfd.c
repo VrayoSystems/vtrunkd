@@ -1006,10 +1006,10 @@ int ag_switcher() {
                 vtun_syslog(LOG_INFO, "ACK_speed_avg %u logical channel %i", info.channel[i].ACK_speed_avg, i);
 #endif
             } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
-                vtun_syslog(LOG_ERR, "ERROR - sended_bytes value is overflow, zeroing ACK_coming_speed");
+                vtun_syslog(LOG_ERR, "WARNING - sended_bytes value is overflow, zeroing ACK_coming_speed");
                 info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 4;
             } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
-                vtun_syslog(LOG_ERR, "ERROR - Speed was slow much time logical channel %i", i);
+                vtun_syslog(LOG_ERR, "WARNING - Speed was slow much time logical channel %i", i);
                 info.channel[i].ACK_speed_avg = 0;
             }
             memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
@@ -1024,7 +1024,7 @@ int ag_switcher() {
         }
 #ifdef DEBUGG
         else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
-            vtun_syslog(LOG_WARNING, "ERROR - speed very slow, need to wait more bytes");
+            vtun_syslog(LOG_WARNING, "WARNING - speed very slow, need to wait more bytes");
         } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
             vtun_syslog(LOG_WARNING, "WARNING - speed very high, need to wait more time");
         } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
@@ -1758,7 +1758,9 @@ int res123 = 0;
 
         if( !len ) {
             /* We are idle, lets check connection */
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "idle...");
+#endif
                 /* Send ECHO request */
                 if((cur_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
