@@ -1473,12 +1473,11 @@ int res123 = 0;
             timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
-                        "{\"p_chan_num\":%i,\"process_name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"my_max_send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"incomplete_seq_len\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACK_coming_speed\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u}",
-                        info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
-                        chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-                        chan_info[my_max_send_q_chan_num].send,
+                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i}",
+                        lfd_host->host, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
+                        rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, shm_conn_info->stats[info.process_num].max_send_q_avg);//info.max_send_q_avg);
+                        hold_mode, ACK_coming_speed_avg, info.mode);
                 json_timer.tv_sec = cur_time.tv_sec;
                 get_info_time_last.tv_usec = cur_time.tv_usec;
             }
