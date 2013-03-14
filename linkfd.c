@@ -509,13 +509,19 @@ int retransmit_send(char *out2) {
         sem_wait(&(shm_conn_info->write_buf_sem));
         remote_lws = shm_conn_info->write_buf[i].remote_lws;
         sem_post(&(shm_conn_info->write_buf_sem));
-        if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
-            continue;
-        }
         if ((last_sent_packet_num[i].seq_num + 1) <= remote_lws) {
             last_sent_packet_num[i].seq_num = remote_lws;
         }
         last_sent_packet_num[i].seq_num++;
+
+        if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
+#ifdef DEBUGG
+           vtun_syslog(LOG_INFO, "debug: retransmit_send skipping logical channel #%i my last seq_num %lu top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
+#endif
+           continue;
+        }
+ 
+
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %lu top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
