@@ -512,7 +512,6 @@ int retransmit_send(char *out2) {
         if ((last_sent_packet_num[i].seq_num + 1) <= remote_lws) {
             last_sent_packet_num[i].seq_num = remote_lws;
         }
-        last_sent_packet_num[i].seq_num++;
 
         if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
 #ifdef DEBUGG
@@ -520,6 +519,7 @@ int retransmit_send(char *out2) {
 #endif
            continue;
         }
+        last_sent_packet_num[i].seq_num++;
  
 
 #ifdef DEBUGG
