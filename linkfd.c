@@ -303,7 +303,7 @@ int missing_resend_buffer (int chan_num, unsigned long buf[], int *buf_len) {
 
 int get_write_buf_wait_data() {
     for (int i = 0; i < info.channel_amount; i++) {
-        if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
+        if ((shm_conn_info->write_buf[i].frames.rel_head != -1) && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1))) {
             return 1;
         }
     }
