@@ -525,6 +525,18 @@ extern llist host_list;
 #define VTUN_SIG_TERM 1
 #define VTUN_SIG_HUP  2
 
+/* Authentication errors */
+#define D_NOSHAKE1 1
+#define D_NOSHAKE2 2
+#define D_ST_CHAL 3
+#define D_CHAL 4
+#define D_NOHOST 5
+#define D_NOMULT 6
+#define D_GREET 7
+#define D_PWD 8
+
+
+
 /* Global options */
 struct vtun_opts {
    int  timeout;

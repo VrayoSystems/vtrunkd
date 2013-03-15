@@ -70,6 +70,7 @@ void connection(int sock)
      struct sigaction sa;
      char *ip;
      int opt;
+     int reason=0;
 
      opt = sizeof(struct sockaddr_in);
      if( getpeername(sock, (struct sockaddr *) &cl_addr, &opt) ){
@@ -86,7 +87,7 @@ void connection(int sock)
 
      io_init();
 
-     if( (host=auth_server(sock)) ){	
+     if( (host=auth_server(sock, &reason)) ){	
         sa.sa_handler=SIG_IGN;
 	sa.sa_flags=SA_NOCLDWAIT;;
         sigaction(SIGHUP,&sa,NULL);
@@ -108,8 +109,8 @@ void connection(int sock)
 	/* Unlock host. (locked in auth_server) */	
 	unlock_host(host);
      } else {
-        vtun_syslog(LOG_INFO,"Denied connection from %s:%d", ip,
-					ntohs(cl_addr.sin_port) );
+        vtun_syslog(LOG_INFO,"Denied connection from %s:%d, reason: %d", ip,
+					ntohs(cl_addr.sin_port), reason );
      }
      close(sock);
 

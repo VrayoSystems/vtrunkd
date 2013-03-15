@@ -27,5 +27,6 @@
 #define ST_HOST  1
 #define ST_CHAL  2
 
-struct vtun_host * auth_server(int fd);
-int auth_client(int fd, struct vtun_host *host);
+struct vtun_host * auth_server(int fd, int * reason);
+int auth_client(int fd, struct vtun_host *host, int * reason);
+
