@@ -311,8 +311,9 @@ struct vtun_host * auth_server(int fd, int *reason)
 	print_p(fd,"VTUN server ver %s\n",VTUN_VER);
 
 	stage = ST_HOST;
-
+    *reason = D_NOREAD;
 	while( readn_t(fd, buf, VTUN_MESG_SIZE, vtun.timeout) > 0 ){
+        *reason = D_OTHER;
 	   buf[sizeof(buf)-1]='\0';
 	   strtok(buf,"\r\n");
 
@@ -387,8 +388,9 @@ int auth_client(int fd, struct vtun_host *host, int * reason)
 	int stage, success=0 ;
 	
 	stage = ST_INIT;
-
+    *reason = D_NOREAD;
 	while( readn_t(fd, buf, VTUN_MESG_SIZE, vtun.timeout) > 0 ){
+        *reason = D_OTHER;
 	   buf[sizeof(buf)-1]='\0';
 	   switch( stage ){
 		case ST_INIT:

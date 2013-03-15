@@ -534,6 +534,8 @@ extern llist host_list;
 #define D_NOMULT 6
 #define D_GREET 7
 #define D_PWD 8
+#define D_NOREAD 9
+#define D_OTHER 10
 
 
 
