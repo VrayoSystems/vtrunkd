@@ -1485,7 +1485,7 @@ int res123 = 0;
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
                         hold_mode, ACK_coming_speed_avg, info.mode);
                 json_timer.tv_sec = cur_time.tv_sec;
-                get_info_time_last.tv_usec = cur_time.tv_usec;
+                json_timer.tv_usec = cur_time.tv_usec;
             }
 #endif
         }
