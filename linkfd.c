@@ -489,7 +489,7 @@ int check_fast_resend() {
 
 /**
  * Function for trying resend
- */
+ */ 
 int retransmit_send(char *out2) {
     if (hold_mode) {
         return CONTINUE_ERROR;
@@ -517,6 +517,8 @@ int retransmit_send(char *out2) {
 #ifdef DEBUGG
            vtun_syslog(LOG_INFO, "debug: retransmit_send skipping logical channel #%i my last seq_num %lu top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
+            // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
+            if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %lu is > top seq_num %lu", i, last_sent_packet_num[i].seq_num, top_seq_num);
            continue;
         }
         last_sent_packet_num[i].seq_num++;
@@ -565,11 +567,11 @@ int retransmit_send(char *out2) {
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         info.channel[i].up_len += len_ret;
     }
-    if (send_counter == 0) {
+    
+    if (send_counter == 0) 
         return LASTPACKETMY_NOTIFY;
-    } else {
-        return 1;
-    }
+        
+    return 1;
 }
 
 /**
@@ -588,8 +590,6 @@ int select_devread_send(char *buf, char *out2) {
     struct my_ip *ip;
     struct tcphdr *tcp;
     struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
     fd_set fdset_tun;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
@@ -607,6 +607,8 @@ int select_devread_send(char *buf, char *out2) {
         if (try_flag != 0) { // if semaphore is locked then go out
             return TRYWAIT_NOTIFY;
         }
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
         select_ret = select(info.tun_device + 1, &fdset_tun, NULL, NULL, &tv);
         if (select_ret < 0) {
             if (errno != EAGAIN && errno != EINTR) {
@@ -682,6 +684,8 @@ int select_devread_send(char *buf, char *out2) {
 #endif
     FD_ZERO(&fdset_tun);
     FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
     select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
@@ -1107,12 +1111,12 @@ int ag_switcher() {
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd;
 #if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u}",
+            "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u,\"remote_buf_len\":%i}",
             info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
             chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num].send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg);
+            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg, shm_conn_info->miss_packets_max);
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return AG_MODE;
@@ -1479,11 +1483,11 @@ int res123 = 0;
             timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i}",
+                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"remote_buf_len\":%i}",
                         lfd_host->host, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        hold_mode, ACK_coming_speed_avg, info.mode);
+                        hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->miss_packets_max);
                 json_timer.tv_sec = cur_time.tv_sec;
                 json_timer.tv_usec = cur_time.tv_usec;
             }
