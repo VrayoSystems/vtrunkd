@@ -2350,7 +2350,7 @@ int res123 = 0;
         }
         sem_post(write_buf_sem);
 
-        if (FD_ISSET(info.tun_device, pfdset_w)) {
+        if ((pfdset_w != NULL) && FD_ISSET(info.tun_device, pfdset_w)) {
             continue; // we do not want to read data from device each time that we write a packet!
         }
 
