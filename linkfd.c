@@ -1016,10 +1016,12 @@ int ag_switcher() {
                 vtun_syslog(LOG_INFO, "ACK_speed_avg %u logical channel %i", info.channel[i].ACK_speed_avg, i);
 #endif
             } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
-                vtun_syslog(LOG_ERR, "WARNING - sended_bytes value is overflow, zeroing ACK_coming_speed");
+                vtun_syslog(LOG_ERR, "WARNING - sent_bytes value is overflow, zeroing ACK_coming_speed");
                 info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 4;
             } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "WARNING - Speed was slow much time logical channel %i", i);
+#endif
                 info.channel[i].ACK_speed_avg = 0;
             }
             memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
@@ -1622,7 +1624,9 @@ int res123 = 0;
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h,
                             sizeof(shm_conn_info->miss_packets_max_send_counter));
+#ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "Sending time lag.....");
+#endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf,
                         ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
@@ -1634,8 +1638,8 @@ int res123 = 0;
                 }
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
-                   vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm,  statb.bytes_rcvd_norm,  statb.bytes_sent_rx,  statb.pkts_dropped, statb.rxmit_req_rx,  statb.rxmits,  statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
        #ifdef DEBUGG
+                   vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm,  statb.bytes_rcvd_norm,  statb.bytes_sent_rx,  statb.pkts_dropped, statb.rxmit_req_rx,  statb.rxmits,  statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
                    vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5],    statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
        #endif
                    dev_my_cnt = 0;
@@ -1993,8 +1997,10 @@ int res123 = 0;
                                     sizeof(shm_conn_info->miss_packets_max_recv_counter));
                             miss_packets_max_recv_counter = ntohl(miss_packets_max_recv_counter);
 							sem_wait(&(shm_conn_info->stats_sem));
-							vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
+#ifdef DEBUGG
+                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
 							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
+#endif
 //                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
                                 shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
