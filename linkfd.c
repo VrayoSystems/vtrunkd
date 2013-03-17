@@ -2294,17 +2294,12 @@ int res123 = 0;
         /* Pass data from write_buff to TUN device */
 
         // I suspect write_buf_sem race condition here... double-check!
-        int tw_dc = 0;
-        int tw_dc_c = 0;
-        while (tw_dc == 0) {
-            tw_dc = sem_trywait(write_buf_sem);
-            tw_dc_c++;
+        int wbs_val;
+        sem_getvalue(write_buf_sem, &wbs_val);
+        if ( wbs_val > 1 ) {
+            sem_wait(write_buf_sem);
+            vtun_syslog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
         }
-        if ( tw_dc_c > 1 ) {
-            vtun_syslog(LOG_INFO, "ASSERT FAILED! write_buf_sem > 1! fixed.");
-        }
-        sem_post(write_buf_sem);
-
 
         sem_wait(write_buf_sem);
 
