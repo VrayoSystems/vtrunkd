@@ -785,7 +785,7 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
     acnt = 0;
     while( i > -1 ) {
         if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
-            vtun_syslog(LOG_INFO, "drop exist pkt");
+            vtun_syslog(LOG_INFO, "drop exist pkt seq_num %lu sitting in write_buf chan %i", seq_num, conn_num);
             //return -3;
             return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         }
