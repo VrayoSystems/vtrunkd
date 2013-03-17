@@ -2282,17 +2282,19 @@ int res123 = 0;
 
                 } // end load frame processing
 
-                //}
             } // if fd0>0
-        } // for chans..
 
         // if we could not create logical channels YET. We can't send data from tun to net. Hope to create later...
         if (info.channel_amount <= 1) { // only service channel available
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
+#endif
             continue;
         }
         /* Pass data from write_buff to TUN device */
         sem_wait(write_buf_sem);
+
+        chan_num_virt = chan_num; // WTF we write to tun async with how we rcv!?!?!
         fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
         if (fprev == -1) { // don't panic ;-)
             shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
@@ -2356,6 +2358,8 @@ int res123 = 0;
             break;
         }
         sem_post(write_buf_sem);
+
+        } // for chans..
 
         if ((pfdset_w != NULL) && FD_ISSET(info.tun_device, pfdset_w)) {
             continue; // we do not want to read data from device each time that we write a packet!
