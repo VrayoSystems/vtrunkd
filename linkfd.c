@@ -1868,6 +1868,7 @@ int res123 = 0;
                             for (i = 0; i < info.channel_amount; i++) {
                                 shm_conn_info->seq_counter[i] = SEQ_START_VAL;
                                 shm_conn_info->write_buf[i].last_written_seq = SEQ_START_VAL;
+                                shm_conn_info->write_buf[i].remote_lws = SEQ_START_VAL;
                             }
                             memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
                             sem_post(&(shm_conn_info->write_buf_sem));
