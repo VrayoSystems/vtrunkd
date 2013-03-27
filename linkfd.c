@@ -2534,6 +2534,46 @@ int res123 = 0;
  */
 int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_channel_num)
 {
+
+    rxmt_mode_request = 0; // flag
+    weight = 0; // bigger weight more time to wait(weight == penalty)
+    weight_cnt = 0;
+    acnt = 0; // assert variable
+
+    // these are for retransmit mode... to be removed
+    retransmit_count = 0;
+    channel_mode = MODE_NORMAL;
+    hold_mode = 0; // 1 - hold 0 - normal
+    force_hold_mode = 1;
+    incomplete_seq_len = 0;
+    rtt = 0;
+    rtt_old=0;
+    rtt_old_old=0;
+    my_miss_packets_max = 0; // in ms; calculated here
+    miss_packets_max = 0; // get from another side
+    proto_err_cnt = 0;
+    my_max_send_q_chan_num = 0;
+    my_max_send_q = 0;
+    max_reorder_byte = 0;
+    last_channels_mask = 0;
+
+    /*Variables for the exact way of measuring speed*/
+    send_q_read_timer = (struct timeval) {0, 0};
+    send_q_read_drop_time = (struct timeval) {0, 100000};
+    send_q_mode_switch_time = (struct timeval) {0, 0};
+    ACK_coming_speed_avg = 0;
+    send_q_limit = 7000;
+    magic_rtt_avg = 0;
+
+    /* Host we are working with.
+     * Used by signal handlers that's why it is global.
+     */
+
+    lfd_mod_head = NULL;
+    lfd_mod_tail = NULL;
+    chan_info = NULL;
+
+
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup;
     int old_prio;
     /** Global initialization section for variable and another things*/
