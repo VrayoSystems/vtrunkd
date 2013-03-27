@@ -562,6 +562,10 @@ int tunnel(struct vtun_host *host, int srv)
                     sem_init(&shm_conn_info[connid].AG_flags_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].common_sem, 1, 1);
 
+                    struct timeval session_hash_time;
+                    gettimeofday(&session_hash_time, NULL );
+                    shm_conn_info[connid].session_hash_this = (uint32_t)session_hash_time.tv_usec;
+
                     for(i=0; i<MAX_TCP_LOGICAL_CHANNELS;i++) {
                          shm_conn_info[connid].seq_counter[i] = SEQ_START_VAL; // start with 10!! 0-9 are reserved as flags
                          shm_conn_info[connid].write_buf[i].last_written_seq = SEQ_START_VAL;

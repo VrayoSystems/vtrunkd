@@ -398,6 +398,8 @@ struct phisical_status {
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */
+    uint32_t session_hash_this; /**< Session hash for this machine */
+    uint32_t session_hash_remote; /**< Session hash for remote machine */
 };
 
 struct conn_info {
@@ -434,6 +436,8 @@ struct conn_info {
     uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable sync by AG_flags_sem
     uint32_t channels_mask; // 1 - channel is working 0 - channel is dead sync by AG_flags_sem
     uint32_t need_to_exit; // sync by AG_flags_sem
+    uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
+    uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
 };
 
 struct resent_chk {

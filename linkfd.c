@@ -1431,11 +1431,15 @@ int res123 = 0;
         vtun_syslog(LOG_INFO, "normal sender added: now %d", shm_conn_info->normal_senders);
     }
 
+    sem_wait(&(shm_conn_info->common_sem));
     for(i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         if(shm_conn_info->seq_counter[i] != SEQ_START_VAL) break;
     }
+    sem_post(&(shm_conn_info->common_sem));
     if(i == MAX_TCP_LOGICAL_CHANNELS) {
-        *((unsigned long *)buf) = htonl(shm_conn_info->seq_counter[0]);
+        sem_wait(&(shm_conn_info->AG_flags_sem));
+        *((unsigned long *)buf) = htonl(shm_conn_info->session_hash_this);
+        sem_post(&(shm_conn_info->AG_flags_sem));
         *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_JUST_STARTED);
         if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
             vtun_syslog(LOG_ERR, "Could not send init pkt; exit");
@@ -1864,20 +1868,28 @@ int res123 = 0;
                         } else if (flag_var == FRAME_JUST_STARTED) {
                             // the opposite end has zeroed counters; zero mine!
                             vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters");
-                            sem_wait(&(shm_conn_info->write_buf_sem));
-                            for (i = 0; i < info.channel_amount; i++) {
-                                shm_conn_info->seq_counter[i] = SEQ_START_VAL;
-                                shm_conn_info->write_buf[i].last_written_seq = SEQ_START_VAL;
-                                shm_conn_info->write_buf[i].remote_lws = SEQ_START_VAL;
+                            uint32_t session_hash_remote = ntohl(*((uint32_t *) (buf)));
+                            sem_wait(&(shm_conn_info->AG_flags_sem));
+                            if (shm_conn_info->session_hash_remote != session_hash_remote) {
+                                shm_conn_info->session_hash_remote = session_hash_remote;
+                                sem_post(&(shm_conn_info->AG_flags_sem));
+                                info.session_hash_remote = session_hash_remote;
+                                sem_wait(&(shm_conn_info->write_buf_sem));
+                                for (i = 0; i < info.channel_amount; i++) {
+                                    shm_conn_info->seq_counter[i] = SEQ_START_VAL;
+                                    shm_conn_info->write_buf[i].last_written_seq = SEQ_START_VAL;
+                                    shm_conn_info->write_buf[i].remote_lws = SEQ_START_VAL;
+                                }
+                                sem_post(&(shm_conn_info->write_buf_sem));
+                                sem_wait(&(shm_conn_info->resend_buf_sem));
+                                for (i = 0; i < RESEND_BUF_SIZE; i++) {
+                                    if (shm_conn_info->resend_frames_buf[i].chan_num == chan_num)
+                                        shm_conn_info->resend_frames_buf[i].seq_num = 0;
+                                }
+                                sem_post(&(shm_conn_info->resend_buf_sem));
+                            } else {
+                                sem_post(&(shm_conn_info->AG_flags_sem));
                             }
-                            memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
-                            sem_post(&(shm_conn_info->write_buf_sem));
-                            sem_wait(&(shm_conn_info->resend_buf_sem));
-                            for(i=0; i<RESEND_BUF_SIZE; i++) {
-                                if(shm_conn_info->resend_frames_buf[i].chan_num == chan_num)
-                                    shm_conn_info->resend_frames_buf[i].seq_num = 0;
-                            }
-                            sem_post(&(shm_conn_info->resend_buf_sem));
                             continue;
                         } else if (flag_var == FRAME_PRIO_PORT_NOTIFY) {
                             // connect to port specified
@@ -2534,7 +2546,7 @@ int res123 = 0;
  */
 int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_channel_num)
 {
-
+    memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     rxmt_mode_request = 0; // flag
     weight = 0; // bigger weight more time to wait(weight == penalty)
     weight_cnt = 0;
