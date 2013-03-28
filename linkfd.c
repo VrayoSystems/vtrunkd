@@ -509,6 +509,10 @@ int retransmit_send(char *out2) {
         sem_post(&(shm_conn_info->common_sem));
         sem_wait(&(shm_conn_info->write_buf_sem));
         remote_lws = shm_conn_info->write_buf[i].remote_lws;
+        if (remote_lws > top_seq_num) {
+            shm_conn_info->write_buf[i].remote_lws = top_seq_num; // ????top_seq_num - 1
+            remote_lws = top_seq_num;
+        }
         sem_post(&(shm_conn_info->write_buf_sem));
         if ((last_sent_packet_num[i].seq_num + 1) <= remote_lws) {
             last_sent_packet_num[i].seq_num = remote_lws;
@@ -1867,8 +1871,8 @@ int res123 = 0;
                             // okay
                         } else if (flag_var == FRAME_JUST_STARTED) {
                             // the opposite end has zeroed counters; zero mine!
-                            vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters");
                             uint32_t session_hash_remote = ntohl(*((uint32_t *) (buf)));
+                            vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters new remote hash - %u", session_hash_remote);
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             if (shm_conn_info->session_hash_remote != session_hash_remote) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
