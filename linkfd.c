@@ -224,10 +224,8 @@ void sig_alarm(int sig)
 
 static void sig_usr1(int sig)
 {
-    vtun_syslog(LOG_INFO, "Get sig_usr1");
-    /* Reset statistic counters on SIGUSR1 */
-    lfd_host->stat.byte_in = lfd_host->stat.byte_out = 0;
-    lfd_host->stat.comp_in = lfd_host->stat.comp_out = 0;
+    vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
+    info.check_shm = 1;
 }
 
 /**
@@ -1462,7 +1460,10 @@ int res123 = 0;
     struct timeval  json_timer;
     gettimeofday(&json_timer, NULL);
     unsigned int superloops = 0;
-
+    info.check_shm = 0; // zeroing check_shm
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    last_channels_mask = shm_conn_info->channels_mask;
+    sem_post(&(shm_conn_info->AG_flags_sem));
 /**
  * Main program loop
  */
@@ -1500,34 +1501,38 @@ int res123 = 0;
             superloops = 0;
 #endif
         }
-
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        uint32_t chan_mask = shm_conn_info->channels_mask;
-        if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
-            linker_term = TERM_NONFATAL;
-            vtun_syslog(LOG_INFO, "Need to exit by peer");
-        }
-        sem_post(&(shm_conn_info->AG_flags_sem));
-        for (uint32_t i = 0; i < 32; i++) {
-            if (!(chan_mask & (1 << i))) {
-                if (last_channels_mask & (1 << i)) {
+        if (info.check_shm) {
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t chan_mask = shm_conn_info->channels_mask;
+            if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
+                linker_term = TERM_NONFATAL;
+                vtun_syslog(LOG_INFO, "Need to exit by peer");
+            }
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            for (uint32_t i = 0; i < 32; i++) {
+                if (!(chan_mask & (1 << i))) {
+                    if (last_channels_mask & (1 << i)) {
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
+                        vtun_syslog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
 #endif
-                    uint32_t i_h = htonl(i);
-                    uint16_t flag_h = htons(FRAME_DEAD_CHANNEL);
-                    memcpy(buf, &i_h, sizeof(uint32_t));
-                    memcpy(buf, &flag_h, sizeof(uint16_t));
-                    int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                    if (len_ret < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
-                        linker_term = TERM_NONFATAL;
+                        uint32_t i_n = htonl(i);
+                        uint16_t flag_n = htons(FRAME_DEAD_CHANNEL);
+                        memcpy(buf, &i_n, sizeof(uint32_t));
+                        memcpy(buf, &flag_n, sizeof(uint16_t));
+                        int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        if (len_ret < 0) {
+                            vtun_syslog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
+                            linker_term = TERM_NONFATAL;
+                        }
                     }
                 }
             }
+            last_channels_mask = chan_mask;
+            if (shm_conn_info->session_hash_remote != info.session_hash_remote) {
+                vtun_syslog(LOG_INFO, "Need to exit by hash compare; exit");
+                linker_term = TERM_NONFATAL;
+            }
         }
-        last_channels_mask = chan_mask;
-
         /* TODO write function for lws sending*/
         for (i = 0; i < info.channel_amount; i++) {
         sem_wait(&(shm_conn_info->write_buf_sem));
@@ -1873,8 +1878,18 @@ int res123 = 0;
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             if (shm_conn_info->session_hash_remote != session_hash_remote) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
+                                uint32_t chan_mask = shm_conn_info->channels_mask;
                                 sem_post(&(shm_conn_info->AG_flags_sem));
                                 info.session_hash_remote = session_hash_remote;
+                                for (int i = 0; i < 32; i++) {
+                                    if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
+                                        continue;
+                                    }
+                                    sem_wait(&(shm_conn_info->stats_sem));
+                                    pid_t pid = shm_conn_info->stats[i].pid;
+                                    sem_post(&(shm_conn_info->stats_sem));
+                                    kill(pid, SIGUSR1);
+                                }
                                 sem_wait(&(shm_conn_info->write_buf_sem));
                                 for (i = 0; i < info.channel_amount; i++) {
                                     shm_conn_info->seq_counter[i] = SEQ_START_VAL;
@@ -2591,7 +2606,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     chan_info = NULL;
 
 
-    struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup;
+    struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
     /** Global initialization section for variable and another things*/
     memset(&info, 0, sizeof(struct phisical_status));
@@ -2661,6 +2676,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     sigaction(SIGINT,&sa,&sa_oldint);
     sa.sa_handler=sig_hup;
     sigaction(SIGHUP,&sa,&sa_oldhup);
+    sa.sa_handler=sig_usr1;
+    sigaction(SIGUSR1,&sa,&sa_oldusr1);
 
     //sa.sa_handler=sig_usr2;
     //sigaction(SIGUSR2,&sa,NULL);
@@ -2671,11 +2688,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     /* Initialize statstic dumps */
     if( host->flags & VTUN_STAT ) {
         char file[40];
-
-        
-        //sa.sa_handler=sig_usr1;
-        //sigaction(SIGUSR1,&sa,NULL);
-
         sprintf(file,"%s/%.20s", VTUN_STAT_DIR, host->host);
         if( (host->stat.file=fopen(file, "a")) ) {
             setvbuf(host->stat.file, NULL, _IOLBF, 0);
@@ -2699,10 +2711,24 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         if (host->stat.file)
             fclose(host->stat.file);
     }
+    // I'm saying that I'm dead
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    sem_post(&(shm_conn_info->AG_flags_sem));
+    for (int i = 0; i < 32; i++) {
+        if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
+            continue;
+        }
+        sem_wait(&(shm_conn_info->stats_sem));
+        pid_t pid = shm_conn_info->stats[i].pid;
+        sem_post(&(shm_conn_info->stats_sem));
+        kill(pid, SIGUSR1);
+    }
 
     sigaction(SIGTERM,&sa_oldterm,NULL);
     sigaction(SIGINT,&sa_oldint,NULL);
     sigaction(SIGHUP,&sa_oldhup,NULL);
+    sigaction(SIGUSR1,&sa_oldusr1,NULL);
 
     setpriority(PRIO_PROCESS,0,old_prio);
 

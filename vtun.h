@@ -400,7 +400,9 @@ struct phisical_status {
     struct logical_status *channel; /**< Array for all logical channels */
     uint32_t session_hash_this; /**< Session hash for this machine */
     uint32_t session_hash_remote; /**< Session hash for remote machine */
+    /** Events */
     int just_started_recv; /**< 0 - when @see FRAME_JUST_STARTED hasn't received yet and 1 - already */
+    int check_shm; /**< 1 - need to check some shm values */
 };
 
 struct conn_info {
