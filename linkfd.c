@@ -1435,20 +1435,13 @@ int res123 = 0;
         vtun_syslog(LOG_INFO, "normal sender added: now %d", shm_conn_info->normal_senders);
     }
 
-    sem_wait(&(shm_conn_info->common_sem));
-    for(i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
-        if(shm_conn_info->seq_counter[i] != SEQ_START_VAL) break;
-    }
-    sem_post(&(shm_conn_info->common_sem));
-    if(i == MAX_TCP_LOGICAL_CHANNELS) {
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        *((unsigned long *)buf) = htonl(shm_conn_info->session_hash_this);
-        sem_post(&(shm_conn_info->AG_flags_sem));
-        *((unsigned short *)(buf+sizeof(unsigned long))) = htons(FRAME_JUST_STARTED);
-        if(proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-            vtun_syslog(LOG_ERR, "Could not send init pkt; exit");
-            linker_term = TERM_NONFATAL;
-        }
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    *((unsigned long *) buf) = htonl(shm_conn_info->session_hash_this);
+    sem_post(&(shm_conn_info->AG_flags_sem));
+    *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_JUST_STARTED);
+    if (proto_write(service_channel, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+        vtun_syslog(LOG_ERR, "Could not send init pkt; exit");
+        linker_term = TERM_NONFATAL;
     }
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
@@ -1745,7 +1738,10 @@ int res123 = 0;
             pfdset_w = NULL;
         }
         FD_ZERO(&fdset);
-        if (hold_mode == 0) {
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
+#endif
+        if ((hold_mode == 0) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
             tv.tv_usec = 200000;
@@ -1873,6 +1869,7 @@ int res123 = 0;
                             // the opposite end has zeroed counters; zero mine!
                             uint32_t session_hash_remote = ntohl(*((uint32_t *) (buf)));
                             vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters new remote hash - %u", session_hash_remote);
+                            info.just_started_recv = 1;
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             if (shm_conn_info->session_hash_remote != session_hash_remote) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
@@ -2221,6 +2218,10 @@ int res123 = 0;
                     }
                     sem_post(write_buf_sem);
 
+                    // check for initialization
+                    if (!info.just_started_recv) {
+                        continue;
+                    }
                     // send lws(last written sequence number) to remote side
                     sem_wait(write_buf_sem);
                     int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
@@ -2306,7 +2307,7 @@ int res123 = 0;
             } // if fd0>0
 
         // if we could not create logical channels YET. We can't send data from tun to net. Hope to create later...
-        if (info.channel_amount <= 1) { // only service channel available
+            if ((info.channel_amount <= 1) || (info.just_started_recv == 0)) { // only service channel available
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
 #endif
@@ -2593,6 +2594,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup;
     int old_prio;
     /** Global initialization section for variable and another things*/
+    memset(&info, 0, sizeof(struct phisical_status));
     lfd_host = host;
     info.srv = ss;
     shm_conn_info = ci;
