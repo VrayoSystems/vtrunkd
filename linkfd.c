@@ -1895,6 +1895,8 @@ int res123 = 0;
                                     shm_conn_info->seq_counter[i] = SEQ_START_VAL;
                                     shm_conn_info->write_buf[i].last_written_seq = SEQ_START_VAL;
                                     shm_conn_info->write_buf[i].remote_lws = SEQ_START_VAL;
+                                    frame_llist_init(&(shm_conn_info->write_buf[i].frames));
+                                    frame_llist_fill(&(shm_conn_info->wb_free_frames), shm_conn_info->frames_buf, FRAME_BUF_SIZE);
                                 }
                                 sem_post(&(shm_conn_info->write_buf_sem));
                                 sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -1902,6 +1904,10 @@ int res123 = 0;
                                     if (shm_conn_info->resend_frames_buf[i].chan_num == chan_num)
                                         shm_conn_info->resend_frames_buf[i].seq_num = 0;
                                 }
+                                memset(shm_conn_info->resend_frames_buf, 0, sizeof(struct frame_seq) * RESEND_BUF_SIZE);
+                                memset(shm_conn_info->fast_resend_buf, 0, sizeof(struct frame_seq) * MAX_TCP_PHYSICAL_CHANNELS);
+                                shm_conn_info->resend_buf_idx = 0;
+                                shm_conn_info->fast_resend_buf_idx = 0;
                                 sem_post(&(shm_conn_info->resend_buf_sem));
                             } else {
                                 sem_post(&(shm_conn_info->AG_flags_sem));
