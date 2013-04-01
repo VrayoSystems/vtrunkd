@@ -1339,7 +1339,7 @@ int res123 = 0;
             vtun_syslog(LOG_INFO,"Chan %d", i);
 #endif
             prio_opt = sizeof(cl_addr);
-            alarm(CHAN_START_ACCEPT_TIMEOUT);
+//            alarm(CHAN_START_ACCEPT_TIMEOUT);
             if( (fd_tmp=accept(prio_s,(struct sockaddr *)&cl_addr,&prio_opt)) < 0 ) {
                 vtun_syslog(LOG_ERR,"Channels socket accept error %s(%d)",
                             strerror(errno), errno);
@@ -1449,7 +1449,7 @@ int res123 = 0;
     last_net_read = cur_time.tv_sec;
     shm_conn_info->lock_time = cur_time.tv_sec;
     
-    alarm(lfd_host->MAX_IDLE_TIMEOUT);
+//    alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
     get_info_time.tv_sec = 0;
     get_info_time.tv_usec = 10000;
