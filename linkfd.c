@@ -1459,7 +1459,6 @@ int res123 = 0;
     timer_resolution.tv_usec = 0;
     struct timeval  json_timer;
     gettimeofday(&json_timer, NULL);
-    unsigned int superloops = 0;
     info.check_shm = 0; // zeroing check_shm
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
@@ -1470,7 +1469,6 @@ int res123 = 0;
     while( !linker_term ) {
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
-        superloops++; // TODO: remove later..
         gettimeofday(&cur_time, NULL);
         timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
@@ -1490,15 +1488,14 @@ int res123 = 0;
             timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"remote_buf_len\":%i,\"loops\":%u}",
+                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"remote_buf_len\":%i}",
                         lfd_host->host, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->miss_packets_max, superloops);
+                        hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->miss_packets_max);
                 json_timer.tv_sec = cur_time.tv_sec;
                 json_timer.tv_usec = cur_time.tv_usec;
             }
-            superloops = 0;
 #endif
         }
         if (info.check_shm) {
