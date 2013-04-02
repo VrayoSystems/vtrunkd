@@ -387,14 +387,22 @@ struct phisical_status {
     int tun_device; /**< /dev/tun descriptor */
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
 
-    /** Garbage statistic*/
+    /** Collect statistic*/
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
     struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
     struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
     uint32_t max_send_q_avg;
     uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
+    uint32_t max_send_q_min;
+    uint32_t max_send_q_max;
     int max_send_q_counter;
+    unsigned int speed_efficient;
+    unsigned int speed_resend;
+    unsigned int speed_r_mode;
+    unsigned int byte_efficient;
+    unsigned int byte_resend;
+    unsigned int byte_r_mode;
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */

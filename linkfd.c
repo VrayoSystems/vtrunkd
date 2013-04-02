@@ -569,6 +569,7 @@ int retransmit_send(char *out2) {
         send_counter++;
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         info.channel[i].up_len += len_ret;
+        info.byte_r_mode += len_ret;
     }
     
     if (send_counter == 0) 
@@ -736,6 +737,7 @@ int select_devread_send(char *buf, char *out2) {
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     info.channel[chan_num].up_len += len_ret;
+    info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
 //    last_sent_packet_num[chan_num].num_resend = 0;
@@ -997,6 +999,10 @@ int ag_switcher() {
     info.max_send_q_avg =
             info.max_send_q_avg > my_max_send_q ?
                     info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 : info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
+#if !defined(DEBUGG)
+    info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
+    info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
+#endif
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
@@ -1116,12 +1122,12 @@ int ag_switcher() {
     uint32_t send_q_c = chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd;
 #if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u,\"remote_buf_len\":%i}",
+            "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":120000,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"r_buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u}",
             info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
             chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num].send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg, shm_conn_info->miss_packets_max);
+            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg, shm_conn_info->miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend);
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return AG_MODE;
@@ -1488,13 +1494,15 @@ int res123 = 0;
             timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"send_q_limit\":%i,\"send_q\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"remote_buf_len\":%i}",
-                        lfd_host->host, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
+                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u}",
+                        lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, chan_info[my_max_send_q_chan_num].rtt,
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->miss_packets_max);
+                        hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend);
                 json_timer.tv_sec = cur_time.tv_sec;
                 json_timer.tv_usec = cur_time.tv_usec;
+                info.max_send_q_max = 0;
+                info.max_send_q_min = 120000;
             }
 #endif
         }
@@ -1559,16 +1567,22 @@ int res123 = 0;
            * This is the Tick module
            */
           if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
-
+            uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
+            info.speed_efficient = info.byte_efficient / time_passed;
+            info.speed_r_mode = info.byte_r_mode / time_passed;
+            info.speed_resend = info.byte_resend / time_passed;
+            info.byte_efficient = 0;
+            info.byte_resend = 0;
+            info.byte_r_mode = 0;
             for (int i = 0; i < info.channel_amount; i++) {
                 // speed(kb/s) calculation
                 sem_wait(&(shm_conn_info->stats_sem));
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt
-                        / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                        / time_passed;
                 sem_post(&(shm_conn_info->stats_sem));
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed =
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt / (tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000);
+                        shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt / (time_passed);
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt = 0;
 #ifdef TRACE
                 vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
@@ -2117,6 +2131,7 @@ int res123 = 0;
                         gettimeofday(&send2, NULL);
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
                         info.channel[0].up_len += len_ret;
+                        info.byte_resend += len_ret;
 #ifdef DEBUGG
                         if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %lu ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
 #endif
@@ -2591,7 +2606,12 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_max_send_q = 0;
     max_reorder_byte = 0;
     last_channels_mask = 0;
-
+    info.byte_efficient = 0;
+    info.byte_resend = 0;
+    info.byte_r_mode = 0;
+    info.speed_efficient = 0;
+    info.speed_resend = 0;
+    info.speed_r_mode = 0;
     /*Variables for the exact way of measuring speed*/
     send_q_read_timer = (struct timeval) {0, 0};
     send_q_read_drop_time = (struct timeval) {0, 100000};
@@ -2607,8 +2627,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     lfd_mod_head = NULL;
     lfd_mod_tail = NULL;
     chan_info = NULL;
-
-
+    info.max_send_q_max = 0;
+    info.max_send_q_min = 120000;
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
     /** Global initialization section for variable and another things*/
