@@ -423,7 +423,9 @@ void seqn_add_tail(int conn_num, char *buf, int len, unsigned long seq_num, unsi
 
     shm_conn_info->resend_buf_idx++;
     if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "seqn_add_tail() resend_frames_buf loop end");
+#endif
         shm_conn_info->resend_buf_idx = 0;
     }
 
@@ -555,7 +557,9 @@ int retransmit_send(char *out2) {
         sem_post(&(shm_conn_info->resend_buf_sem));
         if (last_sent_packet_num[i].num_resend == 0) {
             last_sent_packet_num[i].num_resend++;
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Resend frame ... chan %d start for seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
+#endif
         }
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %lu len %d", i, last_sent_packet_num[i].seq_num, len);
@@ -792,7 +796,9 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
     acnt = 0;
     while( i > -1 ) {
         if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop exist pkt seq_num %lu sitting in write_buf chan %i", seq_num, conn_num);
+#endif
             //return -3;
             return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         }
