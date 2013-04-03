@@ -2226,6 +2226,7 @@ int res123 = 0;
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
+                    my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
