@@ -2064,24 +2064,26 @@ int res123 = 0;
                             vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
 							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
 #endif
-//                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
+                            if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
+                                miss_packets_max = miss_packets_max_tmp;
+                                shm_conn_info->miss_packets_max = miss_packets_max;
                                 shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
-                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                    if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
-                                        shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
-                                        miss_packets_max = miss_packets_max_tmp;
-                                        shm_conn_info->miss_packets_max = miss_packets_max;
-                                        recv_lag = 1;
-                                        break;
-                                    }
-                                }
 #ifdef DEBUGG
-                                if (recv_lag) {
-                                    vtun_syslog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
-                                    vtun_syslog(LOG_INFO, "Miss packets for pid: %i is %u", time_lag_local.pid, miss_packets_max_tmp);
-                                }
+                                vtun_syslog(LOG_INFO, "Miss packets(buf_len) for counter %u is %u apply", miss_packets_max_recv_counter, miss_packets_max_tmp);
 #endif
-//                            }
+                            }
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
+                                    shm_conn_info->stats[i].time_lag = time_lag_local.time_lag;
+                                    recv_lag = 1;
+                                    break;
+                                }
+                            }
+#ifdef DEBUGG
+                            if (recv_lag) {
+                                vtun_syslog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
+                            }
+#endif
 							time_lag_local.time_lag = shm_conn_info->stats[info.process_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
