@@ -2057,7 +2057,7 @@ int res123 = 0;
 							memcpy(&(time_lag_local.pid), buf + sizeof(uint32_t) + sizeof(uint16_t), sizeof(time_lag_local.pid));
 						    time_lag_local.pid = ntohs(time_lag_local.pid);
                             uint32_t miss_packets_max_recv_counter;
-                            memcpy(&(miss_packets_max_recv_counter), buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(time_lag_local.pid), sizeof(uint32_t));
+                            memcpy(&(miss_packets_max_recv_counter), buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
                             miss_packets_max_recv_counter = ntohl(miss_packets_max_recv_counter);
 							sem_wait(&(shm_conn_info->stats_sem));
 #ifdef DEBUGG
