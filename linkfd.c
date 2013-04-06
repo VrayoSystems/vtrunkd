@@ -1392,6 +1392,9 @@ int res123 = 0;
             info.channel[i].descriptor=fd_tmp;
         }
         info.channel[0].descriptor = service_channel;
+        struct timeval timeout;
+        timeout.tv_sec = 10;
+        timeout.tv_usec = 0;
         for (i = 0; i < info.channel_amount; i++) {
             if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
@@ -1400,6 +1403,16 @@ int res123 = 0;
             }
             info.channel[i].rport = ntohs(rmaddr.sin_port);
             vtun_syslog(LOG_ERR, "Socket peer IP channel - %i port - %i", i, info.channel[i].rport);
+            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                vtun_syslog(LOG_ERR, "setsockopt failed");
+                linker_term = TERM_NONFATAL;
+                break;
+            }
+            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                vtun_syslog(LOG_ERR, "setsockopt failed");
+                linker_term = TERM_NONFATAL;
+                break;
+            }
         }
         if(break_out) {
             close(prio_s);
@@ -2007,7 +2020,6 @@ int res123 = 0;
 
                                 prio_opt=1;
                                 setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
-
                                 maxfd = (fd_tmp > maxfd ? (fd_tmp) : maxfd);
                                 info.channel[i].descriptor = fd_tmp;
 #ifdef DEBUGG
@@ -2028,6 +2040,9 @@ int res123 = 0;
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
+                            struct timeval timeout;
+                            timeout.tv_sec = 10;
+                            timeout.tv_usec = 0;
                             for (i = 0; i < info.channel_amount; i++) {
                                 if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
@@ -2036,6 +2051,16 @@ int res123 = 0;
                                 }
                                 info.channel[i].lport = ntohs(localaddr.sin_port);
                                 vtun_syslog(LOG_INFO, " client logical channel - %i port - %i", i, info.channel[i].lport);
+                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                                    vtun_syslog(LOG_ERR, "setsockopt failed");
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
+                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                                    vtun_syslog(LOG_ERR, "setsockopt failed");
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
                             }
                             vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", info.channel_amount);
                             continue;
