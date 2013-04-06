@@ -1912,7 +1912,6 @@ int res123 = 0;
                                     sem_wait(&(shm_conn_info->stats_sem));
                                     pid_t pid = shm_conn_info->stats[i].pid;
                                     sem_post(&(shm_conn_info->stats_sem));
-                                    kill(pid, SIGUSR1);
                                 }
                                 sem_wait(&(shm_conn_info->write_buf_sem));
                                 for (i = 0; i < info.channel_amount; i++) {
@@ -2643,6 +2642,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     chan_info = NULL;
     info.max_send_q_max = 0;
     info.max_send_q_min = 120000;
+    info.check_shm = 1;
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
     /** Global initialization section for variable and another things*/
@@ -2759,7 +2759,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         sem_wait(&(shm_conn_info->stats_sem));
         pid_t pid = shm_conn_info->stats[i].pid;
         sem_post(&(shm_conn_info->stats_sem));
-        kill(pid, SIGUSR1);
     }
 
     sigaction(SIGTERM,&sa_oldterm,NULL);
