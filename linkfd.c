@@ -2464,11 +2464,6 @@ int res123 = 0;
 
         } // for chans..
 
-        if ((pfdset_w != NULL) && FD_ISSET(info.tun_device, pfdset_w)) {
-            continue; // we do not want to read data from device each time that we write a packet!
-        }
-
-
         /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
              *
