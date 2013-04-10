@@ -2358,6 +2358,11 @@ int res123 = 0;
                     if (!info.just_started_recv) {
                         continue;
                     }
+                    sem_wait(write_buf_sem);
+                    if (FD_ISSET(info.tun_device, &fdset_w)) {
+                        write_buf_check_n_flush(chan_num_virt, tv_tmp);
+                    }
+                    sem_post(write_buf_sem);
                     // send lws(last written sequence number) to remote side
                     sem_wait(write_buf_sem);
                     int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
@@ -2458,14 +2463,6 @@ int res123 = 0;
             sem_wait(write_buf_sem);
             vtun_syslog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
         }
-
-        sem_wait(write_buf_sem);
-
-        chan_num_virt = chan_num; // WTF we write to tun async with how we rcv!?!?!
-            if (FD_ISSET(info.tun_device, &fdset_w)) {
-                write_buf_check_n_flush(chan_num, tv_tmp);
-            }
-        sem_post(write_buf_sem);
 
         } // for chans..
 
