@@ -299,7 +299,7 @@ int missing_resend_buffer (int chan_num, unsigned long buf[], int *buf_len) {
     return idx;
 }
 
-int get_write_buf_wait_data() {
+int get_write_buf_wait_data() {//Если мах латенси тоже добавить возврать 1
     for (int i = 0; i < info.channel_amount; i++) {
         if ((shm_conn_info->write_buf[i].frames.rel_head != -1) && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1))) {
 #ifdef DEBUGG
@@ -765,7 +765,7 @@ void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
     }
 #endif
     acnt = 0;
-    while (fprev > -1) {
+    if (fprev > -1) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
@@ -779,8 +779,9 @@ void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
                     vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
                 } else {
                     vtun_syslog(LOG_ERR, "dev write intr - need cont");
-                    //continue; // orig.. wtf??
+                    return;
                 }
+
             } else {
                 if (len < frame_seq_tmp.len) {
                     vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
@@ -801,14 +802,7 @@ void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
             frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
-        } else {
-            break;
         }
-#ifdef DEBUGG
-        if (assert_cnt(7))
-        break; // TODO: add #ifdef DEBUGG
-#endif
-        break;
     }
 }
 
@@ -1926,6 +1920,16 @@ int res123 = 0;
              * */
         //check all chans for being set..
         for (chan_num = 0; chan_num < info.channel_amount; chan_num++) {
+            if (FD_ISSET(info.tun_device, &fdset_w)) {
+                sem_wait(write_buf_sem);
+                struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num].last_write_time;
+                sem_post(write_buf_sem);
+                timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
+                sem_wait(write_buf_sem);
+                write_buf_check_n_flush(chan_num, tv_tmp);
+                write_buf_check_n_flush(chan_num, tv_tmp);
+                sem_post(write_buf_sem);
+            }
             fd0 = -1;
             if(FD_ISSET(info.channel[chan_num].descriptor, &fdset)) {
                 sem_wait(write_buf_sem);
@@ -2358,11 +2362,11 @@ int res123 = 0;
                     if (!info.just_started_recv) {
                         continue;
                     }
-                    sem_wait(write_buf_sem);
                     if (FD_ISSET(info.tun_device, &fdset_w)) {
+                        sem_wait(write_buf_sem);
                         write_buf_check_n_flush(chan_num_virt, tv_tmp);
+                        sem_post(write_buf_sem);
                     }
-                    sem_post(write_buf_sem);
                     // send lws(last written sequence number) to remote side
                     sem_wait(write_buf_sem);
                     int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
@@ -2416,7 +2420,7 @@ int res123 = 0;
                             }
                         } else {
                             if (buf_len > lfd_host->MAX_REORDER) {
-                                vtun_syslog(LOG_ERR, "ASSERT FAILED!! MAX_REORDER not resending! buf_len: %d", buf_len);
+                                vtun_syslog(LOG_ERR, "ASSERT FAILED!! MAX_REORDER not resending! buf_len: %d chan num %i lws %i last packet %i", buf_len, chan_num_virt, shm_conn_info->write_buf[chan_num_virt].last_written_seq,shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].seq_num);
                                 if (!FD_ISSET(info.tun_device, &fdset_w)) {
                                     vtun_syslog(LOG_ERR, "ASSERT FAILED!! tun dev not selected");
                                 }
