@@ -1928,6 +1928,13 @@ int res123 = 0;
         for (chan_num = 0; chan_num < info.channel_amount; chan_num++) {
             fd0 = -1;
             if(FD_ISSET(info.channel[chan_num].descriptor, &fdset)) {
+                sem_wait(write_buf_sem);
+                fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
+                if(fprev == -1) { // don't panic ;-)
+                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
+                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
+                }
+                sem_post(write_buf_sem);
                 fd0=info.channel[chan_num].descriptor; // TODO Why this need????
 
                 //net_counter++; // rxmit mode
@@ -2346,14 +2353,6 @@ int res123 = 0;
                         vtun_syslog(LOG_ERR, "WARNING! MAX_LATENCY_DROP triggering at play! chan %d", chan_num_virt);
                         statb.max_latency_drops++;
                     }
-
-                    sem_wait(write_buf_sem);
-                    fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
-                    if(fprev == -1) { // don't panic ;-)
-                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
-                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
-                    }
-                    sem_post(write_buf_sem);
 
                     // check for initialization
                     if (!info.just_started_recv) {
