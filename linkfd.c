@@ -2415,8 +2415,11 @@ int res123 = 0;
                                 info.channel[chan_num_virt].up_len += len_ret;
                             }
                         } else {
-                            if(buf_len > lfd_host->MAX_REORDER) {
+                            if (buf_len > lfd_host->MAX_REORDER) {
                                 vtun_syslog(LOG_ERR, "ASSERT FAILED!! MAX_REORDER not resending! buf_len: %d", buf_len);
+                                if (!FD_ISSET(info.tun_device, &fdset_w)) {
+                                    vtun_syslog(LOG_ERR, "ASSERT FAILED!! tun dev not selected");
+                                }
                             }
                         }
                         continue;
