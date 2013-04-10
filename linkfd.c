@@ -2389,6 +2389,15 @@ int res123 = 0;
             continue;
         }
         /* Pass data from write_buff to TUN device */
+
+        // I suspect write_buf_sem race condition here... double-check!
+        int wbs_val;
+        sem_getvalue(write_buf_sem, &wbs_val);
+        if ( wbs_val > 1 ) {
+            sem_wait(write_buf_sem);
+            vtun_syslog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
+        }
+
         sem_wait(write_buf_sem);
 
         chan_num_virt = chan_num; // WTF we write to tun async with how we rcv!?!?!
