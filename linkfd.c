@@ -750,6 +750,68 @@ int select_devread_send(char *buf, char *out2) {
     return len;
 }
 
+void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
+    int fprev = -1;
+    int fold = -1;
+    int len;
+    fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
+    shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
+#ifdef DEBUGG
+    if (fprev == -1) {
+        vtun_syslog(LOG_INFO, "no data to write at all!");
+    } else {
+        vtun_syslog(LOG_INFO, "trying to write to to dev: seq_num %lu lws %lu chan %d", shm_conn_info->frames_buf[fprev].seq_num,
+                shm_conn_info->write_buf[logical_channel].last_written_seq, logical_channel);
+    }
+#endif
+    acnt = 0;
+    while (fprev > -1) {
+        int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
+        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
+            struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
+#ifdef DEBUGG
+            struct timeval work_loop1, work_loop2;
+            gettimeofday(&work_loop1, NULL );
+#endif
+            if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
+                vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
+                if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
+                    vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                } else {
+                    vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                    //continue; // orig.. wtf??
+                }
+            } else {
+                if (len < frame_seq_tmp.len) {
+                    vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
+                            shm_conn_info->frames_buf[fprev].len);
+                }
+            }
+#ifdef DEBUGG
+            gettimeofday(&work_loop2, NULL );
+            vtun_syslog(LOG_INFO, "dev_write time: %lu us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
+            vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len,
+                    shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
+                    weight, shm_conn_info->frames_buf[fprev].len, logical_channel);
+#endif
+            shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
+            shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = cur_time.tv_sec;
+            shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = cur_time.tv_usec;
+
+            fold = fprev;
+            fprev = shm_conn_info->frames_buf[fprev].rel_next;
+            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
+        } else {
+            break;
+        }
+#ifdef DEBUGG
+        if (assert_cnt(7))
+        break; // TODO: add #ifdef DEBUGG
+#endif
+        break;
+    }
+}
+
 int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsigned long incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
     char *ptr;
     int mlen = 0;
@@ -2401,68 +2463,9 @@ int res123 = 0;
         sem_wait(write_buf_sem);
 
         chan_num_virt = chan_num; // WTF we write to tun async with how we rcv!?!?!
-        fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
-        if (fprev == -1) { // don't panic ;-)
-            shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
-            shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
-        }
-        shm_conn_info->write_buf[chan_num_virt].complete_seq_quantity = 0;
-        fold = -1;
-
-#ifdef DEBUGG
-        if (fprev == -1) {
-            vtun_syslog(LOG_INFO, "no data to write at all!");
-        } else {
-            vtun_syslog(LOG_INFO, "trying to write to to dev: seq_num %lu lws %lu chan %d", shm_conn_info->frames_buf[fprev].seq_num,
-                    shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
-        }
-#endif
-        acnt = 0;
-        while ((fprev > -1) && FD_ISSET(info.tun_device, &fdset_w)) {
-            int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[chan_num_virt].last_written_seq + 1) ? 1 : 0;
-            if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
-                struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
-#ifdef DEBUGG
-                struct timeval work_loop1, work_loop2;
-                gettimeofday(&work_loop1, NULL );
-#endif
-                if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
-                    vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), chan_num_virt);
-                    if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                        vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
-                    } else {
-                        vtun_syslog(LOG_ERR, "dev write intr - need cont");
-                        //continue; // orig.. wtf??
-                    }
-                } else {
-                    if (len < frame_seq_tmp.len) {
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
-                                shm_conn_info->frames_buf[fprev].len);
-                    }
-                }
-#ifdef DEBUGG
-                gettimeofday(&work_loop2, NULL );
-                vtun_syslog(LOG_INFO, "dev_write time: %lu us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
-                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %lu, lws: %lu mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len,
-                        shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[chan_num_virt].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
-                        weight, shm_conn_info->frames_buf[fprev].len, chan_num_virt);
-#endif
-                shm_conn_info->write_buf[chan_num_virt].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
-                shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
-                shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
-
-                fold = fprev;
-                fprev = shm_conn_info->frames_buf[fprev].rel_next;
-                frame_llist_free(&shm_conn_info->write_buf[chan_num_virt].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
-            } else {
-                break;
+            if (FD_ISSET(info.tun_device, &fdset_w)) {
+                write_buf_check_n_flush(chan_num, tv_tmp);
             }
-#ifdef DEBUGG
-            if (assert_cnt(7))
-                break; // TODO: add #ifdef DEBUGG
-#endif
-            break;
-        }
         sem_post(write_buf_sem);
 
         } // for chans..
