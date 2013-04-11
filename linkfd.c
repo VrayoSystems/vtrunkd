@@ -299,12 +299,14 @@ int missing_resend_buffer (int chan_num, unsigned long buf[], int *buf_len) {
     return idx;
 }
 
-int get_write_buf_wait_data() {//Если мах латенси тоже добавить возврать 1
+int get_write_buf_wait_data() {
     for (int i = 0; i < info.channel_amount; i++) {
         if ((shm_conn_info->write_buf[i].frames.rel_head != -1) && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1))) {
 #ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "AAAAA select skip.. Data ready to be written on chan %d seq_num: %lu", i, shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num);
 #endif
+            return 1;
+        } else if ((cur_time.tv_sec - shm_conn_info->write_buf[i].last_write_time.tv_sec) >= lfd_host->MAX_LATENCY_DROP) {
             return 1;
         }
     }
@@ -1831,6 +1833,7 @@ int res123 = 0;
                     /*
                      * Now do a select () from all devices and channels
                      */
+        sem_wait(write_buf_sem);
         FD_ZERO(&fdset_w);
         if (get_write_buf_wait_data()) {
             pfdset_w = &fdset_w;
@@ -1838,6 +1841,7 @@ int res123 = 0;
         } else {
             pfdset_w = NULL;
         }
+        sem_post(write_buf_sem);
         FD_ZERO(&fdset);
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
