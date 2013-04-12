@@ -2124,7 +2124,7 @@ int res123 = 0;
                             timeout.tv_sec = 10;
                             timeout.tv_usec = 0;
                             for (i = 0; i < info.channel_amount; i++) {
-                                if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
+                                if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
                                     break;
