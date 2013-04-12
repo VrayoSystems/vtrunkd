@@ -752,7 +752,7 @@ int select_devread_send(char *buf, char *out2) {
     return len;
 }
 
-void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
+int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
     int fprev = -1;
     int fold = -1;
     int len;
@@ -804,7 +804,12 @@ void write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
             frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
+            return 1;
+        } else {
+            return 0;
         }
+    } else {
+        return 0;
     }
 }
 
@@ -1922,6 +1927,21 @@ int res123 = 0;
              *
              *
              * */
+        int alive_physical_channels = 0;
+        if (FD_ISSET(info.tun_device, &fdset_w)) {
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t chan_mask = shm_conn_info->channels_mask;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            for (int i = 0; i < 32; i++) {
+                if (!(chan_mask & (1 << i))) {
+                    alive_physical_channels++;
+                }
+            }
+            if (alive_physical_channels == 0) {
+                vtun_syslog(LOG_ERR, "ASSERT All physical channels dead!!!");
+                alive_physical_channels = 1;
+            }
+        }
         //check all chans for being set..
         for (chan_num = 0; chan_num < info.channel_amount; chan_num++) {
             if (FD_ISSET(info.tun_device, &fdset_w)) {
@@ -1930,8 +1950,9 @@ int res123 = 0;
                 sem_post(write_buf_sem);
                 timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
                 sem_wait(write_buf_sem);
-                write_buf_check_n_flush(chan_num, tv_tmp);
-                write_buf_check_n_flush(chan_num, tv_tmp);
+                if (write_buf_check_n_flush(chan_num, tv_tmp)) { //double flush if possible
+                    write_buf_check_n_flush(chan_num, tv_tmp);
+                }
                 sem_post(write_buf_sem);
             }
             fd0 = -1;
@@ -2366,9 +2387,14 @@ int res123 = 0;
                     if (!info.just_started_recv) {
                         continue;
                     }
+
                     if (FD_ISSET(info.tun_device, &fdset_w)) {
                         sem_wait(write_buf_sem);
-                        write_buf_check_n_flush(chan_num_virt, tv_tmp);
+                        for (int i = 0; i < (buf_len / alive_physical_channels); i++) {
+                            if (!write_buf_check_n_flush(chan_num_virt, tv_tmp)) {
+                                break;
+                            }
+                        }
                         sem_post(write_buf_sem);
                     }
                     // send lws(last written sequence number) to remote side
