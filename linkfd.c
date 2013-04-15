@@ -301,13 +301,16 @@ int missing_resend_buffer (int chan_num, unsigned long buf[], int *buf_len) {
 
 int get_write_buf_wait_data() {
     for (int i = 0; i < info.channel_amount; i++) {
-        if ((shm_conn_info->write_buf[i].frames.rel_head != -1) && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1))) {
+        if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
+            if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "AAAAA select skip.. Data ready to be written on chan %d seq_num: %lu", i, shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num);
+                vtun_syslog(LOG_INFO, "AAAAA select skip.. Data ready to be written on chan %d seq_num: %lu", i,
+                        shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num);
 #endif
-            return 1;
-        } else if ((cur_time.tv_sec - shm_conn_info->write_buf[i].last_write_time.tv_sec) >= lfd_host->MAX_LATENCY_DROP) {
-            return 1;
+                return 1;
+            } else if ((cur_time.tv_sec - shm_conn_info->write_buf[i].last_write_time.tv_sec) >= lfd_host->MAX_LATENCY_DROP) {
+                return 1;
+            }
         }
     }
     return 0;
