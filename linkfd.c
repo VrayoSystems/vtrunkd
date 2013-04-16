@@ -1419,10 +1419,22 @@ int res123 = 0;
             vtun_syslog(LOG_INFO,"Chan %d", i);
 #endif
             prio_opt = sizeof(cl_addr);
-//            alarm(CHAN_START_ACCEPT_TIMEOUT);
-            if( (fd_tmp=accept(prio_s,(struct sockaddr *)&cl_addr,&prio_opt)) < 0 ) {
-                vtun_syslog(LOG_ERR,"Channels socket accept error %s(%d)",
-                            strerror(errno), errno);
+            struct timeval accept_time;
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(prio_s, &rfds);
+
+            accept_time.tv_sec = 5;
+            accept_time.tv_usec = 0;
+
+            if (select(prio_s + 1, &rfds, (fd_set *) 0, (fd_set *) 0, &accept_time)) {
+                if ((fd_tmp = accept(prio_s, (struct sockaddr *) &cl_addr, &prio_opt)) < 0) {
+                    vtun_syslog(LOG_ERR, "Channels socket accept error %s(%d)", strerror(errno), errno);
+                    break_out = 1;
+                    break;
+                }
+            } else {
+                vtun_syslog(LOG_ERR, "Accept timeout on chan %i", i);
                 break_out = 1;
                 break;
             }
