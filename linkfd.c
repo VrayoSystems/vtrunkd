@@ -572,10 +572,8 @@ int retransmit_send(char *out2) {
         statb.bytes_sent_rx += len;
         int len_ret = proto_write(info.channel[i].descriptor, out_buf, len);
         if ((len && len_ret) < 0) {
-#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
-#endif
-            return CONTINUE_ERROR;
+            return BREAK_ERROR;
         }
         send_counter++;
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
@@ -1832,6 +1830,7 @@ int res123 = 0;
                             if (len_ret < 0) {
                                    err=1;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
+                                   linker_term = TERM_NONFATAL;
                                }
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
                             info.channel[i].up_len += len_ret;
@@ -1920,6 +1919,7 @@ int res123 = 0;
                         int len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                         if (len_ret < 0) {
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
+                                 linker_term = TERM_NONFATAL;
                                  break;
                              }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
@@ -2281,6 +2281,7 @@ int res123 = 0;
                         int len_ret = proto_write(info.channel[0].descriptor, out2, len);
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "ERROR: cannot resend frame: write to chan %d", 0);
+                            linker_term = TERM_NONFATAL;
                         }
                         gettimeofday(&send2, NULL);
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
@@ -2543,6 +2544,10 @@ int res123 = 0;
             vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
 #endif
                 len = 0;
+            } else if (len == BREAK_ERROR) {
+                vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
+                linker_term = TERM_NONFATAL;
+                break;
             } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE main send");
@@ -2552,6 +2557,7 @@ int res123 = 0;
                     dirty_seq_num++;
                 } else if (len == BREAK_ERROR) {
                     vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
+                    linker_term = TERM_NONFATAL;
                     break;
                 } else if (len == CONTINUE_ERROR) {
                     len = 0;
@@ -2573,6 +2579,7 @@ int res123 = 0;
 #endif
             } else if (len == BREAK_ERROR) {
                 vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
+                linker_term = TERM_NONFATAL;
                 break;
             } else if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
