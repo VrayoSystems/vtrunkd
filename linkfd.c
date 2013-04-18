@@ -1742,7 +1742,6 @@ int res123 = 0;
                     /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
                     time_lag_remote &= 0xFFFFF; // shrink to 20bit
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
-                    my_miss_packets_max = 0;
 					pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t miss_packet_counter_h = htonl(shm_conn_info->miss_packets_max_send_counter++);
 					sem_post(&(shm_conn_info->stats_sem));
@@ -1762,6 +1761,7 @@ int res123 = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
                 info.channel[0].up_len += len_ret;
                 }
+                my_miss_packets_max = 0;
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
        #ifdef DEBUGG
