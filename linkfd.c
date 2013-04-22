@@ -1761,7 +1761,7 @@ int res123 = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
                 info.channel[0].up_len += len_ret;
                 }
-                my_miss_packets_max = 0;
+            my_miss_packets_max = 0;
                    if(delay_cnt == 0) delay_cnt = 1;
                    mean_delay = (delay_acc/delay_cnt);
        #ifdef DEBUGG
@@ -1996,6 +1996,7 @@ int res123 = 0;
                     }
                     if(len < 0) {
                          vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
+                         linker_term = TERM_NONFATAL;
                          break;
                     }
                     if(proto_err_cnt > 5) { // TODO XXX whu do we need this?? why doesnt proto_read just return <0???
@@ -2026,12 +2027,13 @@ int res123 = 0;
                         } else if (flag_var == FRAME_JUST_STARTED) {
                             // the opposite end has zeroed counters; zero mine!
                             uint32_t session_hash_remote = ntohl(*((uint32_t *) (buf)));
-                            vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; zeroing counters new remote hash - %u", session_hash_remote);
+                            vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; receive remote hash - %u", session_hash_remote);
                             info.just_started_recv = 1;
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             if (shm_conn_info->session_hash_remote != session_hash_remote) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
                                 uint32_t chan_mask = shm_conn_info->channels_mask;
+                                vtun_syslog(LOG_INFO, "zeroing counters old - %u new remote hash - %u",shm_conn_info->session_hash_remote, session_hash_remote );
                                 sem_post(&(shm_conn_info->AG_flags_sem));
                                 info.session_hash_remote = session_hash_remote;
                                 for (int i = 0; i < 32; i++) {

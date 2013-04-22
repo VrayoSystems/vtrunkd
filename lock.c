@@ -134,6 +134,7 @@ int lock_host(struct vtun_host * host)
      /* Old process is alive */
      switch( host->multi ){
 	case VTUN_MULTI_KILL:
+	    vtun_syslog(LOG_INFO, "We have another process (process %d), connection deny", pid);
             return -1; //temporaly, deny if process working
            vtun_syslog(LOG_INFO, "Killing old connection (process %d)", pid);
            if( kill(pid, SIGTERM) < 0 && errno != ESRCH ){
