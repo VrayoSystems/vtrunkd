@@ -46,7 +46,7 @@ LOCK_DIR = ${VAR_DIR}/lock/vtrunkd
 
 DEFS = -DVTUN_CONFIG_FILE=\"$(CFG_FILE)\" -DVTUN_PID_FILE=\"$(PID_FILE)\" \
        -DVTUN_STAT_DIR=\"$(STAT_DIR)\" -DVTUN_LOCK_DIR=\"$(LOCK_DIR)\" \
-       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)\"
+       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)_$$(git rev-parse HEAD)\"
 
 OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        frame_llist.o llist.o auth.o tunnel.o lock.o netlib.o  \
