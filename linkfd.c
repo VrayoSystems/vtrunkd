@@ -166,6 +166,7 @@ struct {
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval cur_time; // current time source
+struct timeval socket_timeout = { 10, 0 };
 
 struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
 
@@ -1326,6 +1327,15 @@ int lfd_linker(void)
     linker_term = 0;
     srand((unsigned int) time(NULL ));
 
+    if (setsockopt(service_channel, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
+        vtun_syslog(LOG_ERR, "setsockopt failed");
+        linker_term = TERM_NONFATAL;
+    }
+    if (setsockopt(service_channel, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
+        vtun_syslog(LOG_ERR, "setsockopt failed");
+        linker_term = TERM_NONFATAL;
+    }
+
     if(info.srv) {
         /** Server accepted all logical channel here and get and send pid */
         // now read one single byte
@@ -1468,9 +1478,6 @@ int res123 = 0;
             info.channel[i].descriptor=fd_tmp;
         }
         info.channel[0].descriptor = service_channel;
-        struct timeval timeout;
-        timeout.tv_sec = 10;
-        timeout.tv_usec = 0;
         for (i = 0; i < info.channel_amount; i++) {
             if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
@@ -1479,12 +1486,14 @@ int res123 = 0;
             }
             info.channel[i].rport = ntohs(rmaddr.sin_port);
             vtun_syslog(LOG_ERR, "Socket peer IP channel - %i port - %i", i, info.channel[i].rport);
-            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+        }
+        for (i = 1; i < info.channel_amount; i++) {
+            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
                 vtun_syslog(LOG_ERR, "setsockopt failed");
                 linker_term = TERM_NONFATAL;
                 break;
             }
-            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
                 vtun_syslog(LOG_ERR, "setsockopt failed");
                 linker_term = TERM_NONFATAL;
                 break;
@@ -2158,9 +2167,6 @@ int res123 = 0;
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
-                            struct timeval timeout;
-                            timeout.tv_sec = 10;
-                            timeout.tv_usec = 0;
                             for (i = 0; i < info.channel_amount; i++) {
                                 if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
@@ -2169,12 +2175,14 @@ int res123 = 0;
                                 }
                                 info.channel[i].lport = ntohs(localaddr.sin_port);
                                 vtun_syslog(LOG_INFO, " client logical channel - %i port - %i", i, info.channel[i].lport);
-                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                            }
+                            for(i = 1; i < info.channel_amount; i++) {
+                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
                                     vtun_syslog(LOG_ERR, "setsockopt failed");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
-                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &timeout, sizeof(timeout)) < 0) {
+                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
                                     vtun_syslog(LOG_ERR, "setsockopt failed");
                                     linker_term = TERM_NONFATAL;
                                     break;
