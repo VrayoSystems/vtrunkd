@@ -2689,6 +2689,7 @@ int res123 = 0;
 int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_channel_num)
 {
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
+    memset(&info, 0, sizeof(struct phisical_status));
     rxmt_mode_request = 0; // flag
     weight = 0; // bigger weight more time to wait(weight == penalty)
     weight_cnt = 0;
@@ -2737,7 +2738,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
     /** Global initialization section for variable and another things*/
-    memset(&info, 0, sizeof(struct phisical_status));
+
     lfd_host = host;
     info.srv = ss;
     shm_conn_info = ci;
