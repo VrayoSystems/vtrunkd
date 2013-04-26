@@ -714,8 +714,10 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
+        info.bad_net_sel++;
         return NET_WRITE_BUSY_NOTIFY;
     }
+    info.good_net_sel++;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "READY - descriptor %i channel %d");
 #endif
@@ -1554,7 +1556,7 @@ int res123 = 0;
         linker_term = TERM_NONFATAL;
     }
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"\"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":3,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1}", lfd_host->host);
+    vtun_syslog(LOG_INFO,"\"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":3,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1, \"g_sel\":0, \"b_sel\":0}", lfd_host->host);
 #endif
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
@@ -1609,11 +1611,11 @@ int res123 = 0;
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u}",
+                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"g_sel\":%u, \"b_sel\":%u}",
                         lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, chan_info[my_max_send_q_chan_num].rtt,
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp);
+                        hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.good_net_sel, info.bad_net_sel);
                 json_timer.tv_sec = cur_time.tv_sec;
                 json_timer.tv_usec = cur_time.tv_usec;
                 info.max_send_q_max = 0;
@@ -2646,7 +2648,7 @@ int res123 = 0;
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":2,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1}", lfd_host->host);
+    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":2,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1, \"g_sel\":0, \"b_sel\":0}", lfd_host->host);
 #endif
 
     vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop", lfd_host->host, info.process_num);
