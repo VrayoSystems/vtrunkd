@@ -396,6 +396,7 @@ struct phisical_status {
     uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
     uint32_t max_send_q_min;
     uint32_t max_send_q_max;
+    uint32_t max_send_q_calc; // = cwnd * mss
     int max_send_q_counter;
     unsigned int speed_efficient;
     unsigned int speed_resend;
