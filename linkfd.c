@@ -2786,7 +2786,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     }
 
     /* Write my pid into file */
-    char pid_file_str[30], pid_str[20];
+    char pid_file_str[200], pid_str[20];
     sprintf(pid_file_str, "%s/%s", LINKFD_PID_DIR, lfd_host->host);
     int pid_file_fd = open(pid_file_str, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
     if (pid_file_fd < 0) {
