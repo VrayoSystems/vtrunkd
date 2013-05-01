@@ -404,8 +404,6 @@ struct phisical_status {
     unsigned int byte_efficient;
     unsigned int byte_resend;
     unsigned int byte_r_mode;
-    unsigned int good_net_sel;
-    unsigned int bad_net_sel;
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */
