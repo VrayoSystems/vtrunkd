@@ -56,19 +56,12 @@
 #include "vtun.h"
 #include "lib.h"
 
-void ggg()
-{
-    int d = 1 + 1;
-}
 int tcp_write(int fd, char *buf, int len)
 {
      char *ptr;
 
      if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
          unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
-         if (flag_var == 16390) {
-             ggg();
-         }
      }
 
      ptr = buf - sizeof(short);
@@ -78,9 +71,6 @@ int tcp_write(int fd, char *buf, int len)
 
     if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
         unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
-        if (flag_var == 16390) {
-            ggg();
-        }
     }
 
      return write_n(fd, ptr, len);
