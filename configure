@@ -677,6 +677,7 @@ enable_nosem
 enable_sysvsem
 enable_mark
 enable_debugg
+enable_json
 with_ssl_headers
 with_ssl_lib
 with_lzo_headers
@@ -1312,6 +1313,7 @@ Optional Features:
 --disable-o3     	   Compile without -O3 optimization
 --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25
 --enable-debugg     	   Compile with verbose logging for debug
+--enable-json              JSON logging
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -2170,7 +2172,11 @@ else
 
 fi
 
-
+if test "${enable_json+set}" = set; then :
+  enableval=$enable_json; JSON=$enableval
+else
+  JSON=no
+fi
 
 
 # Check whether --with-ssl-headers was given.
@@ -4905,6 +4911,10 @@ fi
 
 if test "$DEBUGG" = "yes"; then
 	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$JSON" = "yes"; then
+          CFLAGS="$CFLAGS -DJSON=1"
 fi
 
 if test "$O3" = "yes"; then

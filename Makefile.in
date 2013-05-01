@@ -46,13 +46,13 @@ LOCK_DIR = ${VAR_DIR}/lock/vtrunkd
 
 DEFS = -DVTUN_CONFIG_FILE=\"$(CFG_FILE)\" -DVTUN_PID_FILE=\"$(PID_FILE)\" \
        -DVTUN_STAT_DIR=\"$(STAT_DIR)\" -DVTUN_LOCK_DIR=\"$(LOCK_DIR)\" \
-       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)\"
+       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)_$$(git rev-parse HEAD)\"
 
 OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        frame_llist.o llist.o auth.o tunnel.o lock.o netlib.o  \
        tun_dev.o tap_dev.o pty_dev.o pipe_dev.o \
        tcp_proto.o udp_proto.o \
-       linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o netlink_socket_info.o
+       linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o netlink_socket_info.o speed_algo.o
 
 CONFIGURE_FILES = Makefile config.status config.cache config.h config.log 
 

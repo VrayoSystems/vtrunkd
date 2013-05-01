@@ -33,6 +33,8 @@
 #include <sys/shm.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <time.h>
+#include "speed_algo.h"
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -265,11 +267,15 @@ struct vtun_host {
 #define FRAME_PRIO_PORT_NOTIFY 3
 #define FRAME_LAST_WRITTEN_SEQ 4
 #define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
+#define FRAME_DEAD_CHANNEL 6
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
 #define TERM_NONFATAL 1000
 #define TERM_FATAL 1001
+
+#define AG_MODE 0
+#define R_MODE 1
 
 struct _write_buf {
     struct frame_llist frames;
@@ -282,6 +288,7 @@ struct _write_buf {
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
     uint16_t complete_seq_quantity;
+    int top_packet_physical_channel_num;
 };
 
 /**
@@ -332,9 +339,82 @@ struct conn_stats {
     struct speed_chan_data_struct speed_chan_data[MAX_TCP_LOGICAL_CHANNELS];
     uint32_t max_upload_speed;
     uint32_t max_send_q;
+    uint32_t max_send_q_avg;
+    uint32_t send_q_limit;
+    uint16_t miss_packets_max; // get from another side
+    int32_t ACK_speed;
 };
 
+/**
+ * Structure for garbage statistic and information
+ * about logical channels. Include service channel[0]
+ */
+struct logical_status {
+    /** Information about tcp connection */
+    int rport;  /**< remote(dst) tcp port */
+    int lport;  /**< local(src) tcp port */
+    int descriptor; /** file descriptor associated with this connection*/
 
+    /** AVG measuring speed */
+    uint32_t upload;    /**< upload speed */
+    uint32_t up_len;    /**< how much bytes are uploaded */
+    uint32_t download;  /**< download speed */
+    uint32_t down_len;    /**< how much bytes are downloaded */
+    uint32_t rtt;       /**< rtt is measured by vtrunkd */
+    uint32_t tcp_rtt;   /**< rtt is said by @see get_format_tcp_info() */
+    uint32_t magic_rtt;   /**< rtt based on @see ACK_speed_avg */
+
+    /** TCP queue control information */
+    uint32_t send_q;    /**< current send_q value */
+    uint32_t send_q_old;    /**< previous send_q value */
+    uint32_t send_q_limit;  /**< current send_q_limit value */
+    int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
+    int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
+    int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
+
+    struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
+};
+
+/**
+ * Structure for storing all information about
+ * physical channel
+ */
+struct phisical_status {
+    /** Common information */
+    int process_num;    /**< Current physical channel's number */
+    int pid; /**< Our pid is got on this side by getpid()  */
+    int remote_pid; /**< Pid is got from another side by net */
+    int tun_device; /**< /dev/tun descriptor */
+    int srv; /**< 1 - if I'm server and 0 - if I'm client */
+
+    /** Collect statistic*/
+    int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
+    struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
+    struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
+    struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
+    uint32_t max_send_q_avg;
+    uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
+    uint32_t max_send_q_min;
+    uint32_t max_send_q_max;
+    uint32_t max_send_q_calc; // = cwnd * mss
+    int max_send_q_counter;
+    unsigned int speed_efficient;
+    unsigned int speed_resend;
+    unsigned int speed_r_mode;
+    unsigned int byte_efficient;
+    unsigned int byte_resend;
+    unsigned int byte_r_mode;
+    unsigned int good_net_sel;
+    unsigned int bad_net_sel;
+    /** Logical channels information and statistic*/
+    int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
+    struct logical_status *channel; /**< Array for all logical channels */
+    uint32_t session_hash_this; /**< Session hash for this machine */
+    uint32_t session_hash_remote; /**< Session hash for remote machine */
+    /** Events */
+    int just_started_recv; /**< 0 - when @see FRAME_JUST_STARTED hasn't received yet and 1 - already */
+    int check_shm; /**< 1 - need to check some shm values */
+};
 
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
@@ -358,14 +438,20 @@ struct conn_info {
     char normal_senders;
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
+    uint16_t miss_packets_max; // get from another side sync on stats_sem
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
+    uint32_t miss_packets_max_recv_counter; // sync on stats_sem
+    uint32_t miss_packets_max_send_counter; // sync on stats_sem
     //int broken_cnt;
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
     sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
-    uint16_t AG_ready_flags; // contain flags for all physical channels 1 - retransmit mode, 0 - ready to aggregation
-    uint16_t channels_mask; // 1 - channel is working 0 - channel is dead
+    uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable sync by AG_flags_sem
+    uint32_t channels_mask; // 1 - channel is working 0 - channel is dead sync by AG_flags_sem
+    uint32_t need_to_exit; // sync by AG_flags_sem
+    uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
+    uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
 };
 
 struct resent_chk {
@@ -456,6 +542,20 @@ extern llist host_list;
 
 #define VTUN_SIG_TERM 1
 #define VTUN_SIG_HUP  2
+
+/* Authentication errors */
+#define D_NOSHAKE1 1
+#define D_NOSHAKE2 2
+#define D_ST_CHAL 3
+#define D_CHAL 4
+#define D_NOHOST 5
+#define D_NOMULT 6
+#define D_GREET 7
+#define D_PWD 8
+#define D_NOREAD 9
+#define D_OTHER 10
+
+
 
 /* Global options */
 struct vtun_opts {

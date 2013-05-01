@@ -117,6 +117,7 @@ void client(struct vtun_host *host)
      
      // now init everything...
      int shmid;
+     int reason = 0; // connection denial reason
      key_t key;
      struct conn_info *shm_conn_info;
      struct timeval cur_time;
@@ -247,7 +248,7 @@ void client(struct vtun_host *host)
 	   vtun_syslog(LOG_INFO,"Connect to %s failed. %s(%d)", vtun.svr_name,
 					strerror(errno), errno);
         } else {
-	   if( auth_client(s, host) ){   
+	   if( auth_client(s, host, &reason) ){   
 	      vtun_syslog(LOG_INFO,"Session %s[%s] opened",host->host,vtun.svr_name);
               
 
@@ -262,7 +263,7 @@ void client(struct vtun_host *host)
 
 	      vtun_syslog(LOG_INFO,"Session %s[%s] closed",host->host,vtun.svr_name);
 	   } else {
-	      vtun_syslog(LOG_INFO,"Connection denied by %s",vtun.svr_name);
+	      vtun_syslog(LOG_INFO,"Connection denied by %s, reason: %d",vtun.svr_name, reason);
 	   }
 	}
 	close(s);

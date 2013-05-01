@@ -298,7 +298,7 @@ int cs2cl(char *str, char *chal)
 }   
 
 /* Authentication (Server side) */
-struct vtun_host * auth_server(int fd)
+struct vtun_host * auth_server(int fd, int *reason)
 {
         char chal_req[VTUN_CHAL_SIZE], chal_res[VTUN_CHAL_SIZE];	
 	char buf[VTUN_MESG_SIZE], *str1, *str2;
@@ -311,15 +311,20 @@ struct vtun_host * auth_server(int fd)
 	print_p(fd,"VTUN server ver %s\n",VTUN_VER);
 
 	stage = ST_HOST;
-
+    *reason = D_NOREAD;
 	while( readn_t(fd, buf, VTUN_MESG_SIZE, vtun.timeout) > 0 ){
+        *reason = D_OTHER;
 	   buf[sizeof(buf)-1]='\0';
 	   strtok(buf,"\r\n");
 
-	   if( !(str1=strtok(buf," :")) )
-	      break;
-	   if( !(str2=strtok(NULL," :")) )
-	      break;
+	   if( !(str1=strtok(buf," :")) ) {
+            *reason = D_NOSHAKE1;
+	        break;
+          }
+	   if( !(str2=strtok(NULL," :")) ) {
+            *reason = D_NOSHAKE2;
+	        break;
+          }
 
 	   switch( stage ){
 	     case ST_HOST:
@@ -332,14 +337,19 @@ struct vtun_host * auth_server(int fd)
 		   stage = ST_CHAL;
 		   continue;
 	        }
+        *reason = D_ST_CHAL;
 		break;
 	     case ST_CHAL:
 	        if( !strcmp(str1,"CHAL") ){
-		   if( !cs2cl(str2,chal_res) )
-		      break; 
+		   if( !cs2cl(str2,chal_res) ) {
+                *reason = D_CHAL;
+		        break; 
+              }
 		   
-		   if( !(h = find_host(host)) )
-		      break;
+		   if( !(h = find_host(host)) ) {
+                *reason = D_NOHOST;
+	    	      break;
+              }
 
 		   decrypt_chal(chal_res, h->passwd);   		
 	
@@ -350,6 +360,7 @@ struct vtun_host * auth_server(int fd)
 		      if( lock_host(h) < 0 ){
 		         /* Multiple connections are denied */
 		         h = NULL;
+                 *reason = D_NOMULT;
 		         break;
 		      }	
 		      print_p(fd,"OK FLAGS: %s\n", bf2cf(h)); 
@@ -371,14 +382,15 @@ struct vtun_host * auth_server(int fd)
 }
 
 /* Authentication (Client side) */
-int auth_client(int fd, struct vtun_host *host)
+int auth_client(int fd, struct vtun_host *host, int * reason)
 {
 	char buf[VTUN_MESG_SIZE], chal[VTUN_CHAL_SIZE];
 	int stage, success=0 ;
 	
 	stage = ST_INIT;
-
+    *reason = D_NOREAD;
 	while( readn_t(fd, buf, VTUN_MESG_SIZE, vtun.timeout) > 0 ){
+        *reason = D_OTHER;
 	   buf[sizeof(buf)-1]='\0';
 	   switch( stage ){
 		case ST_INIT:
@@ -387,6 +399,7 @@ int auth_client(int fd, struct vtun_host *host)
 		      print_p(fd,"HOST: %s\n",host->host);
 		      continue;
 	           }
+               *reason = D_GREET;
 		   break;	
 
 	        case ST_HOST:
@@ -398,11 +411,13 @@ int auth_client(int fd, struct vtun_host *host)
 
 		      continue;
 	   	   }
+           *reason = D_CHAL;
 		   break;	
 	
 	        case ST_CHAL:
 		   if( !strncmp(buf,"OK",2) && cf2bf(buf,host) )
 		      success = 1;
+           else *reason = D_PWD;
 		   break;
 	   }
 	   break;

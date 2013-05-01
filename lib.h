@@ -75,15 +75,6 @@ static inline int read_n(int fd, char *buf, int len)
 
 	while (!__io_canceled && len > 0) {
 	  if( (w = read(fd, buf, len)) < 0 ){
-            if (errno == EAGAIN) {
-                continue;
-            } else if (errno == EINTR) {
-                ecount++;
-                if (ecount >= 2) {
-                    return -1;
-                }
-                continue;
-            }
 	     return -1;
 	  }
 	  if( !w )
@@ -101,8 +92,6 @@ static inline int write_n(int fd, char *buf, int len)
 
 	while (!__io_canceled && len > 0) {
  	  if( (w = write(fd, buf, len)) < 0 ){
-	     if( errno == EINTR || errno == EAGAIN )
-  	         continue;
 	     return -1;
 	  }
 	  if( !w )

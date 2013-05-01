@@ -22,7 +22,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/vtrunkd
   SECTION:=net
   CATEGORY:=Network
-  DEPENDS:=+kmod-tun +libpthread +flex +bison
+  DEPENDS:=+kmod-tun +libpthread +flex +bison +kmod-sched +libiproute +librt +tc +nano
   TITLE:=Virtual trunking (bonding) daemon
   URL:=http://mxmit.com/vtrunkd
   SUBMENU:=VPN
@@ -32,12 +32,9 @@ define Package/vtrunkd/conffiles
 /etc/vtrunkd.conf
 endef
 
-#CONFIGURE_ARGS += \
-#	--enable-nosem \
-#	--enable-sysvsem \
-#	--enable-debugg \
-#	--disable-mark \
-#	--disable-o3
+CONFIGURE_ARGS += \
+	--prefix= \
+	--enable-json \
 
 # these are reserved for future use
 CONFIGURE_VARS += \
@@ -49,7 +46,7 @@ CONFIGURE_VARS += \
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./vtrunkd-dist/* $(PKG_BUILD_DIR)/
+	$(CP) ./vtrunkd-src/* $(PKG_BUILD_DIR)/
 endef
 
 define Build/Compile

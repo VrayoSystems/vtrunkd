@@ -8,12 +8,12 @@
  *      Author: Kuznetsov Andrey <andreykyz@gmail.com>
  */
 
+#include <sys/socket.h>
 #include <linux/inet_diag.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/socket.h>
 #include <alloca.h>
 #include <errno.h>
 #include <syslog.h>
@@ -76,7 +76,7 @@ struct filter default_filter = {
 
 struct filter current_filter;
 int conn_counter, channel_amount_ss, show_tcpinfo = 0, show_mem = 0;
-struct channel_info** channel_info_ss;
+struct channel_info* channel_info_ss;
 
 int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
 static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f);
@@ -102,13 +102,13 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f) {
     // fill channel_info structure
     if (conn_counter < channel_amount_ss) {
         for (int i = 0; i < channel_amount_ss; i++) {
-            if ((channel_info_ss[i]->lport == ntohs(r->id.idiag_sport)) | (channel_info_ss[i]->rport == ntohs(r->id.idiag_dport))) {
+            if ((channel_info_ss[i].lport == ntohs(r->id.idiag_sport)) | (channel_info_ss[i].rport == ntohs(r->id.idiag_dport))) {
                 format_info(nlh, r);
-                channel_info_ss[i]->recv_q = r->idiag_rqueue;
-                channel_info_ss[i]->send_q = r->idiag_wqueue;
-#ifdef DEBUGG
+                channel_info_ss[i].recv_q = r->idiag_rqueue;
+                channel_info_ss[i].send_q = r->idiag_wqueue;
+#ifdef TRACE
                 vtun_syslog(LOG_INFO, "fss conn_counter - %i channel_amount_ss - %i send_q - %i recv_q - %i lport - %i rport - %i", i,
-                        channel_amount_ss, channel_info_ss[i]->send_q, channel_info_ss[i]->recv_q, ntohs(r->id.idiag_sport),
+                        channel_amount_ss, channel_info_ss[i].send_q, channel_info_ss[i].recv_q, ntohs(r->id.idiag_sport),
                         ntohs(r->id.idiag_dport));
 #endif
                 conn_counter++;
@@ -277,7 +277,7 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
  * @param channel_amount - *channel_info_vt[] array length
  * @return 1 if succes end 0 if error
  */
-int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amount) {
+int get_format_tcp_info(struct channel_info* channel_info_vt, int channel_amount) {
     channel_info_ss = channel_info_vt;
     channel_amount_ss = channel_amount;
     conn_counter = 0;
@@ -293,12 +293,12 @@ int get_format_tcp_info(struct channel_info** channel_info_vt, int channel_amoun
         vtun_syslog(LOG_ERR, "Netlink - return error");
         return 0; // 0 - error 1 - success
     }
-#ifdef DEBUGG
+#ifdef TRACE
     for (int i = 0; i < channel_amount; i++) {
-        vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i]->send_q, channel_info_vt[i]->lport,
-                channel_info_vt[i]->rport);
-        vtun_syslog(LOG_INFO, "fss channel_info_ss send_q %u lport - %i rport - %i", channel_info_ss[i]->send_q, channel_info_ss[i]->lport,
-                channel_info_ss[i]->rport);
+        vtun_syslog(LOG_INFO, "fss channel_info_vt send_q %u lport - %i rport - %i", channel_info_vt[i].send_q, channel_info_vt[i].lport,
+                channel_info_vt[i].rport);
+        vtun_syslog(LOG_INFO, "fss channel_info_ss send_q %u lport - %i rport - %i", channel_info_ss[i].send_q, channel_info_ss[i].lport,
+                channel_info_ss[i].rport);
     }
     vtun_syslog(LOG_INFO, "fss conn_counter is %i", conn_counter);
 #endif
@@ -337,27 +337,27 @@ int format_info(const struct nlmsghdr *nlh, struct inet_diag_msg *r) {
         return 0;
     }
 
-    memset(channel_info_ss[conn_counter], 0, sizeof(channel_info_ss));
-    channel_info_ss[conn_counter]->snd_wscale = info->tcpi_snd_wscale;
-    channel_info_ss[conn_counter]->rcv_wscale = info->tcpi_rcv_wscale;
+    memset(&(channel_info_ss[conn_counter]), 0, sizeof(channel_info_ss));
+    channel_info_ss[conn_counter].snd_wscale = info->tcpi_snd_wscale;
+    channel_info_ss[conn_counter].rcv_wscale = info->tcpi_rcv_wscale;
     if (info->tcpi_rto && info->tcpi_rto != 3000000) {
-        channel_info_ss[conn_counter]->rto = (double) info->tcpi_rto / 1000;
+        channel_info_ss[conn_counter].rto = (double) info->tcpi_rto / 1000;
     }
-    channel_info_ss[conn_counter]->rtt = (double) info->tcpi_rtt / 1000;
-    channel_info_ss[conn_counter]->rtt_var = (double) info->tcpi_rttvar / 1000;
-    channel_info_ss[conn_counter]->ato = (double) info->tcpi_ato / 1000;
+    channel_info_ss[conn_counter].rtt = (double) info->tcpi_rtt / 1000;
+    channel_info_ss[conn_counter].rtt_var = (double) info->tcpi_rttvar / 1000;
+    channel_info_ss[conn_counter].ato = (double) info->tcpi_ato / 1000;
     if (info->tcpi_snd_cwnd != 2) { // really need?
-        channel_info_ss[conn_counter]->cwnd = info->tcpi_snd_cwnd;
+        channel_info_ss[conn_counter].cwnd = info->tcpi_snd_cwnd;
     }
     if (info->tcpi_snd_ssthresh < 0xFFFF) {
-        channel_info_ss[conn_counter]->ssthresh = info->tcpi_snd_ssthresh;
+        channel_info_ss[conn_counter].ssthresh = info->tcpi_snd_ssthresh;
     }
-    if (channel_info_ss[conn_counter]->rtt > 0 && info->tcpi_snd_mss && info->tcpi_snd_cwnd) {
-        channel_info_ss[conn_counter]->send = (uint32_t) ((double) info->tcpi_snd_cwnd * (double) info->tcpi_snd_mss * 1000.
-                / channel_info_ss[conn_counter]->rtt);
+    if (channel_info_ss[conn_counter].rtt > 0 && info->tcpi_snd_mss && info->tcpi_snd_cwnd) {
+        channel_info_ss[conn_counter].send = (uint32_t) ((double) info->tcpi_snd_cwnd * (double) info->tcpi_snd_mss * 1000.
+                / channel_info_ss[conn_counter].rtt);
     }
-    channel_info_ss[conn_counter]->mss = info->tcpi_snd_mss;
-    channel_info_ss[conn_counter]->rcv_rtt = (double) info->tcpi_rcv_rtt / 1000;
-    channel_info_ss[conn_counter]->rcv_space = info->tcpi_rcv_space;
+    channel_info_ss[conn_counter].mss = info->tcpi_snd_mss;
+    channel_info_ss[conn_counter].rcv_rtt = (double) info->tcpi_rcv_rtt / 1000;
+    channel_info_ss[conn_counter].rcv_space = info->tcpi_rcv_space;
     return 1;
 }
