@@ -75,7 +75,7 @@ struct filter default_filter = {
 };
 
 struct filter current_filter;
-int conn_counter, channel_amount_ss, show_tcpinfo = 0, show_mem = 0;
+int conn_counter, channel_amount_ss;
 struct channel_info* channel_info_ss;
 
 int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
@@ -102,7 +102,7 @@ static int tcp_show_sock(struct nlmsghdr *nlh, struct filter *f) {
     // fill channel_info structure
     if (conn_counter < channel_amount_ss) {
         for (int i = 0; i < channel_amount_ss; i++) {
-            if ((channel_info_ss[i].lport == ntohs(r->id.idiag_sport)) | (channel_info_ss[i].rport == ntohs(r->id.idiag_dport))) {
+            if ((channel_info_ss[i].lport == ntohs(r->id.idiag_sport)) & (channel_info_ss[i].rport == ntohs(r->id.idiag_dport))) {
                 format_info(nlh, r);
                 channel_info_ss[i].recv_q = r->idiag_rqueue;
                 channel_info_ss[i].send_q = r->idiag_wqueue;
@@ -166,14 +166,14 @@ static int tcp_show_netlink(struct filter *f, FILE *dump_fp, int socktype) {
     memset(&req.r, 0, sizeof(req.r));
     req.r.idiag_family = AF_INET;
     req.r.idiag_states = f->states;
-    if (show_mem)
-        req.r.idiag_ext |= (1 << (INET_DIAG_MEMINFO - 1));
 
-    if (show_tcpinfo) {
-        req.r.idiag_ext |= (1 << (INET_DIAG_INFO - 1));
-        req.r.idiag_ext |= (1 << (INET_DIAG_VEGASINFO - 1));
-        req.r.idiag_ext |= (1 << (INET_DIAG_CONG - 1));
-    }
+// show_mem - don't use
+//        req.r.idiag_ext |= (1 << (INET_DIAG_MEMINFO - 1));
+
+    //show tcp info such as send_q, cwnd...
+    req.r.idiag_ext |= (1 << (INET_DIAG_INFO - 1));
+    req.r.idiag_ext |= (1 << (INET_DIAG_VEGASINFO - 1));
+    req.r.idiag_ext |= (1 << (INET_DIAG_CONG - 1));
 
     iov.iov_base = &req;
     iov.iov_len = sizeof(req);
@@ -281,7 +281,8 @@ int get_format_tcp_info(struct channel_info* channel_info_vt, int channel_amount
     channel_info_ss = channel_info_vt;
     channel_amount_ss = channel_amount;
     conn_counter = 0;
-    show_tcpinfo = 1;
+
+    clear_channel_info(channel_info_ss, channel_amount_ss);
 
     memset(&current_filter, 0, sizeof(current_filter));
 
@@ -337,7 +338,6 @@ int format_info(const struct nlmsghdr *nlh, struct inet_diag_msg *r) {
         return 0;
     }
 
-    memset(&(channel_info_ss[conn_counter]), 0, sizeof(channel_info_ss));
     channel_info_ss[conn_counter].snd_wscale = info->tcpi_snd_wscale;
     channel_info_ss[conn_counter].rcv_wscale = info->tcpi_rcv_wscale;
     if (info->tcpi_rto && info->tcpi_rto != 3000000) {
@@ -360,4 +360,15 @@ int format_info(const struct nlmsghdr *nlh, struct inet_diag_msg *r) {
     channel_info_ss[conn_counter].rcv_rtt = (double) info->tcpi_rcv_rtt / 1000;
     channel_info_ss[conn_counter].rcv_space = info->tcpi_rcv_space;
     return 1;
+}
+
+void clear_channel_info(struct channel_info* channel_info, int channel_amount) {
+    int lport, rport;
+    for (int i = 0; i < channel_amount; i++) {
+        lport = channel_info[i].lport;
+        rport = channel_info[i].rport;
+        memset(&(channel_info[i]), 0, sizeof(channel_info));
+        channel_info[i].lport = lport;
+        channel_info[i].rport = rport;
+    }
 }
