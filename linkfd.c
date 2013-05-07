@@ -1305,11 +1305,11 @@ int lfd_linker(void)
     int i, j, fd0;
     int break_out = 0;
 
-    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE + VTUN_FRAME_OVERHEAD)) ) {
+    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
         return 0;
     }
-    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2+200)) ) {
+    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
