@@ -29,6 +29,18 @@ AC_ARG_ENABLE(mark,
    MARK=yes
 )
 
+dnl enable low memory opt
+AC_ARG_ENABLE(debugg,
+   --enable-low-mem         Compile for low ram device,
+   LOW_MEM=$enableval,
+   LOW_MEM=no
+)
+
+AC_ARG_ENABLE(json,
+   --enable-json              JSON logging,
+   JSON=$enableval,
+   JSON=no
+)
 
 dnl enable verbose debug
 AC_ARG_ENABLE(debugg,
@@ -111,6 +123,14 @@ fi
 
 if test "$DEBUGG" = "yes"; then
 	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$LOW_MEM" = "yes"; then
+          CFLAGS="$CFLAGS -DLOW_MEM=1"
+fi
+
+if test "$JSON" = "yes"; then
+          CFLAGS="$CFLAGS -DJSON=1"
 fi
 
 if test "$O3" = "yes"; then

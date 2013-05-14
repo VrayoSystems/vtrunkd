@@ -673,8 +673,6 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 enable_o3
-enable_nosem
-enable_sysvsem
 enable_mark
 enable_debugg
 enable_json
@@ -1312,8 +1310,9 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
 --disable-o3     	   Compile without -O3 optimization
 --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25
---enable-debugg     	   Compile with verbose logging for debug
+--enable-low-mem         Compile for low ram device
 --enable-json              JSON logging
+--enable-debugg     	   Compile with verbose logging for debug
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -2135,25 +2134,6 @@ fi
 
 
 
-# Check whether --enable-nosem was given.
-if test "${enable_nosem+set}" = set; then :
-  enableval=$enable_nosem; NOSEM=$enableval
-else
-  NOSEM=no
-
-fi
-
-
-# Check whether --enable-sysvsem was given.
-if test "${enable_sysvsem+set}" = set; then :
-  enableval=$enable_sysvsem; SYSVSEM=$enableval
-else
-  SYSVSEM=no
-
-fi
-
-
-
 # Check whether --enable-mark was given.
 if test "${enable_mark+set}" = set; then :
   enableval=$enable_mark; MARK=$enableval
@@ -2162,6 +2142,23 @@ else
 
 fi
 
+
+# Check whether --enable-debugg was given.
+if test "${enable_debugg+set}" = set; then :
+  enableval=$enable_debugg; LOW_MEM=$enableval
+else
+  LOW_MEM=no
+
+fi
+
+
+# Check whether --enable-json was given.
+if test "${enable_json+set}" = set; then :
+  enableval=$enable_json; JSON=$enableval
+else
+  JSON=no
+
+fi
 
 
 # Check whether --enable-debugg was given.
@@ -2172,11 +2169,7 @@ else
 
 fi
 
-if test "${enable_json+set}" = set; then :
-  enableval=$enable_json; JSON=$enableval
-else
-  JSON=no
-fi
+
 
 
 # Check whether --with-ssl-headers was given.
@@ -4899,18 +4892,12 @@ if test "$MARK" = "no"; then
 	  CFLAGS="$CFLAGS -DW_O_SO_MARK=1"
 fi
 
-
-if test "$NOSEM" = "yes"; then
-	  CFLAGS="$CFLAGS -DNOSEM=1"
-fi
-
-if test "$SYSVSEM" = "yes"; then
-	  CFLAGS="$CFLAGS -DNOSEM=1 -DSYSVSEM=1"
-fi
-
-
 if test "$DEBUGG" = "yes"; then
 	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$LOW_MEM" = "yes"; then
+          CFLAGS="$CFLAGS -DLOW_MEM=1"
 fi
 
 if test "$JSON" = "yes"; then

@@ -25,10 +25,10 @@
 #ifndef _VTUN_FRAME_LLIST_H
 #define _VTUN_FRAME_LLIST_H
 
-#define VTUN_FRAME_SIZE2 2048
+#define VTUN_FRAME_SIZE2 1500
 
 struct frame_seq {
-    char out[VTUN_FRAME_SIZE2+200];
+    char out[VTUN_FRAME_SIZE2];
     int len;
     unsigned long seq_num;
     int rel_next; // relative pointer [TODO: make it short or even char!]

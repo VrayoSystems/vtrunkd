@@ -1026,7 +1026,7 @@ int ag_switcher() {
         chan_info[i].rport = info.channel[i].rport;
         chan_info[i].lport = info.channel[i].lport;
 #ifdef TRACE
-        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i %i", info.process_num, i, chan_info[i].rport, info.channel[i].rport);
+        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i rport %i", info.process_num, i, chan_info[i].lport, info.channel[i].rport);
 #endif
     }
     int max_speed_chan = 0;
@@ -1304,11 +1304,11 @@ int lfd_linker(void)
     int i, j, fd0;
     int break_out = 0;
 
-    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE + VTUN_FRAME_OVERHEAD)) ) {
+    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
         return 0;
     }
-    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2+200)) ) {
+    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
@@ -1478,13 +1478,23 @@ int res123 = 0;
         }
         info.channel[0].descriptor = service_channel;
         for (i = 0; i < info.channel_amount; i++) {
+            memset(&rmaddr, 0, sizeof(rmaddr));
+            memset(&localaddr, 0, sizeof(localaddr));
+            rmaddrlen = sizeof(rmaddr);
+            laddrlen = sizeof(localaddr);
             if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
                 vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                 linker_term = TERM_NONFATAL;
                 break;
             }
+            if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
+                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                linker_term = TERM_NONFATAL;
+                break;
+            }
             info.channel[i].rport = ntohs(rmaddr.sin_port);
-            vtun_syslog(LOG_ERR, "Socket peer IP channel - %i port - %i", i, info.channel[i].rport);
+            info.channel[i].lport = ntohs(localaddr.sin_port);
+            vtun_syslog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i, info.channel[i].lport, info.channel[i].rport);
         }
         for (i = 1; i < info.channel_amount; i++) {
             if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
@@ -2167,13 +2177,23 @@ int res123 = 0;
                                 break;
                             }
                             for (i = 0; i < info.channel_amount; i++) {
+                                memset(&rmaddr, 0, sizeof(rmaddr));
+                                memset(&localaddr, 0, sizeof(localaddr));
+                                rmaddrlen = sizeof(rmaddr);
+                                laddrlen = sizeof(localaddr);
                                 if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                                     vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
                                 info.channel[i].lport = ntohs(localaddr.sin_port);
-                                vtun_syslog(LOG_INFO, " client logical channel - %i port - %i", i, info.channel[i].lport);
+                                if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    linker_term = TERM_NONFATAL;
+                                    break;
+                                }
+                                info.channel[i].rport = ntohs(rmaddr.sin_port);
+                                vtun_syslog(LOG_INFO, "Client descriptor - %i logical channel - %i lport - %i rport - %i",info.channel[i].descriptor, i, info.channel[i].lport, info.channel[i].rport);
                             }
                             for(i = 1; i < info.channel_amount; i++) {
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {

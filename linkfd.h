@@ -43,8 +43,10 @@
  */
 #define LINKFD_PRIO -1
 /* Frame alloc/free */
-#define LINKFD_FRAME_RESERV 128
-#define LINKFD_FRAME_APPEND 64
+//                              len value
+#define LINKFD_FRAME_RESERV sizeof(short)
+//                              seq_num                        flag
+#define LINKFD_FRAME_APPEND sizeof(unsigned long) + sizeof(unsigned short)
 
 static inline void * lfd_alloc(size_t size)
 {

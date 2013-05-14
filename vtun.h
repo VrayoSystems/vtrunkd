@@ -119,7 +119,11 @@
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
 #define FRAME_BUF_SIZE 400 // int
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
-#define RESEND_BUF_SIZE 1200 // int
+#ifdef LOW_MEM
+    #define RESEND_BUF_SIZE 600 // int
+#else
+    #define RESEND_BUF_SIZE 1200 // int
+#endif
 // maximum compiled-in buffers for tcp channels per link
 #define MAX_TCP_LOGICAL_CHANNELS 7//100 // int
 // max aggregated VPN-links compiled-in (+ some extras for racing)
