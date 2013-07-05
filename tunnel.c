@@ -227,7 +227,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
      }
  
      local.sun_family = AF_UNIX;
-     strcpy(local.sun_path, dev);
+     sprintf(local.sun_path, "/tmp/vtrunkd_%s.socket", dev);
      unlink(local.sun_path);
      len = strlen(local.sun_path) + sizeof(local.sun_family);
      if (bind(s, (struct sockaddr *)&local, len) == -1) {
@@ -327,10 +327,10 @@ int read_fd_full(int *fd, char *dev) {
           return -1;
      }
      remote.sun_family = AF_UNIX;
-     strcpy(remote.sun_path, dev);
+     sprintf(remote.sun_path, "/tmp/vtrunkd_%s.socket", dev);
      len = strlen(remote.sun_path) + sizeof(remote.sun_family);
      if (connect(s, (struct sockaddr *)&remote, len) == -1) {
-          vtun_syslog(LOG_ERR, "can not connect to fd_server");
+          vtun_syslog(LOG_ERR, "can not connect to fd_server UNIX SOCKET %s ", remote.sun_path);
           return -1;
      }
      read_fd(s, &ptr, ptr_len, fd);
@@ -596,7 +596,7 @@ int tunnel(struct vtun_host *host, int srv)
                          return -1;
                     }
                     remote.sun_family = AF_UNIX;
-                    strcpy(remote.sun_path, dev);
+                    sprintf(remote.sun_path, "/tmp/vtrunkd_%s.socket", dev);
                     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
                     if (connect(s, (struct sockaddr *)&remote, len) == -1) {
                          switch(pid2 = fork()) {

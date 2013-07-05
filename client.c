@@ -161,7 +161,7 @@ void client(struct vtun_host *host)
                          exit(1);
                     }
                     remote.sun_family = AF_UNIX;
-                    strcpy(remote.sun_path, shm_conn_info[0].devname);
+                    sprintf(remote.sun_path, "/tmp/vtrunkd_%s.socket", shm_conn_info[0].devname);
                     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
                     if ( (shm_conn_info->rdy) && (connect(sss, (struct sockaddr *)&remote, len) == -1)) {
                          vtun_syslog(LOG_INFO, "SHM ready but socket not open! Assuming we're only process running;");
