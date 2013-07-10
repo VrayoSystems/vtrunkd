@@ -1092,13 +1092,18 @@ int ag_switcher() {
                 info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
         if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW) || (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW)) {
             if (ACK_coming_speed >= 0) {
-                info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 4;
+                info.channel[i].ACK_speed_avg *= 100;
+                ACK_coming_speed *= 100;
+                info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 40;
+                info.channel[i].ACK_speed_avg /= 100;
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "ACK_speed_avg %u logical channel %i", info.channel[i].ACK_speed_avg, i);
 #endif
             } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
                 vtun_syslog(LOG_ERR, "WARNING - sent_bytes value is overflow, zeroing ACK_coming_speed");
-                info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 4;
+                info.channel[i].ACK_speed_avg *= 100;
+                info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 40;
+                info.channel[i].ACK_speed_avg /= 100;
             } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "WARNING - Speed was slow much time logical channel %i", i);
