@@ -52,6 +52,7 @@ struct vtun_host default_host;
 void write_pid(void);
 void reread_config(int sig);
 void usage(void);
+void version();
 
 extern int optind,opterr,optopt;
 extern char *optarg;
@@ -121,7 +122,7 @@ int main(int argc, char *argv[], char *env[])
      /* Start logging to syslog and stderr */
      openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
-     while( (opt=getopt(argc,argv,"misf:P:L:t:np")) != EOF ){
+    while ((opt = getopt(argc, argv, "misf:P:L:t:npvh?")) != EOF) {
 	switch(opt){
 	    case 'm':
 	        if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) {
@@ -150,16 +151,25 @@ int main(int argc, char *argv[], char *env[])
 		vtun.persist = 1;
 		break;
 	    case 't':
-	        vtun.timeout = atoi(optarg);	
+	        vtun.timeout = atoi(optarg);
 	        break;
 	    case 'M':
-	        vtun.MAX_TUNNELS_NUM = atoi(optarg);	
-	        break;                
+	        vtun.MAX_TUNNELS_NUM = atoi(optarg);
+	        break;
+        case 'v':
+            version();
+            exit(0);
+            break;
+        case 'h':
+        case '?':
+            usage();
+            exit(0);
+            break;
             default:
 		usage();
 	        exit(1);
 	}
-     }	
+     }
      reread_config(0);
 
      if (vtun.syslog != LOG_DAEMON) {
@@ -284,4 +294,8 @@ void usage(void)
      /* these actually do work. At least given in config file -- grandrew 20110507*/
      printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
 	    "[-p] [-m] [-t timeout] <host profile> <server address>\n");
+}
+
+void version() {
+    printf("vtrunkd ver %s %s\n", VTUN_VER, BUILD_DATE);
 }
