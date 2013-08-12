@@ -27,6 +27,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
+#include <netinet/tcp.h>
+#include <netinet/in.h>
 
 #ifdef HAVE_LIBUTIL_H
 #include <libutil.h>
@@ -88,8 +90,8 @@ static inline int read_n(int fd, char *buf, int len)
 /* Write exactly len bytes (Signal safe)*/
 static inline int write_n(int fd, char *buf, int len)
 {
-	int t=0, w;
-
+    int t = 0, w, state = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_CORK, &state, sizeof(state));
 	while (!__io_canceled && len > 0) {
  	  if( (w = write(fd, buf, len)) < 0 ){
 	     return -1;
@@ -98,7 +100,8 @@ static inline int write_n(int fd, char *buf, int len)
 	     return 0;
 	  len -= w; buf += w; t += w;
 	}
-
+    state = 0;
+    setsockopt(fd, IPPROTO_TCP, TCP_CORK, &state, sizeof(state));
 	return t;
 }
 #endif /* _VTUN_LIB_H */
