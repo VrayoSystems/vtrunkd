@@ -1971,7 +1971,7 @@ int res123 = 0;
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
             for (int i = 0; i < 32; i++) {
-                if (!(chan_mask & (1 << i))) {
+                if (chan_mask & (1 << i)) {
                     alive_physical_channels++;
                 }
             }
