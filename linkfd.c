@@ -185,6 +185,76 @@ int assert_cnt(int where) {
 }
 
 
+int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
+    int len = 0;
+    *size = 0;
+    
+    //if(l->rel_head == -1 && l->rel_tail !=-1) {
+    //    return -8;
+    //}
+    
+    if(l->rel_head != -1 && l->rel_tail ==-1) {
+        return -9;
+    }
+    
+    if(l->rel_head == -1) {
+        return 0;
+    }
+    
+    if(l->rel_head < -1) {
+        return -1;
+    }
+    if(l->rel_tail < -1) {
+        return -2;
+    }
+    if(l->rel_head > max) {
+        return -3;
+    }
+    if(l->rel_tail > max) {
+        return -4;
+    }
+    
+    for (int i = l->rel_head; i != -1; i = flist[i].rel_next) {
+        if(flist[i].rel_next < -1) {
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! frame[%d]->rel_next=%d,seq_num=%lu,len=%d,chan_num=%d", i, flist[i].rel_next, flist[i].seq_num, flist[i].len, flist[i].chan_num);
+            return -5;
+        }
+        if(flist[i].rel_next > max) {
+            return -6;
+        }
+        len++;
+    }
+    *size = len;
+    return 0;
+}
+
+
+int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf wb[], struct frame_llist *lfree, struct frame_seq flist[]) {
+    int free_cnt = 0;
+    int size = 0;
+    int size_total = 0;
+    int result;
+    
+    for(int i=0; i < llist_amt; i++) {
+        result = frame_llist_getSize_asserted(framebuf_size, &wb[i].frames, flist, &size);
+        if (result < 0) return result;
+        size_total += size;
+    }
+    
+    result = frame_llist_getSize_asserted(framebuf_size, lfree, flist, &size);
+    if (result < 0) return result-100;
+    if(size_total + size != framebuf_size) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED! total used in write_buf: %d, free: %d, sum: %d, total: %d", size_total, size, (size_total+size), framebuf_size);
+        return -7;
+    }
+    
+    return 0;
+}
+
+
+
+
+
 /********** Linker *************/
 /* Termination flag */
 static volatile sig_atomic_t linker_term;
@@ -878,6 +948,8 @@ int write_buf_add(int conn_num, char *out, int len, unsigned long seq_num, unsig
                            shm_conn_info->frames_buf,
                            &newf) < 0) {
         // try a fix
+        vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted");
+        return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf();
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
@@ -1824,6 +1896,40 @@ int res123 = 0;
                     info.channel[i].up_len += len_ret;
                 }
             }
+            
+            
+            
+            
+             // do llist checks
+            
+            int alive_physical_channels = 0;
+            int check_result=0;
+            
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t chan_mask = shm_conn_info->channels_mask;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            
+            
+            for (int i = 0; i < 32; i++) {
+                if (chan_mask & (1 << i)) {
+                    alive_physical_channels++;
+                }
+            }
+            if (alive_physical_channels == 0) {
+                vtun_syslog(LOG_ERR, "ASSERT All physical channels dead!!!");
+                alive_physical_channels = 1;
+            }
+            
+            
+            sem_wait(&(shm_conn_info->write_buf_sem));
+            check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
+            sem_post(&(shm_conn_info->write_buf_sem));
+            if(check_result < 0) {
+                vtun_syslog(LOG_ERR, "CHECK FAILED: write_buf broken: error %d", check_result);
+            }
+            
+            
+            
        
                // now check ALL connections
             for (i = 0; i < info.channel_amount; i++) {

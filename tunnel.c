@@ -588,7 +588,7 @@ int tunnel(struct vtun_host *host, int srv)
                     
                     
                     frame_llist_init(&shm_conn_info[connid].rb_free_frames);
-                    frame_llist_fill(&shm_conn_info[connid].rb_free_frames, shm_conn_info[connid].resend_frames_buf, FRAME_BUF_SIZE);
+                    frame_llist_fill(&shm_conn_info[connid].rb_free_frames, shm_conn_info[connid].resend_frames_buf, RESEND_BUF_SIZE);
                     
                     vtun_syslog(LOG_INFO, "Starting fd_server");
                     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
