@@ -1610,7 +1610,7 @@ int res123 = 0;
         }
         
         if (timercmp_result || ag_switch_flag) {
-            info.mode = ag_switcher();
+            info.mode = R_MODE;
             get_info_time_last.tv_sec = cur_time.tv_sec;
             get_info_time_last.tv_usec = cur_time.tv_usec;
 #if !defined(DEBUGG) && defined(JSON)
