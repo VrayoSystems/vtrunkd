@@ -2554,89 +2554,41 @@ int res123 = 0;
         } // for chans..
 
         /* Read data from the local device(tun_device), encode and pass it to
-             * the network (service_channel)
+             * the network (retransmit hardcoded)
              *
              *
              * ****************************************************************************************
              *
              *
              * */
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        uint32_t AG_ready_flag_tmp = shm_conn_info->AG_ready_flag;
-        sem_post(&(shm_conn_info->AG_flags_sem));
-        // check for mode
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: send time, AG_ready_flags %xx0", info.mode);
-#endif
-        if ((AG_ready_flag_tmp == R_MODE) || (info.mode == R_MODE)) { // it is RETRANSMIT_MODE(R_MODE)
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: R_MODE");
-#endif
-            len = retransmit_send(out2);
-            if (len == CONTINUE_ERROR) {
+
+        len = retransmit_send(out2);
+        if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
 #endif
-                len = 0;
-            } else if (len == BREAK_ERROR) {
-                vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
-                linker_term = TERM_NONFATAL;
-                break;
-            } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
+            len = 0;
+        } else if (len == BREAK_ERROR) {
+            vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
+            linker_term = TERM_NONFATAL;
+            break;
+        } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: R_MODE main send");
-#endif
-                len = select_devread_send(buf, out2);
-                if (len > 0) {
-                    dirty_seq_num++;
-                } else if (len == BREAK_ERROR) {
-                    vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
-                    linker_term = TERM_NONFATAL;
-                    break;
-                } else if (len == CONTINUE_ERROR) {
-                    len = 0;
-                } else if (len == TRYWAIT_NOTIFY) {
-                    len = 0; //todo need to check resend_buf for new packet again ????
-                }
-            } else {
-                dirty_seq_num++;
-            }
-        } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: AG_MODE");
+                vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
             len = select_devread_send(buf, out2);
             if (len > 0) {
-                dirty_seq_num++;
-#ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);
-#endif
             } else if (len == BREAK_ERROR) {
-                vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
+                vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
                 break;
             } else if (len == CONTINUE_ERROR) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
-#endif
                 len = 0;
             } else if (len == TRYWAIT_NOTIFY) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
-#endif
-                len = 0;
-            } else if (len == NET_WRITE_BUSY_NOTIFY) {
-#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
-#endif
-                len = 0;
-            } else if (len == SEND_Q_NOTIFY) {
-#ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
-#endif
-                len = 0;
+                len = 0; //todo need to check resend_buf for new packet again ????
             }
         }
+
             //Check time interval and ping if need.
         if (((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
 				ping_rcvd = 0;
