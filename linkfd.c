@@ -2212,7 +2212,7 @@ int res123 = 0;
 
                             for(i=1; i<=lfd_host->TCP_CONN_AMOUNT; i++) {
                                 errno = 0;
-                                for(j=0; j<30; j++) {
+                                for(j=0; j<3; j++) {
                                     if( (fd_tmp = socket(AF_INET,SOCK_STREAM,0))==-1 ) {
                                         vtun_syslog(LOG_ERR,"Can't create CHAN socket. %s(%d) chan %d try %d",
                                                     strerror(errno), errno, i, j);
@@ -2256,8 +2256,8 @@ int res123 = 0;
                                     }
                                     break;
                                 }
-                                if((j==30 || j==0) && (errno != 0)) {
-                                    vtun_syslog(LOG_INFO,"WTF j==30 || j==0");
+                                if((j==3 || j==0) && (errno != 0)) {
+                                    vtun_syslog(LOG_INFO,"WTF j==3 || j==0");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
