@@ -1594,7 +1594,8 @@ int res123 = 0;
             alarm(0);
         }
 
-        for(; i>=0; i--) {
+        maxfd = 0;
+        for(int i=0; i < info.channel_amount; i++) {
             if (maxfd < info.channel[i].descriptor) {
                 maxfd = info.channel[i].descriptor;
             }
