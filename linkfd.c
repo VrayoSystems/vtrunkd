@@ -1594,7 +1594,7 @@ int res123 = 0;
             alarm(0);
         }
 
-        maxfd = 0;
+        maxfd = info.tun_device;
         for(int i=0; i < info.channel_amount; i++) {
             if (maxfd < info.channel[i].descriptor) {
                 maxfd = info.channel[i].descriptor;
@@ -2268,7 +2268,6 @@ int res123 = 0;
 
                                 prio_opt=1;
                                 setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
-                                maxfd = (fd_tmp > maxfd ? (fd_tmp) : maxfd);
                                 info.channel[i].descriptor = fd_tmp;
 #ifdef DEBUGG
                                 vtun_syslog(LOG_INFO,"CHAN sock connected");
@@ -2281,6 +2280,12 @@ int res123 = 0;
                                 break;
                             }
                             info.channel_amount = i;
+                            maxfd = info.tun_device;
+                            for (int i = 0; i < info.channel_amount; i++) {
+                                if (maxfd < info.channel[i].descriptor) {
+                                    maxfd = info.channel[i].descriptor;
+                                }
+                            }
                             //double call for getcockname beacause frst call returned ZERO in addr
                             laddrlen = sizeof(localaddr);
                             if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
