@@ -22,7 +22,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/vtrunkd
   SECTION:=net
   CATEGORY:=Network
-  DEPENDS:=+kmod-tun +libpthread +flex +bison +kmod-sched +libiproute +librt +tc +nano
+  DEPENDS:=+kmod-tun +libpthread +flex +bison +libiproute +librt +nano
   TITLE:=Virtual trunking (bonding) daemon
   URL:=http://mxmit.com/vtrunkd
   SUBMENU:=VPN
