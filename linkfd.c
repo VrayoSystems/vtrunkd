@@ -1418,6 +1418,11 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
 		read_n(service_channel, buf, sizeof(uint16_t)+sizeof(uint16_t));
         info.channel_amount = ntohs(*((uint16_t *) buf)); // include info channel
+        if (info.channel_amount > MAX_TCP_LOGICAL_CHANNELS) {
+            vtun_syslog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
+            info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
+            linker_term = TERM_NONFATAL;
+        }
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
@@ -2841,6 +2846,12 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
+            return 0;
+        }
+        if (info.channel_amount > MAX_TCP_LOGICAL_CHANNELS) {
+            vtun_syslog(LOG_ERR, "ASSERT! channel amount corrupt %i channels. Exit ", info.channel_amount);
+            info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
+            linker_term = TERM_NONFATAL;
             return 0;
         }
         chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
