@@ -1774,64 +1774,63 @@ int res123 = 0;
                 break;
             }
             if (info.just_started_recv == 1) {
-            uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
-            info.speed_efficient = info.byte_efficient / time_passed;
-            info.speed_r_mode = info.byte_r_mode / time_passed;
-            info.speed_resend = info.byte_resend / time_passed;
-            info.byte_efficient = 0;
-            info.byte_resend = 0;
-            info.byte_r_mode = 0;
-            for (int i = 0; i < info.channel_amount; i++) {
-                // speed(kb/s) calculation
-                sem_wait(&(shm_conn_info->stats_sem));
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed = shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt
-                        / time_passed;
-                sem_post(&(shm_conn_info->stats_sem));
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt = 0;
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed =
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt / (time_passed);
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt = 0;
+                uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
+                info.speed_efficient = info.byte_efficient / time_passed;
+                info.speed_r_mode = info.byte_r_mode / time_passed;
+                info.speed_resend = info.byte_resend / time_passed;
+                info.byte_efficient = 0;
+                info.byte_resend = 0;
+                info.byte_r_mode = 0;
+                for (int i = 0; i < info.channel_amount; i++) {
+                    // speed(kb/s) calculation
+                    sem_wait(&(shm_conn_info->stats_sem));
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed =
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt / time_passed;
+                    sem_post(&(shm_conn_info->stats_sem));
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt = 0;
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed =
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt / (time_passed);
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt = 0;
 #ifdef TRACE
-                vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed, info.process_num, i);
-                vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed, info.process_num, i);
+                    vtun_syslog(LOG_INFO, "upload speed %lu kb/s physical channel %d logical channel %d",
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed, info.process_num, i);
+                    vtun_syslog(LOG_INFO, "download speed %lu kb/s physical channel %d logical channel %d",
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed, info.process_num, i);
 #endif
-                // speed in packets/sec calculation
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed =
-                        (shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
-                shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets = 0;
+                    // speed in packets/sec calculation
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed =
+                            (shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
+                    shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets = 0;
 #ifdef TRACE
-                vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d lport %d rport %d",
-                        shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed, info.process_num, i, info.channel[i].lport, info.channel[i].rport);
+                    vtun_syslog(LOG_INFO, "download speed %lu packet/s physical channel %d logical channel %d lport %d rport %d",
+                            shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed, info.process_num, i, info.channel[i].lport, info.channel[i].rport);
 #endif
-            }
+                }
 //               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
 
-            	   //time_lag = old last written time - new written time
-            	   // calculate mean value and send time_lag to another side
-            	   //github.com - Issue #11
-				int time_lag_cnt = 0, time_lag_sum = 0;
-				for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
-					if (time_lag_info_arr[i].time_lag_cnt != 0) {
-						time_lag_cnt++;
-						time_lag_sum += time_lag_info_arr[i].time_lag_sum / time_lag_info_arr[i].time_lag_cnt;
-						time_lag_info_arr[i].time_lag_sum = 0;
-						time_lag_info_arr[i].time_lag_cnt = 0;
-					}
-				}
-				time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
-				sem_wait(&(shm_conn_info->stats_sem));
-				shm_conn_info->stats[info.process_num].time_lag_remote = time_lag_local.time_lag;
-				sem_post(&(shm_conn_info->stats_sem));
+                //time_lag = old last written time - new written time
+                // calculate mean value and send time_lag to another side
+                //github.com - Issue #11
+                int time_lag_cnt = 0, time_lag_sum = 0;
+                for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+                    if (time_lag_info_arr[i].time_lag_cnt != 0) {
+                        time_lag_cnt++;
+                        time_lag_sum += time_lag_info_arr[i].time_lag_sum / time_lag_info_arr[i].time_lag_cnt;
+                        time_lag_info_arr[i].time_lag_sum = 0;
+                        time_lag_info_arr[i].time_lag_cnt = 0;
+                    }
+                }
+                time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
+                sem_wait(&(shm_conn_info->stats_sem));
+                shm_conn_info->stats[info.process_num].time_lag_remote = time_lag_local.time_lag;
+                sem_post(&(shm_conn_info->stats_sem));
 
-
-				//todo send time_lag for all process(PHYSICAL CHANNELS)
-				uint32_t time_lag_remote;
-				uint16_t pid_remote;
-				for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-					sem_wait(&(shm_conn_info->stats_sem));
-					/* If pid is null --> link didn't up --> continue*/
+                //todo send time_lag for all process(PHYSICAL CHANNELS)
+                uint32_t time_lag_remote;
+                uint16_t pid_remote;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    sem_wait(&(shm_conn_info->stats_sem));
+                    /* If pid is null --> link didn't up --> continue*/
                     if (shm_conn_info->stats[i].pid == 0) {
                         sem_post(&(shm_conn_info->stats_sem));
                         continue;
@@ -1839,64 +1838,65 @@ int res123 = 0;
 #ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
 #endif
-					time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
+                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
                     /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
                     time_lag_remote &= 0xFFFFF; // shrink to 20bit
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
-					pid_remote = shm_conn_info->stats[i].pid_remote;
+                    pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t miss_packet_counter_h = htonl(shm_conn_info->miss_packets_max_send_counter++);
-					sem_post(&(shm_conn_info->stats_sem));
-					uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
+                    sem_post(&(shm_conn_info->stats_sem));
+                    uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                     memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
                     memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t));
                     uint16_t pid_remote_h = htons(pid_remote);
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h, sizeof(uint32_t));
-                int len_ret = proto_write(info.channel[0].descriptor, buf,
-                        ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
-                if (len_ret < 0) {
+                    int len_ret = proto_write(info.channel[0].descriptor, buf,
+                            ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
                         linker_term = TERM_NONFATAL; //?????
                     }
-                shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                info.channel[0].up_len += len_ret;
+                    shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                    info.channel[0].up_len += len_ret;
                 }
-            my_miss_packets_max = 0;
-                   if(delay_cnt == 0) delay_cnt = 1;
-                   mean_delay = (delay_acc/delay_cnt);
-       #ifdef DEBUGG
-                   vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm,  statb.bytes_rcvd_norm,  statb.bytes_sent_rx,  statb.pkts_dropped, statb.rxmit_req_rx,  statb.rxmits,  statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
-                   vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5],    statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
-       #endif
-                   dev_my_cnt = 0;
-                   last_tick = cur_time.tv_sec;
-                   shm_conn_info->alive = cur_time.tv_sec;
-                   delay_acc = 0;
-                   delay_cnt = 0;
-                      
+                my_miss_packets_max = 0;
+                if (delay_cnt == 0)
+                    delay_cnt = 1;
+                mean_delay = (delay_acc / delay_cnt);
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
+                vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5], statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
+#endif
+                dev_my_cnt = 0;
+                last_tick = cur_time.tv_sec;
+                shm_conn_info->alive = cur_time.tv_sec;
+                delay_acc = 0;
+                delay_cnt = 0;
+
                 for (i = 0; i < info.channel_amount; i++) {
-                sem_wait(&(shm_conn_info->write_buf_sem));
-                unsigned long last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
-                unsigned long last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
-                sem_post(&(shm_conn_info->write_buf_sem));
-                if (((cur_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
-                    // TODO: DUP code!
                     sem_wait(&(shm_conn_info->write_buf_sem));
-                    *((unsigned long *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
-                    last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
-                    shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+                    unsigned long last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
+                    unsigned long last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
                     sem_post(&(shm_conn_info->write_buf_sem));
-                    *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                    int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                    if (len_ret < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
-                        linker_term = TERM_NONFATAL;
+                    if (((cur_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
+                        // TODO: DUP code!
+                        sem_wait(&(shm_conn_info->write_buf_sem));
+                        *((unsigned long *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
+                        last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
+                        shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+                        sem_post(&(shm_conn_info->write_buf_sem));
+                        *((unsigned short *) (buf + sizeof(unsigned long))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                        int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(unsigned long) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        if (len_ret < 0) {
+                            vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                            linker_term = TERM_NONFATAL;
+                        }
+                        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        info.channel[i].up_len += len_ret;
                     }
-                    shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                    info.channel[i].up_len += len_ret;
                 }
-            }
             
             
             
