@@ -1768,7 +1768,12 @@ int res123 = 0;
           /**
            * This is the Tick module
            */
-          if( timercmp(&tv_tmp, &timer_resolution, >=) ) {
+        if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            if ((cur_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
+                vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
+                break;
+            }
+            if (info.just_started_recv == 1) {
             uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
             info.speed_efficient = info.byte_efficient / time_passed;
             info.speed_r_mode = info.byte_r_mode / time_passed;
@@ -1869,11 +1874,6 @@ int res123 = 0;
                    shm_conn_info->alive = cur_time.tv_sec;
                    delay_acc = 0;
                    delay_cnt = 0;
-       
-                      if( (cur_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT ) {
-                          vtun_syslog(LOG_INFO,"Session %s network timeout", lfd_host->host);
-                          break;
-                      }
                       
                 for (i = 0; i < info.channel_amount; i++) {
                 sem_wait(&(shm_conn_info->write_buf_sem));
@@ -1978,6 +1978,7 @@ int res123 = 0;
                last_timing.tv_sec = cur_time.tv_sec;
                last_timing.tv_usec = cur_time.tv_usec;
           }
+        }
 
                     /*
                      * Now do a select () from all devices and channels
