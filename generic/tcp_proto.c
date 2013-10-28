@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/wait.h>
@@ -60,29 +61,21 @@ int tcp_write(int fd, char *buf, int len)
 {
      char *ptr;
 
-     if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
-         unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
-     }
+     ptr = buf - sizeof(uint16_t);
 
-     ptr = buf - sizeof(short);
-
-     *((unsigned short *)ptr) = htons(len); 
-     len  = (len & VTUN_FSIZE_MASK) + sizeof(short);
-
-    if (VTUN_BAD_FRAME == len & ~VTUN_FSIZE_MASK) {
-        unsigned short flag_var = ntohs(*((unsigned short *) (buf + (sizeof(unsigned long)))));
-    }
+     *((uint16_t *)ptr) = htons(len);
+     len  = (len & VTUN_FSIZE_MASK) + sizeof(uint16_t);
 
      return write_n(fd, ptr, len);
 }
 
 int tcp_read(int fd, char *buf)
 {
-     unsigned short len, flen;
+     uint16_t len, flen;
      int rlen;
 
      /* Rad frame size */
-     if( (rlen = read_n(fd, (char *)&len, sizeof(short)) ) <= 0) {
+     if( (rlen = read_n(fd, (char *)&len, sizeof(uint16_t)) ) <= 0) {
 #ifdef DEBUGG
         vtun_syslog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove! OK on client connect error
 #endif
