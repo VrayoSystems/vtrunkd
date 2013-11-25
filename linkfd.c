@@ -641,7 +641,7 @@ int retransmit_send(char *out2) {
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        int len_ret = proto_write(info.channel[i].descriptor, out_buf, len);
+        int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
         if ((len && len_ret) < 0) {
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
             return BREAK_ERROR;
@@ -802,7 +802,7 @@ int select_devread_send(char *buf, char *out2) {
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
-    int len_ret = proto_write(info.channel[chan_num].descriptor, buf, len);
+    int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     if ((len && len_ret) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
@@ -1435,6 +1435,7 @@ int lfd_linker(void)
             return 0;
         }
 		sem_wait(&(shm_conn_info->stats_sem));
+        info.channel[0].descriptor = service_channel; // load service channel
 		shm_conn_info->stats[info.process_num].pid_remote = ntohs(*((uint16_t *) (buf + sizeof(uint16_t))));
 		time_lag_local.pid_remote = shm_conn_info->stats[info.process_num].pid_remote;
 		time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
@@ -1446,56 +1447,57 @@ int lfd_linker(void)
 #endif
         vtun_syslog(LOG_INFO,"Will create %d channels", info.channel_amount);
 
-        // try to bind to portnum my_num+smth:
-        memset(&my_addr, 0, sizeof(my_addr));
-        my_addr.sin_addr.s_addr = INADDR_ANY;
-        memset(&rmaddr, 0, sizeof(rmaddr));
-        my_addr.sin_family = AF_INET;
-        if( (prio_s=socket(AF_INET,SOCK_STREAM,0))== -1 ) {
-            vtun_syslog(LOG_ERR,"Can't create Channels socket");
-            return -1;
+        for (int i = 1; i < info.channel_amount; i++) {
+            // try to bind to portnum my_num+smth:
+            memset(&my_addr, 0, sizeof(my_addr));
+            my_addr.sin_addr.s_addr = INADDR_ANY;
+            memset(&rmaddr, 0, sizeof(rmaddr));
+            my_addr.sin_family = AF_INET;
+            if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+                vtun_syslog(LOG_ERR, "Can't create Channels socket");
+                return -1;
+            }
+
+            // Get buffer size
+            socklen_t optlen = sizeof(sendbuff);
+            if (getsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDBUF, &sendbuff, &optlen) == -1) {
+                vtun_syslog(LOG_ERR, "Error getsockopt one");
+            } else {
+                vtun_syslog(LOG_INFO, "send buffer size = %d\n", sendbuff);
+            }
+
+//            prio_opt = 1;
+//            setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
+
+            if (bind(info.channel[i].descriptor, (struct sockaddr *) &my_addr, sizeof(my_addr))) {
+                vtun_syslog(LOG_ERR, "Can't bind to the Channels socket");
+                return -1;
+            }
+
+            // now get my port number
+            laddrlen = sizeof(localaddr);
+            if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
+                vtun_syslog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                close(prio_s);
+                return 0;
+            }
+
+            vtun_syslog(LOG_INFO, "Prio bound to temp port %d; sending notification", ntohs(localaddr.sin_port));
+
+            info.channel[i].lport = ntohs(localaddr.sin_port);
         }
-int res123 = 0;
- // Get buffer size
- socklen_t optlen = sizeof(sendbuff);
- res123 = getsockopt(prio_s, SOL_SOCKET, SO_SNDBUF, &sendbuff, &optlen);
-
- if(res123 == -1)
-     vtun_syslog(LOG_ERR,"Error getsockopt one");
- else
-     vtun_syslog(LOG_INFO,"send buffer size = %d\n", sendbuff);
-
-        prio_opt=1;
-        setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
-
-        if( bind(prio_s,(struct sockaddr *)&my_addr,sizeof(my_addr)) ) {
-            vtun_syslog(LOG_ERR,"Can't bind to the Channels socket");
-            return -1;
+        for (int i = 1; i < info.channel_amount; i++) {
+            int hton_ret = htons(info.channel[i].lport);
+            memcpy(buf + sizeof(uint16_t) * (i - 1), &hton_ret, sizeof(uint16_t));
+            vtun_syslog(LOG_INFO, "Send port to client %d", info.channel[i].lport);
         }
-        if( listen(prio_s, 10) ) {
-            vtun_syslog(LOG_ERR,"Can't listen on the Channels socket");
-            return -1;
-        }
+        write_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
 
 
-        // now get my port number
-        laddrlen = sizeof(localaddr);
-        if(getsockname(prio_s, (struct sockaddr *)(&localaddr), &laddrlen) < 0) {
-            vtun_syslog(LOG_ERR,"My port socket getsockname error; retry %s(%d)",
-                        strerror(errno), errno);
-            close(prio_s);
-            return 0;
-        }
-
-        vtun_syslog(LOG_INFO,"Prio bound to temp port %d; sending notification", ntohs(localaddr.sin_port));
-
-	tmp_s = ntohs(localaddr.sin_port);
-
-        *((uint32_t *)buf) = htonl((uint32_t)tmp_s); // already in htons format...
-        *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_PRIO_PORT_NOTIFY);
-        if(proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-            vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)",
-                        strerror(errno), errno);
+        *((uint32_t *) buf) = htonl(0); // already in htons format...
+        *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_PRIO_PORT_NOTIFY);
+        if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
+            vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
             close(prio_s);
             return 0;
         }
@@ -1512,85 +1514,30 @@ int res123 = 0;
             struct timeval accept_time;
             fd_set rfds;
             FD_ZERO(&rfds);
-            FD_SET(prio_s, &rfds);
+            FD_SET(info.channel[i].descriptor, &rfds);
 
             accept_time.tv_sec = 5;
             accept_time.tv_usec = 0;
 
-            if (select(prio_s + 1, &rfds, (fd_set *) 0, (fd_set *) 0, &accept_time)) {
-                if ((fd_tmp = accept(prio_s, (struct sockaddr *) &cl_addr, &prio_opt)) < 0) {
-                    vtun_syslog(LOG_ERR, "Channels socket accept error %s(%d)", strerror(errno), errno);
+            if (select(info.channel[i].descriptor + 1, &rfds, (fd_set *) 0, (fd_set *) 0, &accept_time) == 1) {
+                struct sockaddr_in cli_addr;
+                socklen_t slen = sizeof(cli_addr);
+                int ret_len = recvfrom(info.channel[i].descriptor, buf, sizeof(uint16_t), 0, (struct sockaddr*) &cli_addr, &slen);
+                if (ret_len == -1) {
+                    vtun_syslog(LOG_ERR, "Recvfrom err on chan %i %s(%d)", i, strerror(errno), errno);
                     break_out = 1;
                     break;
                 }
+                connect(info.channel[i].descriptor, &cli_addr, sizeof(cli_addr));
+                info.channel[i].rport = ntohs(cli_addr.sin_port);
             } else {
                 vtun_syslog(LOG_ERR, "Accept timeout on chan %i", i);
                 break_out = 1;
                 break;
             }
             alarm(0);
-
-            prio_opt=1;
-            setsockopt(fd_tmp,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
-
-            prio_opt=1;
-            setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
-            
-            rmaddrlen = sizeof(rmaddr);
-
-            if(getsockname(fd_tmp, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
-                vtun_syslog(LOG_ERR,"Channels socket getsockname error; retry %s(%d)",
-                            strerror(errno), errno );
-
-                break_out = 1;
-                break;
-            }
-            if(getpeername(fd_tmp, (struct sockaddr *)(&rmaddr), &rmaddrlen) < 0) {
-                vtun_syslog(LOG_ERR,"Channels socket getpeername error; retry %s(%d)",
-                            strerror(errno), errno );
-                break_out = 1;
-                break;
-            }
-            inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
-            if(inet_addr(lfd_host->sopt.raddr) != rmaddr.sin_addr.s_addr) {
-                vtun_syslog(LOG_ERR,"Socket IP addresses do not match: %s != %s", lfd_host->sopt.raddr, ipstr);
-                break_out = 1;
-                break;
-            }
-            info.channel[i].descriptor=fd_tmp;
         }
-        info.channel[0].descriptor = service_channel;
-        for (i = 0; i < info.channel_amount; i++) {
-            memset(&rmaddr, 0, sizeof(rmaddr));
-            memset(&localaddr, 0, sizeof(localaddr));
-            rmaddrlen = sizeof(rmaddr);
-            laddrlen = sizeof(localaddr);
-            if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
-                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
-                linker_term = TERM_NONFATAL;
-                break;
-            }
-            if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
-                linker_term = TERM_NONFATAL;
-                break;
-            }
-            info.channel[i].rport = ntohs(rmaddr.sin_port);
-            info.channel[i].lport = ntohs(localaddr.sin_port);
-            vtun_syslog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i, info.channel[i].lport, info.channel[i].rport);
-        }
-        for (i = 1; i < info.channel_amount; i++) {
-            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-                vtun_syslog(LOG_ERR, "setsockopt failed");
-                linker_term = TERM_NONFATAL;
-                break;
-            }
-            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-                vtun_syslog(LOG_ERR, "setsockopt failed");
-                linker_term = TERM_NONFATAL;
-                break;
-            }
-        }
+
         if(break_out) {
             close(prio_s);
             for(; i>=0; i--) {
@@ -1600,16 +1547,29 @@ int res123 = 0;
             alarm(0);
         }
 
+        memset(&rmaddr, 0, sizeof(rmaddr));
+        memset(&localaddr, 0, sizeof(localaddr));
+        rmaddrlen = sizeof(rmaddr);
+        laddrlen = sizeof(localaddr);
+        if (getpeername(info.channel[0].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
+            vtun_syslog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
+            linker_term = TERM_NONFATAL;
+        }
+        if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
+            vtun_syslog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
+            linker_term = TERM_NONFATAL;
+         }
+        info.channel[0].rport = ntohs(rmaddr.sin_port);
+        info.channel[0].lport = ntohs(localaddr.sin_port);
+
+        gettimeofday(&(info.get_tcp_info_time), NULL );
         maxfd = info.tun_device;
-        for(int i=0; i < info.channel_amount; i++) {
+        for (int i = 0; i < info.channel_amount; i++) {
+            vtun_syslog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i,
+                    info.channel[i].lport, info.channel[i].rport);
             if (maxfd < info.channel[i].descriptor) {
                 maxfd = info.channel[i].descriptor;
             }
-        }
-
-        // Server another init section
-        gettimeofday(&(info.get_tcp_info_time), NULL );
-        for (int i = 0; i < info.channel_amount; i++) {
             memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.channel[i].get_tcp_info_time_old));
         }
     } else {
@@ -1626,9 +1586,16 @@ int res123 = 0;
  		shm_conn_info->stats[info.process_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = shm_conn_info->stats[info.process_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
-#ifdef DEBUGG
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
-#endif
+
+ //       read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
+        vtun_syslog(LOG_INFO, "remote ports len %d", read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1)));
+
+        for (int i = 1; i < info.channel_amount; i++) {
+            memcpy(&info.channel[i].rport, (i - 1) * sizeof(uint16_t) + buf, sizeof(uint16_t));
+            info.channel[i].rport = ntohs(info.channel[i].rport);
+            vtun_syslog(LOG_INFO, "remote port recived %d", info.channel[i].rport);
+        }
  		info.channel_amount = 1; // now we'll accumulate here established logical channels
     }
 
@@ -1747,7 +1714,7 @@ int res123 = 0;
             }
         }
         /* TODO write function for lws sending*/
-        for (i = 0; i < info.channel_amount; i++) {
+        for (i = 1; i < info.channel_amount; i++) {
         sem_wait(&(shm_conn_info->write_buf_sem));
         uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
         uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
@@ -1760,7 +1727,7 @@ int res123 = 0;
             shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
             sem_post(&(shm_conn_info->write_buf_sem));
             *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                 linker_term = TERM_NONFATAL;
@@ -1881,7 +1848,7 @@ int res123 = 0;
                 delay_acc = 0;
                 delay_cnt = 0;
 
-                for (i = 0; i < info.channel_amount; i++) {
+                for (i = 1; i < info.channel_amount; i++) {
                     sem_wait(&(shm_conn_info->write_buf_sem));
                     uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
                     uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
@@ -1894,7 +1861,7 @@ int res123 = 0;
                         shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
                         sem_post(&(shm_conn_info->write_buf_sem));
                         *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                        int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
@@ -1939,7 +1906,7 @@ int res123 = 0;
             
        
                // now check ALL connections
-            for (i = 0; i < info.channel_amount; i++) {
+            for (i = 1; i < info.channel_amount; i++) {
                    sem_wait(&(shm_conn_info->write_buf_sem));
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
                    sem_post(&(shm_conn_info->write_buf_sem));
@@ -1962,7 +1929,7 @@ int res123 = 0;
                                vtun_syslog(LOG_INFO,"Requesting bad frame (MAX_LATENCY) id %"PRIu32" chan %d", incomplete_seq_buf[imf], i); // TODO HERE: remove this (2 places) verbosity later!!
                                //statb.rxmit_req++;
                                statb.max_latency_hit++;
-                            int len_ret = proto_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                            int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                             if (len_ret < 0) {
                                    err=1;
                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
@@ -2053,7 +2020,12 @@ int res123 = 0;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                        int len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        int len_ret;
+                        if (i == 0) {
+                            len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        } else {
+                            len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        }
                         if (len_ret < 0) {
                                  vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  linker_term = TERM_NONFATAL;
@@ -2120,14 +2092,18 @@ int res123 = 0;
 
                 //net_counter++; // rxmit mode
                 last_action = cur_time.tv_sec;
-                
+                if (chan_num == 0) {
+                    len = tcp_read(fd0, buf);
+                } else {
+                    len = udp_read(fd0, buf);
+                }
 
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 #endif
-                if( (len=proto_read(fd0, buf)) <= 0 ) {
+                if( len<= 0 ) {
                     if (len == 0) {
-                        vtun_syslog(LOG_INFO, "proto_read return 0, the peer has performed an orderly shutdown. TERM_NONFATAL");
+                        vtun_syslog(LOG_INFO, "proto_read return 0, the peer with %d has performed an orderly shutdown. TERM_NONFATAL", chan_num);
                         linker_term = TERM_NONFATAL;
                         break;
                     }
@@ -2206,83 +2182,38 @@ int res123 = 0;
                             continue;
                         } else if (flag_var == FRAME_PRIO_PORT_NOTIFY) {
                             // connect to port specified
-                            if( server_addr(&rmaddr, lfd_host) < 0 ) {
+                            if (server_addr(&rmaddr, lfd_host) < 0) {
                                 vtun_syslog(LOG_ERR, "Could not set server address!");
                                 linker_term = TERM_FATAL;
                                 break;
                             }
-
-                            tmp_s = (uint16_t) ntohl(*((uint32_t *)buf));
-			    rmaddr.sin_port = htons(tmp_s);
                             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
-                            vtun_syslog(LOG_INFO, "Channels connecting to %s : %d to create %d channels", ipstr, ntohs(rmaddr.sin_port), lfd_host->TCP_CONN_AMOUNT);
+                            vtun_syslog(LOG_INFO, "Channels connecting to %s to create %d channels", ipstr, lfd_host->TCP_CONN_AMOUNT);
                             usleep(500000);
 
-                            for(i=1; i<=lfd_host->TCP_CONN_AMOUNT; i++) {
+                            for (i = 1; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
                                 errno = 0;
-                                for(j=0; j<3; j++) {
-                                    if( (fd_tmp = socket(AF_INET,SOCK_STREAM,0))==-1 ) {
-                                        vtun_syslog(LOG_ERR,"Can't create CHAN socket. %s(%d) chan %d try %d",
-                                                    strerror(errno), errno, i, j);
-                                        linker_term = TERM_FATAL;
-                                        break;
-                                    }
-
+                                if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+                                    vtun_syslog(LOG_ERR, "Can't create CHAN socket. %s(%d) chan %d", strerror(errno), errno, i);
+                                    linker_term = TERM_FATAL;
+                                    break;
+                                }
 #ifndef W_O_SO_MARK
-                                    if(lfd_host->RT_MARK != -1) {
-                                        if (setsockopt(fd_tmp, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
-                                            vtun_syslog(LOG_ERR,"Client CHAN socket rt mark error %s(%d)",
-                                                        strerror(errno), errno);
-                                            break_out = 1;
-                                            break;
-                                        }
-                                    }
-#endif
-
-
-#ifdef DEBUGG
-                                    vtun_syslog(LOG_INFO,"Connecting CHAN sock i %d j %d", i, j);
-#endif
-                                    /*
-                                    //  TODO: not sure doubling is required here
-                                    if( server_addr(&rmaddr, lfd_host) < 0 ) {
-                                        vtun_syslog(LOG_ERR, "Could not set server address!");
-                                        errno = -EINVAL;
-                                        linker_term = TERM_FATAL;
+                                if (lfd_host->RT_MARK != -1) {
+                                    if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
+                                        vtun_syslog(LOG_ERR, "Client CHAN socket rt mark error %s(%d)", strerror(errno), errno);
+                                        break_out = 1;
                                         break;
                                     }
-
-                                    //  TODO: not sure doubling is required here
-			            rmaddr.sin_port = htons(tmp_s);
-				    */
-                                    if( connect_t(fd_tmp,(struct sockaddr *) &rmaddr, SUP_TCP_CONN_TIMEOUT_SECS) ) {
-                                        vtun_syslog(LOG_INFO,"Connect CHAN failed. %s(%d) chan %d try %d",
-                                                    strerror(errno), errno, i, j);
-                                        close(fd_tmp);
-                                        usleep(500000);
-                                        continue;
-                                    }
-                                    break;
                                 }
-                                if((j==3 || j==0) && (errno != 0)) {
-                                    vtun_syslog(LOG_INFO,"WTF j==3 || j==0");
-                                    linker_term = TERM_NONFATAL;
-                                    break;
-                                }
-
-                                prio_opt=1;
-                                setsockopt(fd_tmp,SOL_SOCKET,SO_KEEPALIVE,&prio_opt,sizeof(prio_opt) );
-
-                                prio_opt=1;
-                                setsockopt(fd_tmp,IPPROTO_TCP,TCP_NODELAY,&prio_opt,sizeof(prio_opt) );
-                                info.channel[i].descriptor = fd_tmp;
-#ifdef DEBUGG
-                                vtun_syslog(LOG_INFO,"CHAN sock connected");
 #endif
-
+                                rmaddr.sin_port = htons(info.channel[i].rport);
+                                connect(info.channel[i].descriptor, (struct sockaddr *)&rmaddr, sizeof(rmaddr));
+                                udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                                usleep(500000);
                             }
-                            if(i<lfd_host->TCP_CONN_AMOUNT) {
-                                vtun_syslog(LOG_ERR,"Could not connect all requested tuns; exit");
+                            if (i < lfd_host->TCP_CONN_AMOUNT) {
+                                vtun_syslog(LOG_ERR, "Could not connect all requested tuns; exit");
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
@@ -2455,7 +2386,12 @@ int res123 = 0;
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
-                        int len_ret = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
+                        int len_ret;
+                        if (chan_num == 0) {
+                            len_ret = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
+                        } else {
+                            len_ret = udp_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
+                        }
                         if ( len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send echo reply");
                             linker_term = TERM_NONFATAL;
@@ -2580,7 +2516,7 @@ int res123 = 0;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
                         sem_post(write_buf_sem);
                         *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                        int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
@@ -2607,7 +2543,7 @@ int res123 = 0;
                                 vtun_syslog(LOG_INFO,"Requesting bad frame MAX_REORDER incomplete_seq_len %d blen %d seq_num %"PRIu32" chan %d",incomplete_seq_len, buf_len, incomplete_seq_buf[imf], chan_num_virt);
                                 //statb.rxmit_req++;
                                 statb.max_reorder_hit++;
-                                int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf,
+                                int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf,
                                         ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                                 if (len_ret < 0) {
                                     vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
@@ -2637,7 +2573,7 @@ int res123 = 0;
                         memcpy(buf, &tmp_l, sizeof(uint32_t));
                         *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_MODE_NORM);
                         statb.chok_not++;
-                        int len_ret = proto_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                        int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
                             linker_term = TERM_NONFATAL;
@@ -2721,7 +2657,12 @@ int res123 = 0;
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                int len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                int len_ret;
+                if (i == 0) {
+                    len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                } else {
+                    len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                }
                 if (len_ret < 0) {
 						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
 						break;

@@ -63,10 +63,10 @@ int udp_write(int fd, char *buf, int len)
      register char *ptr;
      register int wlen;
 
-     ptr = buf - sizeof(short);
+     ptr = buf - sizeof(uint16_t);
 
-     *((unsigned short *)ptr) = htons(len); 
-     len  = (len & VTUN_FSIZE_MASK) + sizeof(short);
+     *((uint16_t *)ptr) = htons(len);
+     len  = (len & VTUN_FSIZE_MASK) + sizeof(uint16_t);
 
      while( 1 ){
 	if( (wlen = write(fd, ptr, len)) < 0 ){ 
@@ -84,12 +84,12 @@ int udp_write(int fd, char *buf, int len)
 
 int udp_read(int fd, char *buf)
 {
-     unsigned short hdr, flen;
+     uint16_t hdr, flen;
      struct iovec iv[2];
      register int rlen;
 
      /* Read frame */
-     iv[0].iov_len  = sizeof(short);
+     iv[0].iov_len  = sizeof(uint16_t);
      iv[0].iov_base = (char *) &hdr;
      iv[1].iov_len  = VTUN_FRAME_SIZE + VTUN_FRAME_OVERHEAD;
      iv[1].iov_base = buf;
