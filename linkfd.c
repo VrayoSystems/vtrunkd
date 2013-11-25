@@ -1681,6 +1681,7 @@ int lfd_linker(void)
             }
 #endif
         }
+        hold_mode = 0;
         if (info.check_shm) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -2616,7 +2617,7 @@ int lfd_linker(void)
              *
              *
              * */
-
+        sem_wait(&shm_conn_info->hard_sem);
         len = retransmit_send(out2);
         if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
@@ -2626,7 +2627,7 @@ int lfd_linker(void)
         } else if (len == BREAK_ERROR) {
             vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
             linker_term = TERM_NONFATAL;
-            break;
+//            break;
         } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "debug: R_MODE main send");
@@ -2636,14 +2637,14 @@ int lfd_linker(void)
             } else if (len == BREAK_ERROR) {
                 vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
-                break;
+//                break;
             } else if (len == CONTINUE_ERROR) {
                 len = 0;
             } else if (len == TRYWAIT_NOTIFY) {
                 len = 0; //todo need to check resend_buf for new packet again ????
             }
         }
-
+        sem_post(&shm_conn_info->hard_sem);
             //Check time interval and ping if need.
         if (((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
 				ping_rcvd = 0;

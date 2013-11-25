@@ -454,6 +454,7 @@ struct conn_info {
     uint32_t need_to_exit; // sync by AG_flags_sem
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
+    sem_t hard_sem;
 };
 
 struct resent_chk {
