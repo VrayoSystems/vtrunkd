@@ -1489,7 +1489,7 @@ int lfd_linker(void)
         for (int i = 1; i < info.channel_amount; i++) {
             uint16_t hton_ret = htons(info.channel[i].lport);
             memcpy(buf + sizeof(uint16_t) * (i - 1), &hton_ret, sizeof(uint16_t));
-            vtun_syslog(LOG_INFO, "Send port to client %d", info.channel[i].lport);
+            vtun_syslog(LOG_INFO, "Send port to client %u", info.channel[i].lport);
         }
         write_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
 
@@ -1588,14 +1588,14 @@ int lfd_linker(void)
  		sem_post(&(shm_conn_info->stats_sem));
  		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 
- //       read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
-        vtun_syslog(LOG_INFO, "remote ports len %d", read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1)));
+ 		len = read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
+        vtun_syslog(LOG_INFO, "remote ports len %d", len);
 
         for (int i = 1; i < info.channel_amount; i++) {
             uint16_t rport_h;
             memcpy(&rport_h, buf + (i - 1) * sizeof(uint16_t), sizeof(uint16_t));
             info.channel[i].rport = ntohs(rport_h);
-            vtun_syslog(LOG_INFO, "remote port recived %d", info.channel[i].rport);
+            vtun_syslog(LOG_INFO, "remote port recived %u", info.channel[i].rport);
         }
  		info.channel_amount = 1; // now we'll accumulate here established logical channels
     }

@@ -355,8 +355,8 @@ struct conn_stats {
  */
 struct logical_status {
     /** Information about tcp connection */
-    int rport;  /**< remote(dst) tcp port */
-    int lport;  /**< local(src) tcp port */
+    uint16_t rport;  /**< remote(dst) tcp port */
+    uint16_t lport;  /**< local(src) tcp port */
     int descriptor; /** file descriptor associated with this connection*/
 
     /** AVG measuring speed */
