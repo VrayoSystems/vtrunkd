@@ -371,15 +371,21 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 }
 
 int get_write_buf_wait_data() {
+    struct timeval max_latency_drop = { 0, 20000 }, tv_tmp;
+
     for (int i = 0; i < info.channel_amount; i++) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
+            sem_wait(&(shm_conn_info->write_buf_sem));
+            timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
+            sem_post(&(shm_conn_info->write_buf_sem));
+            if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
+                    == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "AAAAA select skip.. Data ready to be written on chan %d seq_num: %"PRIu32"", i,
                         shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num);
 #endif
                 return 1;
-            } else if ((cur_time.tv_sec - shm_conn_info->write_buf[i].last_write_time.tv_sec) >= lfd_host->MAX_LATENCY_DROP) {
+            } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                 return 1;
             }
         }
@@ -828,6 +834,7 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
     int fprev = -1;
     int fold = -1;
     int len;
+    struct timeval max_latency_drop = { 0, 20000 };
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -841,13 +848,13 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
     acnt = 0;
     if (fprev > -1) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_usec >= 20000)) {
+        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || ( timercmp(&tv_tmp, &max_latency_drop, >=))) {
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
             struct timeval work_loop1, work_loop2;
             gettimeofday(&work_loop1, NULL );
 #endif
-            if (tv_tmp.tv_usec >= 20000) {
+            if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                 vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32"", shm_conn_info->frames_buf[fprev].seq_num,
                         shm_conn_info->write_buf[logical_channel].last_written_seq);
             }
