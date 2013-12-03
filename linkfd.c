@@ -841,12 +841,16 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
     acnt = 0;
     if (fprev > -1) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP)) {
+        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || (tv_tmp.tv_usec >= 20000)) {
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
             struct timeval work_loop1, work_loop2;
             gettimeofday(&work_loop1, NULL );
 #endif
+            if (tv_tmp.tv_usec >= 20000) {
+                vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32"", shm_conn_info->frames_buf[fprev].seq_num,
+                        shm_conn_info->write_buf[logical_channel].last_written_seq);
+            }
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -2483,7 +2487,7 @@ int lfd_linker(void)
                     struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
                     sem_post(write_buf_sem);
                     timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
-                    if ( (tv_tmp.tv_sec >= lfd_host->MAX_LATENCY_DROP) &&
+                    if ( (tv_tmp.tv_usec >= 20000) &&
                          (timerisset(&last_write_time_tmp))) {
                         //if(buf_len > 1)
                         vtun_syslog(LOG_ERR, "WARNING! MAX_LATENCY_DROP triggering at play! chan %d", chan_num_virt);
