@@ -2542,7 +2542,8 @@ int lfd_linker(void)
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
                     }
-                    if(buf_len > lfd_host->MAX_REORDER) {
+//                    if(buf_len > lfd_host->MAX_REORDER) {
+                    if(0){
                         // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
                         //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
                         sem_wait(write_buf_sem);
