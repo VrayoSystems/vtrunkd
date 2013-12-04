@@ -851,8 +851,8 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
             gettimeofday(&work_loop1, NULL );
 #endif
             if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32"", shm_conn_info->frames_buf[fprev].seq_num,
-                        shm_conn_info->write_buf[logical_channel].last_written_seq);
+                vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
+                        shm_conn_info->write_buf[logical_channel].last_written_seq, tv_tmp.tv_sec, tv_tmp.tv_usec);
             }
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
@@ -909,7 +909,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             *succ_flag = -2;
             return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
- */
+     */
+    if (i == -1) {
+        shm_conn_info->write_buf[conn_num].last_write_time = cur_time;
+    }
     if (( (seq_num > shm_conn_info->write_buf[conn_num].last_written_seq) &&
             (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq) >= STRANGE_SEQ_FUTURE ) ||
             ( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
