@@ -378,10 +378,14 @@ int get_write_buf_wait_data() {
             timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
+#endif
                 return 1;
             } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
+#endif
                 return 1;
             }
         }
@@ -849,11 +853,11 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
 #ifdef DEBUGG
             struct timeval work_loop1, work_loop2;
             gettimeofday(&work_loop1, NULL );
-#endif
             if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                 vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
                         shm_conn_info->write_buf[logical_channel].last_written_seq, tv_tmp.tv_sec, tv_tmp.tv_usec);
             }
+#endif
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -1918,7 +1922,7 @@ int lfd_linker(void)
             
        
                // now check ALL connections
-            for (i = 1; i < info.channel_amount; i++) {
+            if(0) {
                    sem_wait(&(shm_conn_info->write_buf_sem));
                    timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
                    sem_post(&(shm_conn_info->write_buf_sem));
