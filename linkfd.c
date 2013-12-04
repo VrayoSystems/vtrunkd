@@ -378,12 +378,10 @@ int get_write_buf_wait_data() {
             timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
-#ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "AAAAA select skip.. Data ready to be written on chan %d seq_num: %"PRIu32"", i,
-                        shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num);
-#endif
+                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
                 return 1;
             } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
                 return 1;
             }
         }
