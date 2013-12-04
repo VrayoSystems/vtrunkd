@@ -375,9 +375,7 @@ int get_write_buf_wait_data() {
 
     for (int i = 0; i < info.channel_amount; i++) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            sem_wait(&(shm_conn_info->write_buf_sem));
             timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
-            sem_post(&(shm_conn_info->write_buf_sem));
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
