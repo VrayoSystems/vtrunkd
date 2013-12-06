@@ -1918,52 +1918,6 @@ int lfd_linker(void)
                 vtun_syslog(LOG_ERR, "CHECK FAILED: write_buf broken: error %d", check_result);
             }
             
-            
-            
-       
-               // now check ALL connections
-            if(0) {
-                   sem_wait(&(shm_conn_info->write_buf_sem));
-                   timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
-                   sem_post(&(shm_conn_info->write_buf_sem));
-                   if( timercmp(&tv_tmp, &max_latency, >=) ) {
-
-                       sem_wait(write_buf_sem);
-
-                       incomplete_seq_len = missing_resend_buffer(i, incomplete_seq_buf, &buf_len);
-
-                       sem_post(write_buf_sem);
-
-                       //vtun_syslog(LOG_INFO, "missing_resend_buf ret %d %d ", incomplete_seq_len, buf_len);
-   
-                       if(incomplete_seq_len) {
-                           for(imf=0; imf < incomplete_seq_len; imf++) {
-                               if(check_sent(incomplete_seq_buf[imf], sq_rq_buf, &sq_rq_pos, i)) continue;
-                               tmp_l = htonl(incomplete_seq_buf[imf]);
-                               memcpy(buf, &tmp_l, sizeof(uint32_t));
-                               *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_MODE_RXMIT);
-                               vtun_syslog(LOG_INFO,"Requesting bad frame (MAX_LATENCY) id %"PRIu32" chan %d", incomplete_seq_buf[imf], i); // TODO HERE: remove this (2 places) verbosity later!!
-                               //statb.rxmit_req++;
-                               statb.max_latency_hit++;
-                            int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                            if (len_ret < 0) {
-                                   err=1;
-                                   vtun_syslog(LOG_ERR, "BAD_FRAME request resend ERROR chan %d", i);
-                                   linker_term = TERM_NONFATAL;
-                               }
-                            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                            info.channel[i].up_len += len_ret;
-                           }
-                           if(err) {
-                               err = 0;
-                               break;
-                           }
-                       }
-                   }
-               }
-
-
-               
                last_timing.tv_sec = cur_time.tv_sec;
                last_timing.tv_usec = cur_time.tv_usec;
           }
@@ -2542,65 +2496,8 @@ int lfd_linker(void)
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
                     }
-//                    if(buf_len > lfd_host->MAX_REORDER) {
-                    if(0){
-                        // TODO: "resend bomb type II" problem - if buf_len > MAX_REORDER: any single(ordinary reorder) miss will cause resend
-                        //       to fight the bomb: introduce max buffer scan length for missing_resend_buffer method
-                        sem_wait(write_buf_sem);
-                        incomplete_seq_len = missing_resend_buffer(chan_num_virt, incomplete_seq_buf, &buf_len);
-                        sem_post(write_buf_sem);
-
-                        if(incomplete_seq_len) {
-                            for(imf=0; imf < incomplete_seq_len; imf++) {
-                            	// TODO: use free channel to send packets that are late to fight the congestion
-                                if(check_sent(incomplete_seq_buf[imf], sq_rq_buf, &sq_rq_pos, chan_num_virt)) continue;
-                                tmp_l = htonl(incomplete_seq_buf[imf]);
-                                memcpy(buf, &tmp_l, sizeof(uint32_t));
-                                *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_MODE_RXMIT);
-                                vtun_syslog(LOG_INFO,"Requesting bad frame MAX_REORDER incomplete_seq_len %d blen %d seq_num %"PRIu32" chan %d",incomplete_seq_len, buf_len, incomplete_seq_buf[imf], chan_num_virt);
-                                //statb.rxmit_req++;
-                                statb.max_reorder_hit++;
-                                int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf,
-                                        ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                                if (len_ret < 0) {
-                                    vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
-                                    linker_term = TERM_NONFATAL;
-                                    break;
-                                }
-                                shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
-                                info.channel[chan_num_virt].up_len += len_ret;
-                            }
-                        } else {
-                            if (buf_len > lfd_host->MAX_REORDER) {
-                                vtun_syslog(LOG_ERR, "ASSERT FAILED!! MAX_REORDER not resending! buf_len: %d chan num %i lws %i last packet %i", buf_len, chan_num_virt, shm_conn_info->write_buf[chan_num_virt].last_written_seq,shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num_virt].frames.rel_head].seq_num);
-                                if (!FD_ISSET(info.tun_device, &fdset_w)) {
-                                    vtun_syslog(LOG_ERR, "ASSERT FAILED!! tun dev not selected");
-                                }
-                            }
-                        }
-                        continue;
-                    }
 
                     lfd_host->stat.byte_in += len; // the counter became completely wrong
-
-                    if( (flag_var == FRAME_MODE_RXMIT) &&
-                            ((succ_flag == 0) || ( (seq_num-shm_conn_info->write_buf[chan_num_virt].last_written_seq) < lfd_host->MAX_REORDER ))) {
-                        vtun_syslog(LOG_INFO, "sending FRAME_MODE_NORM to notify THIS channel is now OK");
-                        tmp_l = htonl(incomplete_seq_buf[0]);
-                        memcpy(buf, &tmp_l, sizeof(uint32_t));
-                        *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_MODE_NORM);
-                        statb.chok_not++;
-                        int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                        if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "BAD_FRAME request resend 2");
-                            linker_term = TERM_NONFATAL;
-                            break;
-                        }
-                        shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
-                        info.channel[chan_num_virt].up_len += len_ret;
-                        succ_flag = -100; // drop flag??
-                        continue;
-                    }
 
                 } // end load frame processing
 
