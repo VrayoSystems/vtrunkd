@@ -481,11 +481,13 @@ int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var) {
 /**
  * Function for add flag and seq_num to packet
  */
-int pack_packet(char *buf, int len, uint32_t seq_num, int flag) {
+int pack_packet(char *buf, int len, uint32_t seq_num, uint16_t local_seq_num, int flag) {
     uint32_t seq_num_n = htonl(seq_num);
     uint16_t flag_n = htons(flag);
+    uint16_t local_seq_num_n = htons(local_seq_num);
     memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
     memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(uint16_t));
     return len + sizeof(uint32_t) + sizeof(uint16_t);
 }
 
@@ -765,7 +767,7 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        len = pack_packet(buf, len, tmp_seq_counter, channel_mode);
+        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
     }
 #ifdef DEBUGG
     else {

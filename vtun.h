@@ -368,13 +368,14 @@ struct logical_status {
     uint32_t tcp_rtt;   /**< rtt is said by @see get_format_tcp_info() */
     uint32_t magic_rtt;   /**< rtt based on @see ACK_speed_avg */
 
-    /** TCP queue control information */
+    /** Net buffer control information */
     uint32_t send_q;    /**< current send_q value */
     uint32_t send_q_old;    /**< previous send_q value */
     uint32_t send_q_limit;  /**< current send_q_limit value */
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
+    uint16_t local_seq_num;
 
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 };
