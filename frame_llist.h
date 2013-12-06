@@ -35,6 +35,7 @@ struct frame_seq {
     int sender_pid; // okay as short?
     int chan_num;
     int physical_channel_num;
+    struct timeval time_stamp;
 };
 
 struct frame_llist{

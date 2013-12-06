@@ -831,11 +831,11 @@ int select_devread_send(char *buf, char *out2) {
     return len;
 }
 
-int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
+int write_buf_check_n_flush(int logical_channel) {
     int fprev = -1;
     int fold = -1;
     int len;
-    struct timeval max_latency_drop = { 0, 20000 };
+    struct timeval max_latency_drop = { 0, 20000 }, tv_tmp;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -848,6 +848,7 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
 #endif
     acnt = 0;
     if (fprev > -1) {
+        timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || ( timercmp(&tv_tmp, &max_latency_drop, >=))) {
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
@@ -982,6 +983,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].len = len;
     shm_conn_info->frames_buf[newf].sender_pid = mypid;
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
+    shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
@@ -2041,12 +2043,8 @@ int lfd_linker(void)
         for (chan_num = 0; chan_num < info.channel_amount; chan_num++) {
             if (FD_ISSET(info.tun_device, &fdset_w)) {
                 sem_wait(write_buf_sem);
-                struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num].last_write_time;
-                sem_post(write_buf_sem);
-                timersub(&info.current_time, &last_write_time_tmp, &tv_tmp);
-                sem_wait(write_buf_sem);
-                if (write_buf_check_n_flush(chan_num, tv_tmp)) { //double flush if possible
-                    write_buf_check_n_flush(chan_num, tv_tmp);
+                if (write_buf_check_n_flush(chan_num)) { //double flush if possible
+                    write_buf_check_n_flush(chan_num);
                 }
                 sem_post(write_buf_sem);
             }
@@ -2451,13 +2449,6 @@ int lfd_linker(void)
                     sem_wait(write_buf_sem);
                     struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
                     sem_post(write_buf_sem);
-                    timersub(&info.current_time, &last_write_time_tmp, &tv_tmp);
-                    if ( (tv_tmp.tv_usec >= 20000) &&
-                         (timerisset(&last_write_time_tmp))) {
-                        //if(buf_len > 1)
-                        vtun_syslog(LOG_ERR, "WARNING! MAX_LATENCY_DROP triggering at play! chan %d", chan_num_virt);
-                        statb.max_latency_drops++;
-                    }
 
                     // check for initialization
                     if (!info.just_started_recv) {
@@ -2467,7 +2458,7 @@ int lfd_linker(void)
                     if (FD_ISSET(info.tun_device, &fdset_w)) {
                         sem_wait(write_buf_sem);
                         for (int i = 0; i < (buf_len / alive_physical_channels); i++) {
-                            if (!write_buf_check_n_flush(chan_num_virt, tv_tmp)) {
+                            if (!write_buf_check_n_flush(chan_num_virt)) {
                                 break;
                             }
                         }
