@@ -394,7 +394,7 @@ struct phisical_status {
 
     /** Collect statistic*/
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
-    struct timeval current_time;    /**< Is last got time. Need for for the Tick module */
+    struct timeval current_time;    /**< Is last got time.*/
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
     struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
     uint32_t max_send_q_avg;

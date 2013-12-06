@@ -165,7 +165,6 @@ struct {
 
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
-struct timeval cur_time; // current time source
 struct timeval socket_timeout = { 10, 0 };
 
 struct last_sent_packet last_sent_packet_num[MAX_TCP_LOGICAL_CHANNELS]; // initialized by 0 look for memset(..
@@ -375,7 +374,7 @@ int get_write_buf_wait_data() {
 
     for (int i = 0; i < info.channel_amount; i++) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            timersub(&cur_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
+            timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
@@ -883,8 +882,8 @@ int write_buf_check_n_flush(int logical_channel, struct timeval tv_tmp) {
                     weight, shm_conn_info->frames_buf[fprev].len, logical_channel);
 #endif
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
-            shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = cur_time.tv_sec;
-            shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = cur_time.tv_usec;
+            shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
+            shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
 
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
@@ -917,7 +916,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     }
      */
     if (i == -1) {
-        shm_conn_info->write_buf[conn_num].last_write_time = cur_time;
+        shm_conn_info->write_buf[conn_num].last_write_time = info.current_time;
     }
     if (( (seq_num > shm_conn_info->write_buf[conn_num].last_written_seq) &&
             (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq) >= STRANGE_SEQ_FUTURE ) ||
@@ -1636,10 +1635,10 @@ int lfd_linker(void)
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
     
-    gettimeofday(&cur_time, NULL);
-    last_action = cur_time.tv_sec;
-    last_net_read = cur_time.tv_sec;
-    shm_conn_info->lock_time = cur_time.tv_sec;
+    gettimeofday(&info.current_time, NULL);
+    last_action = info.current_time.tv_sec;
+    last_net_read = info.current_time.tv_sec;
+    shm_conn_info->lock_time = info.current_time.tv_sec;
     
 //    alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
@@ -1661,8 +1660,8 @@ int lfd_linker(void)
     while( !linker_term ) {
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
-        gettimeofday(&cur_time, NULL);
-        timersub(&cur_time, &get_info_time_last, &tv_tmp_tmp_tmp);
+        gettimeofday(&info.current_time, NULL);
+        timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
         int ag_switch_flag = 0;
@@ -1674,10 +1673,10 @@ int lfd_linker(void)
         
         if (timercmp_result || ag_switch_flag) {
             info.mode = R_MODE;
-            get_info_time_last.tv_sec = cur_time.tv_sec;
-            get_info_time_last.tv_usec = cur_time.tv_usec;
+            get_info_time_last.tv_sec = info.current_time.tv_sec;
+            get_info_time_last.tv_usec = info.current_time.tv_usec;
 #if !defined(DEBUGG) && defined(JSON)
-            timersub(&cur_time, &json_timer, &tv_tmp_tmp_tmp);
+            timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 sem_wait(&(shm_conn_info->stats_sem));
                 miss_packets_max = shm_conn_info->miss_packets_max;
@@ -1691,8 +1690,8 @@ int lfd_linker(void)
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
                         hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
-                json_timer.tv_sec = cur_time.tv_sec;
-                json_timer.tv_usec = cur_time.tv_usec;
+                json_timer.tv_sec = info.current_time.tv_sec;
+                json_timer.tv_usec = info.current_time.tv_usec;
                 info.max_send_q_max = 0;
                 info.max_send_q_min = 120000;
             }
@@ -1742,7 +1741,7 @@ int lfd_linker(void)
             sem_wait(&(shm_conn_info->write_buf_sem));
             *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
             last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
-            shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+            shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
             sem_post(&(shm_conn_info->write_buf_sem));
             *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
@@ -1755,12 +1754,12 @@ int lfd_linker(void)
         }
     }
           // do an expensive thing
-          timersub(&cur_time, &last_timing, &tv_tmp);
+          timersub(&info.current_time, &last_timing, &tv_tmp);
           /**
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
-            if ((cur_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
+            if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
@@ -1857,12 +1856,12 @@ int lfd_linker(void)
                     delay_cnt = 1;
                 mean_delay = (delay_acc / delay_cnt);
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (cur_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
+                vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (info.current_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
                 vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5], statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
 #endif
                 dev_my_cnt = 0;
-                last_tick = cur_time.tv_sec;
-                shm_conn_info->alive = cur_time.tv_sec;
+                last_tick = info.current_time.tv_sec;
+                shm_conn_info->alive = info.current_time.tv_sec;
                 delay_acc = 0;
                 delay_cnt = 0;
 
@@ -1871,12 +1870,12 @@ int lfd_linker(void)
                     uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
                     uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
                     sem_post(&(shm_conn_info->write_buf_sem));
-                    if (((cur_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
+                    if (((info.current_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
                         // TODO: DUP code!
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
                         last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
-                        shm_conn_info->write_buf[i].last_lws_notified = cur_time.tv_sec;
+                        shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
                         sem_post(&(shm_conn_info->write_buf_sem));
                         *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
                         int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
@@ -1920,8 +1919,8 @@ int lfd_linker(void)
                 vtun_syslog(LOG_ERR, "CHECK FAILED: write_buf broken: error %d", check_result);
             }
             
-               last_timing.tv_sec = cur_time.tv_sec;
-               last_timing.tv_usec = cur_time.tv_usec;
+               last_timing.tv_sec = info.current_time.tv_sec;
+               last_timing.tv_usec = info.current_time.tv_usec;
           }
         }
 
@@ -1983,12 +1982,12 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "idle...");
 #endif
                 /* Send ECHO request */
-                if((cur_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
+                if((info.current_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
                          ping_rcvd = 0;
-                         gettimeofday(&cur_time, NULL);
-                         ping_req_ts = ((cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
-                         last_ping = cur_time.tv_sec;
+                         gettimeofday(&info.current_time, NULL);
+                         ping_req_ts = ((info.current_time.tv_sec) * 1000) + (info.current_time.tv_usec / 1000);
+                         last_ping = info.current_time.tv_sec;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
@@ -2006,7 +2005,7 @@ int lfd_linker(void)
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
                         info.channel[i].up_len += len_ret;
                          }
-                         last_action = cur_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
+                         last_action = info.current_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
                     }
                 }
             continue;
@@ -2044,7 +2043,7 @@ int lfd_linker(void)
                 sem_wait(write_buf_sem);
                 struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num].last_write_time;
                 sem_post(write_buf_sem);
-                timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
+                timersub(&info.current_time, &last_write_time_tmp, &tv_tmp);
                 sem_wait(write_buf_sem);
                 if (write_buf_check_n_flush(chan_num, tv_tmp)) { //double flush if possible
                     write_buf_check_n_flush(chan_num, tv_tmp);
@@ -2056,14 +2055,14 @@ int lfd_linker(void)
                 sem_wait(write_buf_sem);
                 fprev = shm_conn_info->write_buf[chan_num_virt].frames.rel_head;
                 if(fprev == -1) { // don't panic ;-)
-                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
-                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
+                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = info.current_time.tv_sec;
+                     shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = info.current_time.tv_usec;
                 }
                 sem_post(write_buf_sem);
                 fd0=info.channel[chan_num].descriptor; // TODO Why this need????
 
                 //net_counter++; // rxmit mode
-                last_action = cur_time.tv_sec;
+                last_action = info.current_time.tv_sec;
                 if (chan_num == 0) {
                     len = tcp_read(fd0, buf);
                 } else {
@@ -2354,7 +2353,7 @@ int lfd_linker(void)
                     }
                     if( fl==VTUN_ECHO_REQ ) {
                         /* Send ECHO reply */
-                        last_net_read = cur_time.tv_sec;
+                        last_net_read = info.current_time.tv_sec;
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "sending PONG...");
 #endif
@@ -2380,13 +2379,13 @@ int lfd_linker(void)
 #endif
                         
                         if(chan_num == 0) ping_rcvd = 1;
-                        last_net_read = cur_time.tv_sec;
-                        gettimeofday(&cur_time, NULL);
+                        last_net_read = info.current_time.tv_sec;
+                        gettimeofday(&info.current_time, NULL);
 
                         if(rtt_old_old == 0) {
-                            rtt_old = rtt_old_old = (( (cur_time.tv_sec ) * 1000) + (cur_time.tv_usec / 1000) - ping_req_ts);
+                            rtt_old = rtt_old_old = (( (info.current_time.tv_sec ) * 1000) + (info.current_time.tv_usec / 1000) - ping_req_ts);
                         }
-                        rtt = (   (( (cur_time.tv_sec ) * 1000) + (cur_time.tv_usec / 1000) - ping_req_ts) + rtt_old + rtt_old_old   ) / 3;
+                        rtt = (   (( (info.current_time.tv_sec ) * 1000) + (info.current_time.tv_usec / 1000) - ping_req_ts) + rtt_old + rtt_old_old   ) / 3;
                         rtt_old_old = rtt_old;
                         rtt_old = rtt;
                         continue; 
@@ -2399,7 +2398,7 @@ int lfd_linker(void)
                     }
                 } else {
                     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
-                    last_net_read = cur_time.tv_sec;
+                    last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
                     out = buf; // wtf?
@@ -2433,8 +2432,8 @@ int lfd_linker(void)
                     my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
                     if(buf_len == 1) { // to avoid dropping first out-of order packet in sequence
-                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = cur_time.tv_sec;
-                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = cur_time.tv_usec;
+                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = info.current_time.tv_sec;
+                         shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = info.current_time.tv_usec;
                     }
                     sem_post(write_buf_sem);
 #ifdef DEBUGG
@@ -2452,7 +2451,7 @@ int lfd_linker(void)
                     sem_wait(write_buf_sem);
                     struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
                     sem_post(write_buf_sem);
-                    timersub(&cur_time, &last_write_time_tmp, &tv_tmp);
+                    timersub(&info.current_time, &last_write_time_tmp, &tv_tmp);
                     if ( (tv_tmp.tv_usec >= 20000) &&
                          (timerisset(&last_write_time_tmp))) {
                         //if(buf_len > 1)
@@ -2485,7 +2484,7 @@ int lfd_linker(void)
 #endif
                         *((uint32_t *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
-                        shm_conn_info->write_buf[chan_num_virt].last_lws_notified = cur_time.tv_sec;
+                        shm_conn_info->write_buf[chan_num_virt].last_lws_notified = info.current_time.tv_sec;
                         sem_post(write_buf_sem);
                         *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
                         int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
@@ -2561,13 +2560,13 @@ int lfd_linker(void)
         }
         sem_post(&shm_conn_info->hard_sem);
             //Check time interval and ping if need.
-        if (((cur_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
+        if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
 				ping_rcvd = 0;
-				gettimeofday(&cur_time, NULL);
+				gettimeofday(&info.current_time, NULL);
 
-				ping_req_ts = ((cur_time.tv_sec) * 1000) + (cur_time.tv_usec / 1000);
+				ping_req_ts = ((info.current_time.tv_sec) * 1000) + (info.current_time.tv_usec / 1000);
 
-				last_ping = cur_time.tv_sec;
+				last_ping = info.current_time.tv_sec;
 #ifdef DEBUGG
 				vtun_syslog(LOG_INFO, "PING2");
 #endif
@@ -2588,8 +2587,8 @@ int lfd_linker(void)
 				}
 			}
 
-            gettimeofday(&cur_time, NULL);
-            last_action = cur_time.tv_sec;
+            gettimeofday(&info.current_time, NULL);
+            last_action = info.current_time.tv_sec;
             lfd_host->stat.comp_out += len;
     }
 
