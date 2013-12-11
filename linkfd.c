@@ -487,7 +487,7 @@ int pack_packet(char *buf, int len, uint32_t seq_num, uint16_t local_seq_num, in
     memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
     memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
     memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(uint16_t));
-    return len + sizeof(uint32_t) + sizeof(uint16_t);
+    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t);
 }
 
 /**
@@ -766,7 +766,10 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
+        if (info.channel[chan_num].local_seq_num == UINT16_MAX)
+            info.channel[chan_num].local_seq_num = 0;
         len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
+
     }
 #ifdef DEBUGG
     else {
@@ -2395,13 +2398,21 @@ int lfd_linker(void)
                         break;
                     }
                 } else {
+                    gettimeofday(&info.current_time, NULL);
                     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
                     out = buf; // wtf?
 
-                    len = seqn_break_tail(out, len, &seq_num, &flag_var);
+                    len = seqn_break_tail(out, len-sizeof(uint16_t), &seq_num, &flag_var);
+                    /* Accumulate loss packet*/
+                    uint16_t local_seq_tmp;
+                    memcpy(&local_seq_tmp, buf + len - sizeof(uint16_t), sizeof(uint16_t));
+                    if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv + 1) {
+                        info.channel[chan_num].packet_loss += local_seq_tmp - info.channel[chan_num].local_seq_num_recv + 1;
+                    }
+                    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
 #ifdef DEBUGG
                     if (seq_num % 50 == 0) {
                         vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %"PRIu32" len %d", chan_num, seq_num, len);
@@ -2423,7 +2434,7 @@ int lfd_linker(void)
                     gettimeofday(&work_loop1, NULL );
 #endif
                     uint16_t my_miss_packets = 0;
-                    int another_chan = (info.process_num == 0) ? 1: 0;
+                    info.channel[chan_num].last_recv_time = info.current_time;
                     sem_wait(write_buf_sem);
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
