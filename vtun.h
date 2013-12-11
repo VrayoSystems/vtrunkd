@@ -272,6 +272,7 @@ struct vtun_host {
 #define FRAME_LAST_WRITTEN_SEQ 4
 #define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
 #define FRAME_DEAD_CHANNEL 6
+#define FRAME_CHANNEL_INFO 7
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
@@ -378,8 +379,8 @@ struct logical_status {
     uint16_t local_seq_num;
     uint16_t local_seq_num_recv;
     struct timeval last_recv_time;
-    uint16_t packet_loss;
-
+    uint16_t packet_loss_counter;
+    uint16_t packet_recv_counter;
 
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 };

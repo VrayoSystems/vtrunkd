@@ -81,6 +81,7 @@
 #include "netlib.h"
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
+#include "timer.h"
 
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -1656,6 +1657,11 @@ int lfd_linker(void)
     struct timeval  json_timer;
     gettimeofday(&json_timer, NULL);
     info.check_shm = 0; // zeroing check_shm
+
+    struct timer_obj *recv_n_loss_send_timer = create_timer();
+    struct timeval recv_n_loss_time = { 500, 0 };
+    set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
+
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1735,8 +1741,13 @@ int lfd_linker(void)
                 linker_term = TERM_NONFATAL;
             }
         }
-        /* TODO write function for lws sending*/
         for (i = 1; i < info.channel_amount; i++) {
+            /*sending recv and loss data*/
+            if (info.channel[i].packet_recv_counter > 10 || fast_check_timer(recv_n_loss_send_timer, &info.current_time)) {
+
+            }
+
+             /* TODO write function for lws sending*/
         sem_wait(&(shm_conn_info->write_buf_sem));
         uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
         uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
@@ -2410,9 +2421,10 @@ int lfd_linker(void)
                     uint16_t local_seq_tmp;
                     memcpy(&local_seq_tmp, buf + len - sizeof(uint16_t), sizeof(uint16_t));
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv + 1) {
-                        info.channel[chan_num].packet_loss += local_seq_tmp - info.channel[chan_num].local_seq_num_recv + 1;
+                        info.channel[chan_num].packet_loss_counter += local_seq_tmp - info.channel[chan_num].local_seq_num_recv + 1;
                     }
                     info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
+                    info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
                     if (seq_num % 50 == 0) {
                         vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %"PRIu32" len %d", chan_num, seq_num, len);
@@ -2593,6 +2605,8 @@ int lfd_linker(void)
             last_action = info.current_time.tv_sec;
             lfd_host->stat.comp_out += len;
     }
+
+    free_timer(recv_n_loss_send_timer);
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask

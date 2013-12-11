@@ -52,7 +52,7 @@ OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        frame_llist.o llist.o auth.o tunnel.o lock.o netlib.o  \
        tun_dev.o tap_dev.o pty_dev.o pipe_dev.o \
        tcp_proto.o udp_proto.o \
-       linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o netlink_socket_info.o speed_algo.o
+       linkfd.o lfd_shaper.o lfd_zlib.o lfd_lzo.o lfd_encrypt.o netlink_socket_info.o speed_algo.o timer.o
 
 CONFIGURE_FILES = Makefile config.status config.cache config.h config.log 
 

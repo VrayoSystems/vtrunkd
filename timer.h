@@ -20,7 +20,8 @@ struct timer_obj {
 struct timer_obj* create_timer();
 void free_timer(struct timer_obj *timer);
 
-void set_timer(struct timer_obj *timer);
+void set_timer(struct timer_obj *timer, struct timeval *timer_time);
+void update_timer(struct timer_obj *timer);
 int check_timer(struct timer_obj *timer);
 int fast_check_timer(struct timer_obj *timer, struct timeval *cur_time);
 
