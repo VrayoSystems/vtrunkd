@@ -379,12 +379,14 @@ struct logical_status {
     uint16_t local_seq_num;
     uint16_t local_seq_num_recv;
     struct timeval last_recv_time;
+    struct timeval last_info_send_time;
     uint16_t packet_loss_counter;
     uint16_t packet_recv_counter;
     struct timeval packet_recv_time;
     uint16_t packet_loss;
     uint16_t packet_recv;
-    uint32_t packet_seq_num_acked;
+    uint16_t packet_seq_num_acked;
+    uint32_t packet_recv_period;
 
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 };

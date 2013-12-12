@@ -1741,10 +1741,33 @@ int lfd_linker(void)
                 linker_term = TERM_NONFATAL;
             }
         }
+        int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
         for (i = 1; i < info.channel_amount; i++) {
             /*sending recv and loss data*/
-            if (info.channel[i].packet_recv_counter > 10 || fast_check_timer(recv_n_loss_send_timer, &info.current_time)) {
-
+            if (((info.channel[i].packet_recv_counter > 10) || timer_result) && (info.channel[i].packet_recv_counter > 0)) {
+                uint16_t tmp_n = htons(info.channel[i].packet_recv_counter);
+                memcpy(buf, &tmp_n, sizeof(uint16_t));
+                tmp_n = htons(info.channel[i].packet_loss_counter);
+                memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                tmp_n = htons(FRAME_CHANNEL_INFO);
+                memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                tmp_n = htons(info.channel[i].local_seq_num_recv);
+                memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                tmp_n = htons(i);
+                memcpy(buf + 4 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                struct timeval tmp_tv;
+                timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
+                info.channel[i].last_info_send_time = info.current_time;
+                tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
+                memcpy(buf + 5 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
+                int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                if (len_ret < 0) {
+                    vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
+                    linker_term = TERM_NONFATAL;
+                    break;
+                }
+                shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                info.channel[0].up_len += len_ret;
             }
 
              /* TODO write function for lws sending*/
@@ -2301,6 +2324,23 @@ int lfd_linker(void)
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
+                        } else if (flag_var == FRAME_CHANNEL_INFO) {
+                            uint32_t tmp_n;
+                            int chan_num;
+                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
+                            chan_num = ntohs(tmp_n);
+                            memcpy(&tmp_n, buf, sizeof(uint16_t));
+                            info.channel[chan_num].packet_recv = ntohs(tmp_n);
+                            memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
+                            info.channel[chan_num].packet_loss = ntohs(tmp_n);
+                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
+                            info.channel[chan_num].packet_seq_num_acked = ntohs(tmp_n);
+                            memcpy(&tmp_n, buf + 5 * sizeof(uint16_t), sizeof(uint32_t));
+                            info.channel[chan_num].packet_recv_period = ntohs(tmp_n);
+                            vtun_syslog(LOG_ERR,
+                                    "FRAME_CHANNEL_INFO chan_num %"PRIu16" packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
+                                    chan_num, info.channel[chan_num].packet_recv, info.channel[chan_num].packet_loss,
+                                    info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period);
                         } else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
