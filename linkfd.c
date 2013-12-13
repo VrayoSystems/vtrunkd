@@ -1766,7 +1766,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
-                        i, info.channel[chan_num].packet_recv_counter, info.channel[chan_num].packet_loss_counter,
+                        i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
