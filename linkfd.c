@@ -475,7 +475,7 @@ int get_oldest_packet_seq_num(int chan_num, uint32_t *seq_num) {
 int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var) {
     *seq_num = ntohl(*((uint32_t *)(&out[len-sizeof(uint32_t)-sizeof(uint16_t)])));
     *flag_var = ntohs(*((uint16_t *)(&out[len-sizeof(uint16_t)])));
-    return len-sizeof(uint32_t)-sizeof(uint16_t);
+    return len - (sizeof(uint32_t) + sizeof(uint16_t));
 }
 
 /**
@@ -767,10 +767,12 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        if (info.channel[chan_num].local_seq_num == UINT16_MAX)
+        if (info.channel[chan_num].local_seq_num == (UINT16_MAX-1))
             info.channel[chan_num].local_seq_num = 0;
         len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
-
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu16" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
+#endif
     }
 #ifdef DEBUGG
     else {
@@ -1659,7 +1661,7 @@ int lfd_linker(void)
     info.check_shm = 0; // zeroing check_shm
 
     struct timer_obj *recv_n_loss_send_timer = create_timer();
-    struct timeval recv_n_loss_time = { 500, 0 };
+    struct timeval recv_n_loss_time = { 0, 500000 };
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -1747,10 +1749,8 @@ int lfd_linker(void)
             if (((info.channel[i].packet_recv_counter > 10) || timer_result) && (info.channel[i].packet_recv_counter > 0)) {
                 update_timer(recv_n_loss_send_timer);
                 uint16_t tmp_n = htons(info.channel[i].packet_recv_counter);
-                info.channel[i].packet_recv_counter = 0;
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(info.channel[i].packet_loss_counter);
-                info.channel[i].packet_loss_counter = 0;
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
@@ -1763,12 +1763,20 @@ int lfd_linker(void)
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
                 memcpy(buf + 5 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
+#ifdef DEBUGG
+                vtun_syslog(LOG_ERR,
+                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
+                        i, info.channel[chan_num].packet_recv_counter, info.channel[chan_num].packet_loss_counter,
+                        info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
+#endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
                     break;
                 }
+                info.channel[i].packet_recv_counter = 0;
+                info.channel[i].packet_loss_counter = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
                 info.channel[0].up_len += len_ret;
             }
@@ -2340,21 +2348,18 @@ int lfd_linker(void)
                             info.channel[chan_num].packet_seq_num_acked = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + 5 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohs(tmp_n);
+#ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
-                                    "FRAME_CHANNEL_INFO chan_num %"PRIu16" packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
+                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
                                     chan_num, info.channel[chan_num].packet_recv, info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period);
+#endif
+                            continue;
                         } else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
-                    /*
-                    // TODO: do we need to slow down here?
-                        if(hold_mode) {
-                            vtun_syslog(LOG_ERR, "Resend blocked due to hold_mode = 1: seq %"PRIu32"; rxm_notf %d chan %d", ntohl(*((uint32_t *)buf)), statb.rxmits_notfound, chan_num);
-                            continue;
-                        }
-                    */
-
+                        vtun_syslog(LOG_ERR, "Cannot resend frame %"PRIu32"; chan %d coz remomed api", ntohl(*((uint32_t *)buf)), chan_num);
+                        continue;
 
                         sem_wait(resend_buf_sem);
                         len=get_resend_frame(chan_num, ntohl(*((uint32_t *)buf)), &out2, &sender_pid);
@@ -2458,20 +2463,18 @@ int lfd_linker(void)
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
                     out = buf; // wtf?
-
-                    len = seqn_break_tail(out, len-sizeof(uint16_t), &seq_num, &flag_var);
+                    len = len - sizeof(uint16_t);
+                    len = seqn_break_tail(out, len, &seq_num, &flag_var);
                     /* Accumulate loss packet*/
                     uint16_t local_seq_tmp;
-                    memcpy(&local_seq_tmp, buf + len - sizeof(uint16_t), sizeof(uint16_t));
+                    memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint16_t));
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv + 1) {
-                        info.channel[chan_num].packet_loss_counter += local_seq_tmp - info.channel[chan_num].local_seq_num_recv + 1;
+                        info.channel[chan_num].packet_loss_counter += ntohs(local_seq_tmp) - info.channel[chan_num].local_seq_num_recv + 1;
                     }
-                    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
+                    info.channel[chan_num].local_seq_num_recv = ntohs(local_seq_tmp);
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
-                    if (seq_num % 50 == 0) {
-                        vtun_syslog(LOG_INFO, "Receive frame ... chan %d seq %"PRIu32" len %d", chan_num, seq_num, len);
-                    }
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu16" seq_num %"PRIu32" recv counter  %"PRIu16" len %d", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len);
 #endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
