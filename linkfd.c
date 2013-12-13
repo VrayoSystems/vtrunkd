@@ -1745,15 +1745,18 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
             /*sending recv and loss data*/
             if (((info.channel[i].packet_recv_counter > 10) || timer_result) && (info.channel[i].packet_recv_counter > 0)) {
+                update_timer(recv_n_loss_send_timer);
                 uint16_t tmp_n = htons(info.channel[i].packet_recv_counter);
+                info.channel[i].packet_recv_counter = 0;
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(info.channel[i].packet_loss_counter);
+                info.channel[i].packet_loss_counter = 0;
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(info.channel[i].local_seq_num_recv);
                 memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(i);
+                tmp_n = htons((uint16_t) i);
                 memcpy(buf + 4 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 struct timeval tmp_tv;
                 timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
@@ -2328,7 +2331,7 @@ int lfd_linker(void)
                             uint32_t tmp_n;
                             int chan_num;
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
-                            chan_num = ntohs(tmp_n);
+                            chan_num = (int)ntohs(tmp_n);
                             memcpy(&tmp_n, buf, sizeof(uint16_t));
                             info.channel[chan_num].packet_recv = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
