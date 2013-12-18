@@ -1763,13 +1763,16 @@ int lfd_linker(void)
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
                 memcpy(buf + 5 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
+                tmp_n = htonl(info.channel[i].upload);
+                memcpy(buf + 5 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
+
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
-                int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + 2 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
@@ -2347,12 +2350,14 @@ int lfd_linker(void)
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + 5 * sizeof(uint16_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_recv_period = ntohs(tmp_n);
+                            info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
+                            memcpy(&tmp_n, buf + 5 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+                            info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
 #ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
-                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
+                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
                                     chan_num, info.channel[chan_num].packet_recv, info.channel[chan_num].packet_loss,
-                                    info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period);
+                                    info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload);
 #endif
                             continue;
                         } else {
