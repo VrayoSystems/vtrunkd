@@ -1748,7 +1748,7 @@ int lfd_linker(void)
             /*sending recv and loss data*/
             if (((info.channel[i].packet_recv_counter > 10) || timer_result) && (info.channel[i].packet_recv_counter > 0)) {
                 update_timer(recv_n_loss_send_timer);
-                uint16_t tmp_n = htons(info.channel[i].packet_recv_counter);
+                uint32_t tmp_n = htons(info.channel[i].packet_recv_counter);
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(info.channel[i].packet_loss_counter);
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
@@ -1763,7 +1763,7 @@ int lfd_linker(void)
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
                 memcpy(buf + 5 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
-                tmp_n = htonl(info.channel[i].upload);
+                tmp_n = htonl(shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed);
                 memcpy(buf + 5 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
 
 #ifdef DEBUGG
@@ -1833,6 +1833,7 @@ int lfd_linker(void)
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt = 0;
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed =
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt / (time_passed);
+                    info.channel[i].download = shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed;
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt = 0;
 #ifdef TRACE
                     vtun_syslog(LOG_INFO, "upload speed %"PRIu32" kb/s physical channel %d logical channel %d",
