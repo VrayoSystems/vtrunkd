@@ -423,9 +423,6 @@ struct phisical_status {
     unsigned int byte_resend;
     unsigned int byte_r_mode;
 
-    int weight;
-    int weight_loaded;
-
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */
@@ -473,7 +470,6 @@ struct conn_info {
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
     sem_t hard_sem;
-    uint32_t send_counter;
 };
 
 struct resent_chk {

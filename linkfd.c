@@ -2601,43 +2601,8 @@ int lfd_linker(void)
              *
              *
              * */
-        uint32_t max_speed = 0;
-        int max_chan_speed = 1;
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        if ((shm_conn_info->send_counter & (1 << info.process_num)) & (info.weight_loaded == 0)) {
-            for (int process = 0; process < 32; process++) {
-                if (shm_conn_info->channels_mask & (1 << process)) {
-                    for (int i = 1; i < info.channel_amount; i++) {
-                        if (max_speed < shm_conn_info->stats[process].speed_chan_data[i].up_recv_speed) {
-                            max_speed = shm_conn_info->stats[process].speed_chan_data[i].up_recv_speed;
-                            max_chan_speed = i;
-                        }
-                    }
-                }
-            }
-        }
-        int weight_div = max_speed / 10;
-        info.weight = weight_div == 0 ? 1 : shm_conn_info->stats[info.process_num].speed_chan_data[max_chan_speed].up_recv_speed / weight_div;
-
-        info.weight_loaded = 1;
-        sem_post(&(shm_conn_info->AG_flags_sem));
-
-        if (info.weight_loaded > info.weight) {
-            continue;
-        } else if (info.weight_loaded == info.weight) {
-            int process = info.process_num + 1;
-            for (int i = 0; i < 32; i++) {
-                process = process == 32 ? 0 : process;
-                if (shm_conn_info->channels_mask & (1 << process)) {
-                    shm_conn_info->send_counter &= 1 << process;
-                    break;
-                }
-            }
-        }
-        info.weight_loaded++;
         sem_wait(&shm_conn_info->hard_sem);
-//        len = retransmit_send(out2);
-        len = LASTPACKETMY_NOTIFY;
+        len = retransmit_send(out2);
         if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
@@ -2800,13 +2765,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     lfd_host = host;
     info.srv = ss;
     shm_conn_info = ci;
-
-    sem_wait(&(shm_conn_info->AG_flags_sem));
-    if (shm_conn_info->send_counter == 0) {
-        shm_conn_info->send_counter = 1;
-    }
-    sem_post(&(shm_conn_info->AG_flags_sem));
-
     info.pid = getpid();
     info.process_num = physical_channel_num;
     info.mode = R_MODE;
