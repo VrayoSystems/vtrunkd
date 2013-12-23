@@ -321,12 +321,14 @@ struct time_lag {
 
 struct speed_chan_data_struct {
     uint32_t up_current_speed; // current physical channel's speed(kbyte/s) = up_data_len_amt / time
+    uint32_t up_recv_speed;
     uint32_t up_data_len_amt; // in byte
     uint32_t down_current_speed; // current physical channel's speed(kbyte/s) = down_data_len_amt / time
     uint32_t down_data_len_amt; // in byte
 
     uint32_t down_packets; // per last_tick. need for speed calculation
     uint32_t down_packet_speed;
+
 };
 
 /**
@@ -388,7 +390,6 @@ struct logical_status {
     uint16_t packet_seq_num_acked;
     uint32_t packet_recv_period;
     uint32_t packet_recv_upload;
-
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 };
 
@@ -421,6 +422,10 @@ struct phisical_status {
     unsigned int byte_efficient;
     unsigned int byte_resend;
     unsigned int byte_r_mode;
+
+    int weight;
+    int weight_loaded;
+
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
     struct logical_status *channel; /**< Array for all logical channels */
@@ -468,6 +473,7 @@ struct conn_info {
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
     sem_t hard_sem;
+    uint32_t send_counter;
 };
 
 struct resent_chk {
