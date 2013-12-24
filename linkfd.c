@@ -481,14 +481,14 @@ int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var) {
 /**
  * Function for add flag and seq_num to packet
  */
-int pack_packet(char *buf, int len, uint32_t seq_num, uint16_t local_seq_num, int flag) {
+int pack_packet(char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, int flag) {
     uint32_t seq_num_n = htonl(seq_num);
     uint16_t flag_n = htons(flag);
-    uint16_t local_seq_num_n = htons(local_seq_num);
+    uint32_t local_seq_num_n = htonl(local_seq_num);
     memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
     memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
-    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(uint16_t));
-    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t);
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
+    return len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
 }
 
 /**
@@ -767,11 +767,11 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        if (info.channel[chan_num].local_seq_num == (UINT16_MAX-1))
+        if (info.channel[chan_num].local_seq_num == (UINT32_MAX-1))
             info.channel[chan_num].local_seq_num = 0;
         len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu16" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
+        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
 #endif
     }
 #ifdef DEBUGG
@@ -1754,25 +1754,25 @@ int lfd_linker(void)
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(info.channel[i].local_seq_num_recv);
-                memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                tmp_n = htonl(info.channel[i].local_seq_num_recv);
+                memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
                 tmp_n = htons((uint16_t) i);
-                memcpy(buf + 4 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
+                memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint16_t));
                 struct timeval tmp_tv;
                 timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
-                memcpy(buf + 5 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
+                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
                 tmp_n = htonl(shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed);
-                memcpy(buf + 5 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
 
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
-                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" ",
+                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
-                int len_ret = proto_write(info.channel[0].descriptor, buf, ((5 * sizeof(uint16_t) + 2 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
@@ -2342,17 +2342,17 @@ int lfd_linker(void)
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
                             uint32_t tmp_n;
                             int chan_num;
-                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
+                            memcpy(&tmp_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
                             chan_num = (int)ntohs(tmp_n);
                             memcpy(&tmp_n, buf, sizeof(uint16_t));
                             info.channel[chan_num].packet_recv = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
                             info.channel[chan_num].packet_loss = ntohs(tmp_n);
-                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint16_t));
-                            info.channel[chan_num].packet_seq_num_acked = ntohs(tmp_n);
-                            memcpy(&tmp_n, buf + 5 * sizeof(uint16_t), sizeof(uint32_t));
+                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint32_t));
+                            info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
+                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
-                            memcpy(&tmp_n, buf + 5 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = info.channel[chan_num].packet_recv_upload;
@@ -2360,7 +2360,7 @@ int lfd_linker(void)
 
 #ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
-                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu16" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
+                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
                                     chan_num, info.channel[chan_num].packet_recv, info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload);
 #endif
@@ -2473,18 +2473,18 @@ int lfd_linker(void)
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
                     out = buf; // wtf?
-                    len = len - sizeof(uint16_t);
+                    len = len - sizeof(uint32_t);
                     len = seqn_break_tail(out, len, &seq_num, &flag_var);
                     /* Accumulate loss packet*/
-                    uint16_t local_seq_tmp;
-                    memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint16_t));
+                    uint32_t local_seq_tmp;
+                    memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv + 1) {
-                        info.channel[chan_num].packet_loss_counter += ntohs(local_seq_tmp) - info.channel[chan_num].local_seq_num_recv + 1;
+                        info.channel[chan_num].packet_loss_counter += ntohl(local_seq_tmp) - info.channel[chan_num].local_seq_num_recv + 1;
                     }
-                    info.channel[chan_num].local_seq_num_recv = ntohs(local_seq_tmp);
+                    info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu16" seq_num %"PRIu32" recv counter  %"PRIu16" len %d", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len);
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len);
 #endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames

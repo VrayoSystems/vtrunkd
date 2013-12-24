@@ -378,8 +378,8 @@ struct logical_status {
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
-    uint16_t local_seq_num;
-    uint16_t local_seq_num_recv;
+    uint32_t local_seq_num;
+    uint32_t local_seq_num_recv;
     struct timeval last_recv_time;
     struct timeval last_info_send_time;
     uint16_t packet_loss_counter;
@@ -387,7 +387,7 @@ struct logical_status {
     struct timeval packet_recv_time;
     uint16_t packet_loss;
     uint16_t packet_recv;
-    uint16_t packet_seq_num_acked;
+    uint32_t packet_seq_num_acked;
     uint32_t packet_recv_period;
     uint32_t packet_recv_upload;
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
