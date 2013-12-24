@@ -1142,13 +1142,6 @@ int ag_switcher() {
         my_max_speed_chan = max_speed_chan;
     }
 
-    gettimeofday(&(info.get_tcp_info_time), NULL);
-    if(!get_format_tcp_info(chan_info, info.channel_amount)) {
-        /*TODO may be need add error counter, because if we have one error
-         * we can use previos values. But if we have two error running
-         * we should take action */
-        vtun_syslog(LOG_ERR, "Ag switcher - netlink return error");
-    }
     /*find my max send_q*/
     my_max_send_q = 0;
     for (int i = 0; i < info.channel_amount; i++) {
@@ -1184,7 +1177,7 @@ int ag_switcher() {
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
     for (int i = 0; i < info.channel_amount; i++) {
-        int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), info.channel[i].send_q_old,
+        int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, info.channel[i].send_q_old,
                 info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
         if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW) || (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW)) {
             if (ACK_coming_speed >= 0) {
@@ -1206,7 +1199,7 @@ int ag_switcher() {
 #endif
                 info.channel[i].ACK_speed_avg = 0;
             }
-            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.get_tcp_info_time));
+            memcpy(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, sizeof(info.channel[i].send_q_time));
             info.channel[i].send_q_old = info.channel[i].send_q;
             info.channel[i].up_len = 0;
             info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
@@ -1585,7 +1578,7 @@ int lfd_linker(void)
         info.channel[0].rport = ntohs(rmaddr.sin_port);
         info.channel[0].lport = ntohs(localaddr.sin_port);
 
-        gettimeofday(&(info.get_tcp_info_time), NULL );
+        gettimeofday(&info.current_time, NULL );
         maxfd = info.tun_device;
         for (int i = 0; i < info.channel_amount; i++) {
             vtun_syslog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i,
@@ -1593,7 +1586,8 @@ int lfd_linker(void)
             if (maxfd < info.channel[i].descriptor) {
                 maxfd = info.channel[i].descriptor;
             }
-            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.channel[i].get_tcp_info_time_old));
+            memcpy(&info.channel[i].get_tcp_info_time_old, &info.current_time, sizeof(info.channel[i].get_tcp_info_time_old));
+            memcpy(&info.channel[i].send_q_time, &info.current_time, sizeof(info.channel[i].send_q_time));
         }
     } else {
         /** Send to server information about channel amount and get and send pid */
@@ -2344,12 +2338,14 @@ int lfd_linker(void)
                             int chan_num;
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
                             chan_num = (int)ntohs(tmp_n);
+                            gettimeofday(&info.channel[chan_num].send_q_time, NULL);
                             memcpy(&tmp_n, buf, sizeof(uint16_t));
                             info.channel[chan_num].packet_recv = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
                             info.channel[chan_num].packet_loss = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
+                            info.channel[chan_num].send_q = info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked;
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
@@ -2789,9 +2785,10 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
             return 0;
         }
         info.channel[0].descriptor = host->rmt_fd; // service channel
-        gettimeofday(&(info.get_tcp_info_time), NULL );
+        gettimeofday(&info.current_time, NULL );
         for (int i = 0; i < info.channel_amount; i++) {
-            memcpy(&(info.channel[i].get_tcp_info_time_old), &(info.get_tcp_info_time), sizeof(info.channel[i].get_tcp_info_time_old));
+            memcpy(&(info.channel[i].get_tcp_info_time_old), &info.current_time, sizeof(info.channel[i].get_tcp_info_time_old));
+            memcpy(&(info.channel[i].send_q_time), &info.current_time, sizeof(info.channel[i].send_q_time));
         }
     }
     info.tun_device = host->loc_fd; // virtual tun device

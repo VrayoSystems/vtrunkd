@@ -373,6 +373,7 @@ struct logical_status {
 
     /** Net buffer control information */
     uint32_t send_q;    /**< current send_q value */
+    struct timeval send_q_time;
     uint32_t send_q_old;    /**< previous send_q value */
     uint32_t send_q_limit;  /**< current send_q_limit value */
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
@@ -409,7 +410,6 @@ struct phisical_status {
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
     struct timeval current_time;    /**< Is last got time.*/
     struct timeval current_time_old; /**< Previous value of @see current_time. Need for for the Tick module */
-    struct timeval get_tcp_info_time; /**< Is time when called get_format_tcp_info */
     uint32_t max_send_q_avg;
     uint32_t max_send_q_avg_arr[SPEED_AVG_ARR];
     uint32_t max_send_q_min;
