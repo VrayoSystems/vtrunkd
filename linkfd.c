@@ -1148,11 +1148,10 @@ int ag_switcher() {
 #ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i].recv_q, chan_info[i].send_q, i);
 #endif
-        if ((my_max_send_q < chan_info[i].send_q) && (i != 0)) {
-            my_max_send_q = chan_info[i].send_q;
+        if ((my_max_send_q < info.channel[i].send_q) && (i != 0)) {
+            my_max_send_q = info.channel[i].send_q;
             my_max_send_q_chan_num = i;
         }
-        info.channel[i].send_q = chan_info[i].send_q;
 #ifdef TRACE
     vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
 #endif
@@ -1255,11 +1254,6 @@ int ag_switcher() {
             }
         }
         /*ag switching enable*/
-        if (high_speed_chan == info.process_num) {
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            shm_conn_info->AG_ready_flag = ACK_coming_speed_avg > ((chan_info[my_max_send_q_chan_num].send * (1 - AG_FLOW_FACTOR)) / 1000) ? AG_MODE : R_MODE;
-            sem_post(&(shm_conn_info->AG_flags_sem));
-        }
 
         int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
         int EBL = (90 - (int) miss_packets_max) * 1300;
