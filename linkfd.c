@@ -2345,7 +2345,7 @@ int lfd_linker(void)
                             info.channel[chan_num].packet_loss = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
-                            info.channel[chan_num].send_q = info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked;
+                            info.channel[chan_num].send_q = 1300 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
