@@ -128,7 +128,7 @@ uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 uint32_t last_channels_mask = 0;
 
 /*Variables for the exact way of measuring speed*/
-struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0};
+struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
 int32_t ACK_coming_speed_avg = 0;
 int32_t send_q_limit = 7000;
 int32_t magic_rtt_avg = 0;
@@ -1142,8 +1142,11 @@ int ag_switcher() {
         my_max_speed_chan = max_speed_chan;
     }
 
+    struct timeval ag_curtime, time_sub_tmp;
+    gettimeofday(&ag_curtime, NULL );
+
     /*find my max send_q*/
-    my_max_send_q = 0;
+    uint32_t my_max_send_q = 0;
     for (int i = 0; i < info.channel_amount; i++) {
 #ifdef TRACE
         vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i].recv_q, chan_info[i].send_q, i);
@@ -1156,6 +1159,17 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
 #endif
     }
+
+    uint32_t bytes_pass = 0;
+
+    if (timercmp(&info.channel[my_max_send_q_chan_num].send_q_time, &ag_curtime, !=)) {
+        timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
+        bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
+                + (time_sub_tmp.tv_sec * info.channel[my_max_send_q_chan_num].ACK_speed_avg);
+    }
+
+    uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put - bytes_pass;
+
     info.max_send_q_avg =
             info.max_send_q_avg > my_max_send_q ?
                     info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 : info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
@@ -1271,7 +1285,7 @@ int ag_switcher() {
     }
 
     int hold_mode_previous = hold_mode;
-    if ((((int) my_max_send_q) < send_q_limit)) {
+    if ((((int) send_q_eff) < send_q_limit)) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
@@ -1635,6 +1649,7 @@ int lfd_linker(void)
     last_action = info.current_time.tv_sec;
     last_net_read = info.current_time.tv_sec;
     shm_conn_info->lock_time = info.current_time.tv_sec;
+    net_model_start = info.current_time;
     
 //    alarm(lfd_host->MAX_IDLE_TIMEOUT);
     struct timeval get_info_time, get_info_time_last, tv_tmp_tmp_tmp;
@@ -2347,7 +2362,7 @@ int lfd_linker(void)
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = info.channel[chan_num].packet_recv_upload;
                             sem_post(&(shm_conn_info->AG_flags_sem));
-
+                            info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 #ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
                                     "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
