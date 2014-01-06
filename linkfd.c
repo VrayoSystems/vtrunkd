@@ -657,6 +657,7 @@ int retransmit_send(char *out2) {
         send_counter++;
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         info.channel[i].up_len += len_ret;
+        info.channel[i].up_packets++;
         info.byte_r_mode += len_ret;
     }
     
@@ -830,6 +831,7 @@ int select_devread_send(char *buf, char *out2) {
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     info.channel[chan_num].up_len += len_ret;
+    info.channel[chan_num].up_packets++;
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
@@ -1186,12 +1188,12 @@ int ag_switcher() {
     int speed_success = 0;
 
     /* ACK_coming_speed recalculation */
-    int skip_time_usec = magic_rtt_avg / 10 * 1000;
+    int skip_time_usec = rtt / 10 * 1000;
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
     for (int i = 0; i < info.channel_amount; i++) {
         int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, info.channel[i].send_q_old,
-                info.channel[i].send_q, info.channel[i].up_len, skip_time_usec);
+                info.channel[i].send_q, info.channel[i].up_packets * 1000, skip_time_usec);
         if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW) || (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW)) {
             if (ACK_coming_speed >= 0) {
                 info.channel[i].ACK_speed_avg *= 100;
@@ -1215,6 +1217,7 @@ int ag_switcher() {
             memcpy(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, sizeof(info.channel[i].send_q_time));
             info.channel[i].send_q_old = info.channel[i].send_q;
             info.channel[i].up_len = 0;
+            info.channel[i].up_packets = 0;
             info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
             info.channel[i].magic_rtt =
                     info.channel[i].ACK_speed_avg == 0 ? info.channel[i].send_q / 1 : info.channel[i].send_q / info.channel[i].ACK_speed_avg;
@@ -2354,7 +2357,7 @@ int lfd_linker(void)
                             info.channel[chan_num].packet_loss = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
-                            info.channel[chan_num].send_q = 1300 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
+                            info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
