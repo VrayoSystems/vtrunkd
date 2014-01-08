@@ -119,7 +119,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_old=0, rtt_old_old=0;
+int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_shift=0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
@@ -1337,7 +1337,7 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
-
+    int ping_req_ts[MAX_TCP_LOGICAL_CHANNELS] = {0}; // in us
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
     long int last_net_read = 0; // for timeout;
 
@@ -1388,7 +1388,6 @@ int lfd_linker(void)
     uint32_t last_last_written_seq[MAX_TCP_LOGICAL_CHANNELS]; // for LWS notification TODO: move this to write_buf!
 
     // ping stats
-    long int ping_req_ts = 0;
     int ping_rcvd = 1; // flag that ping is rcvd; ok to send next
     long int last_ping=0;
 
@@ -2046,11 +2045,11 @@ int lfd_linker(void)
                     if(ping_rcvd) {
                          ping_rcvd = 0;
                          gettimeofday(&info.current_time, NULL);
-                         ping_req_ts = ((info.current_time.tv_sec) * 1000) + (info.current_time.tv_usec / 1000);
                          last_ping = info.current_time.tv_sec;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
+                        ping_req_ts[i] = ((info.current_time.tv_sec) * 1000000) + info.current_time.tv_usec; //save time
                         int len_ret;
                         if (i == 0) {
                             len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
@@ -2460,12 +2459,15 @@ int lfd_linker(void)
                         last_net_read = info.current_time.tv_sec;
                         gettimeofday(&info.current_time, NULL);
 
-                        if(rtt_old_old == 0) {
-                            rtt_old = rtt_old_old = (( (info.current_time.tv_sec ) * 1000) + (info.current_time.tv_usec / 1000) - ping_req_ts);
+                        if (chan_num == my_max_send_q_chan_num) {
+                            rtt = (int) ((info.current_time.tv_sec * 1000000 + info.current_time.tv_usec) - ping_req_ts[chan_num]); // us
+
+                            sem_wait(&(shm_conn_info->stats_sem));
+                            shm_conn_info->stats[info.process_num].rtt_phys_avg += (rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 8;
+                            rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
+                            sem_post(&(shm_conn_info->stats_sem));
                         }
-                        rtt = (   (( (info.current_time.tv_sec ) * 1000) + (info.current_time.tv_usec / 1000) - ping_req_ts) + rtt_old + rtt_old_old   ) / 3;
-                        rtt_old_old = rtt_old;
-                        rtt_old = rtt;
+
                         continue; 
                     }
                     if( fl==VTUN_CONN_CLOSE ) {
@@ -2642,14 +2644,13 @@ int lfd_linker(void)
 				ping_rcvd = 0;
 				gettimeofday(&info.current_time, NULL);
 
-				ping_req_ts = ((info.current_time.tv_sec) * 1000) + (info.current_time.tv_usec / 1000);
-
 				last_ping = info.current_time.tv_sec;
 #ifdef DEBUGG
 				vtun_syslog(LOG_INFO, "PING2");
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
+                ping_req_ts[i] = ((info.current_time.tv_sec) * 1000000) + info.current_time.tv_usec; //save time
                 int len_ret;
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
@@ -2733,8 +2734,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     force_hold_mode = 1;
     incomplete_seq_len = 0;
     rtt = 0;
-    rtt_old=0;
-    rtt_old_old=0;
+    rtt_shift=0;
     my_miss_packets_max = 0; // in ms; calculated here
     miss_packets_max = 0; // get from another side
     proto_err_cnt = 0;

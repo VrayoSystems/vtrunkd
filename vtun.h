@@ -350,6 +350,7 @@ struct conn_stats {
     uint32_t send_q_limit;
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
+    int rtt_phys_avg;
 };
 
 /**
@@ -365,6 +366,7 @@ struct logical_status {
     /** AVG measuring speed */
     uint32_t upload;    /**< upload speed */
     uint32_t up_len;    /**< how much bytes are uploaded */
+    uint32_t up_packets; /**< how much packets are uploaded */
     uint32_t download;  /**< download speed */
     uint32_t down_len;    /**< how much bytes are downloaded */
     uint32_t rtt;       /**< rtt is measured by vtrunkd */
