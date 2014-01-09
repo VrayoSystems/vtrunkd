@@ -2488,13 +2488,20 @@ int lfd_linker(void)
                     /* Accumulate loss packet*/
                     uint32_t local_seq_tmp;
                     memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
-                    if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv + 1) {
-                        info.channel[chan_num].packet_loss_counter += ntohl(local_seq_tmp) - info.channel[chan_num].local_seq_num_recv + 1;
+                    if (ntohl(local_seq_tmp) > info.channel[chan_num].local_seq_num_recv + 1) {
+#ifdef DEBUGG
+                        vtun_syslog(LOG_INFO, "loss was %"PRIu16"", info.channel[chan_num].packet_loss_counter);
+#endif
+                        info.channel[chan_num].packet_loss_counter += ntohl(local_seq_tmp) - (info.channel[chan_num].local_seq_num_recv + 1);
+#ifdef DEBUGG
+                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRIu16"", info.channel[chan_num].local_seq_num_recv,
+                                ntohl(local_seq_tmp), info.channel[chan_num].packet_loss_counter);
+#endif
                     }
                     info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len);
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRIu16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, info.channel[chan_num].packet_loss_counter);
 #endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
