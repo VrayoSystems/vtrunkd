@@ -658,6 +658,7 @@ int retransmit_send(char *out2) {
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         info.channel[i].up_len += len_ret;
         info.channel[i].up_packets++;
+        info.channel[i].bytes_put++;
         info.byte_r_mode += len_ret;
     }
     
@@ -832,6 +833,7 @@ int select_devread_send(char *buf, char *out2) {
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     info.channel[chan_num].up_len += len_ret;
     info.channel[chan_num].up_packets++;
+    info.channel[chan_num].bytes_put++;
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
@@ -1147,20 +1149,7 @@ int ag_switcher() {
     struct timeval ag_curtime, time_sub_tmp;
     gettimeofday(&ag_curtime, NULL );
 
-    /*find my max send_q*/
-    uint32_t my_max_send_q = 0;
-    for (int i = 0; i < info.channel_amount; i++) {
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Recv-Q %u Send-Q %u Logical channel %i", chan_info[i].recv_q, chan_info[i].send_q, i);
-#endif
-        if ((my_max_send_q < info.channel[i].send_q) && (i != 0)) {
-            my_max_send_q = info.channel[i].send_q;
-            my_max_send_q_chan_num = i;
-        }
-#ifdef TRACE
-    vtun_syslog(LOG_INFO,"sended_bytes - %u",info.channel[i].up_len);
-#endif
-    }
+    uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
 
     uint32_t bytes_pass = 0;
 
@@ -1170,15 +1159,8 @@ int ag_switcher() {
                 + (time_sub_tmp.tv_sec * info.channel[my_max_send_q_chan_num].ACK_speed_avg);
     }
 
-    uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put - bytes_pass;
+    uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
 
-    info.max_send_q_avg =
-            info.max_send_q_avg > my_max_send_q ?
-                    info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 : info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
-#if !defined(DEBUGG)
-    info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
-    info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
-#endif
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
@@ -1773,9 +1755,9 @@ int lfd_linker(void)
 
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
-                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
+                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
-                        info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
+                        (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
@@ -2357,6 +2339,21 @@ int lfd_linker(void)
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
                             info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
+                            uint32_t my_max_send_q = 0;
+                            for (int i = 1; i < info.channel_amount; i++) {
+                                if (my_max_send_q < info.channel[i].send_q) {
+                                    my_max_send_q = info.channel[i].send_q;
+                                    my_max_send_q_chan_num = i;
+                                }
+                            }
+                            info.max_send_q_avg =
+                                    info.max_send_q_avg > my_max_send_q ?
+                                            info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 :
+                                            info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
+#if !defined(DEBUGG)
+                            info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
+                            info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
+#endif
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
@@ -2367,8 +2364,8 @@ int lfd_linker(void)
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 #ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
-                                    "FRAME_CHANNEL_INFO recv chan_num %d packet_recv %"PRIu16" packet_loss %"PRIu16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
-                                    chan_num, info.channel[chan_num].packet_recv, info.channel[chan_num].packet_loss,
+                                    "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
+                                    chan_num, info.channel[chan_num].send_q, info.channel[chan_num].packet_recv, (int16_t)info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload);
 #endif
                             continue;
@@ -2494,14 +2491,18 @@ int lfd_linker(void)
 #endif
                         info.channel[chan_num].packet_loss_counter += ntohl(local_seq_tmp) - (info.channel[chan_num].local_seq_num_recv + 1);
 #ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRIu16"", info.channel[chan_num].local_seq_num_recv,
-                                ntohl(local_seq_tmp), info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
+                                ntohl(local_seq_tmp), (int)info.channel[chan_num].packet_loss_counter);
 #endif
+                    } else if (ntohl(local_seq_tmp) < info.channel[chan_num].local_seq_num_recv) {
+                        info.channel[chan_num].packet_loss_counter--;
                     }
-                    info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
+                    if (ntohl(local_seq_tmp) > info.channel[chan_num].local_seq_num_recv) {
+                        info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
+                    }
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRIu16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, info.channel[chan_num].packet_loss_counter);
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
 #endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
