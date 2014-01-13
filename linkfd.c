@@ -1160,10 +1160,10 @@ int ag_switcher() {
     }
 
     uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
-
+#ifdef DEBUGG
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
-
+#endif
     /* store my max send_q in shm */
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
