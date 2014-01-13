@@ -20,22 +20,22 @@ void free_timer(struct timer_obj *timer) {
 
 void set_timer(struct timer_obj *timer, struct timeval *timer_time) {
     memset(timer, 0, sizeof(struct timer_obj));
-    gettimeofday(&timer->start_time, NULL );
-    memcpy(&timer->timer_time, timer_time, sizeof(struct timeval));
+    gettimeofday(&(timer->start_time), NULL );
+    memcpy(&(timer->timer_time), timer_time, sizeof(struct timeval));
 }
 
 void update_timer(struct timer_obj *timer){
-    gettimeofday(&timer->start_time, NULL );
+    gettimeofday(&(timer->start_time), NULL );
 }
 
 int check_timer(struct timer_obj *timer) {
     gettimeofday(&timer->cur_time, NULL );
-    timersub(&timer->cur_time, &timer->start_time, &timer->tmp);
-    return timercmp(&timer->timer_time,&timer->tmp, <=);
+    timersub(&(timer->cur_time), &(timer->start_time), &(timer->tmp));
+    return timercmp(&(timer->timer_time), &(timer->tmp), <=);
 }
 
 int fast_check_timer(struct timer_obj *timer, struct timeval *cur_time){
-    timersub(cur_time, &timer->start_time, &timer->tmp);
-    return timercmp(&timer->timer_time, &timer->tmp, <=);
+    timersub(cur_time, &(timer->start_time), &(timer->tmp));
+    return timercmp(&(timer->timer_time), &(timer->tmp), <=);
 }
 
