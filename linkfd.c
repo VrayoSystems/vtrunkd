@@ -1700,7 +1700,6 @@ int lfd_linker(void)
             }
 #endif
         }
-        hold_mode = 0;
         if (info.check_shm) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
