@@ -1153,11 +1153,10 @@ int ag_switcher() {
 
     uint32_t bytes_pass = 0;
 
-    if (timercmp(&info.channel[my_max_send_q_chan_num].send_q_time, &ag_curtime, !=)) {
-        timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
-        bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
-                + (time_sub_tmp.tv_sec * info.channel[my_max_send_q_chan_num].ACK_speed_avg);
-    }
+    timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
+    bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
+            + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
+
 
     uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
 #ifdef DEBUGG
