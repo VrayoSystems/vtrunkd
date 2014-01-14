@@ -1154,9 +1154,10 @@ int ag_switcher() {
     uint32_t bytes_pass = 0;
 
     timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
-    bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
-            + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-
+    //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
+    //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
+    bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
+            + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
     uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
 #ifdef DEBUGG
@@ -1736,13 +1737,13 @@ int lfd_linker(void)
             /*sending recv and loss data*/
             if ((info.channel[i].packet_recv_counter > 10) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
-                uint32_t tmp_n = htons(info.channel[i].packet_recv_counter);
+                uint32_t tmp_n = htons(info.channel[i].packet_recv_counter); // amt of rcvd packets
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(info.channel[i].packet_loss_counter);
+                tmp_n = htons(info.channel[i].packet_loss_counter); // amt of pkts lost
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(FRAME_CHANNEL_INFO);
+                tmp_n = htons(FRAME_CHANNEL_INFO);  // flag
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htonl(info.channel[i].local_seq_num_recv);
+                tmp_n = htonl(info.channel[i].local_seq_num_recv); // 
                 memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
                 tmp_n = htons((uint16_t) i);
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint16_t));
@@ -1750,9 +1751,9 @@ int lfd_linker(void)
                 timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
-                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
+                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // pkt recv period
                 tmp_n = htonl(shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t));
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
 //#ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
