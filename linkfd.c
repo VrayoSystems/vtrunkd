@@ -1688,7 +1688,7 @@ int lfd_linker(void)
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%f,\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
+                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
                         lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
                         rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
@@ -1735,7 +1735,7 @@ int lfd_linker(void)
         int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
         for (i = 1; i < info.channel_amount; i++) {
             /*sending recv and loss data*/
-            if (((info.channel[i].packet_recv_counter > 10) || timer_result) && (info.channel[i].packet_recv_counter > 0)) {
+            if ((info.channel[i].packet_recv_counter > 10) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp_n = htons(info.channel[i].packet_recv_counter);
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
