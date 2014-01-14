@@ -1221,56 +1221,60 @@ int ag_switcher() {
 #endif
     }
 
-    if (speed_success) {
+    /*if (speed_success) {
         ACK_coming_speed_avg = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
         magic_rtt_avg = info.channel[my_max_send_q_chan_num].magic_rtt;
-        sem_wait(&(shm_conn_info->AG_flags_sem));
-        uint32_t chan_mask = shm_conn_info->channels_mask;
-        sem_post(&(shm_conn_info->AG_flags_sem));
-        sem_wait(&(shm_conn_info->stats_sem));
-        shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
-        miss_packets_max = shm_conn_info->miss_packets_max;
-        int send_q_limit_grow;
-        int high_speed_chan = 31;
-        for (int i = 0; i < 32; i++) {
-            /* look for first alive channel*/
-            if (chan_mask & (1 << i)) {
+        
+        */
+    sem_wait(&(shm_conn_info->AG_flags_sem));
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    sem_post(&(shm_conn_info->AG_flags_sem));
+    sem_wait(&(shm_conn_info->stats_sem));
+    //shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
+    shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].packet_recv_upload;
+    miss_packets_max = shm_conn_info->miss_packets_max;
+        
+    int send_q_limit_grow;
+    int high_speed_chan = 31;
+    for (int i = 0; i < 32; i++) {
+        /* look for first alive channel*/
+        if (chan_mask & (1 << i)) {
 #ifdef TRACE
-            vtun_syslog(LOG_INFO, "First alive channel %i",i);
+        vtun_syslog(LOG_INFO, "First alive channel %i",i);
 #endif
-                high_speed_chan = i;
-                break;
-            }
+            high_speed_chan = i;
+            break;
         }
-        /* find high speed channel */
-        for (int i = 0; i < 32; i++) {
-#ifdef TRACE
-            vtun_syslog(LOG_INFO, "Checking channel %i",i);
-#endif
-            /* check alive channel*/
-            if (chan_mask & (1 << i)) {
-                high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
-#ifdef TRACE
-            vtun_syslog(LOG_INFO, "Channel %i alive",i);
-#endif
-            }
-        }
-        /*ag switching enable*/
-
-        int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-        int EBL = (90 - (int) miss_packets_max) * 1300;
-        if (high_speed_chan == info.process_num) {
-            send_q_limit_grow = (EBL - send_q_limit) / 2;
-        } else {
-            // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-            send_q_limit_grow = (((((int) (shm_conn_info->stats[high_speed_chan].max_send_q_avg)) * shm_conn_info->stats[info.process_num].ACK_speed)
-                    / ACK_speed_high_speed) - send_q_limit) / 2;
-        }
-        sem_post(&(shm_conn_info->stats_sem));
-        send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
-        send_q_limit += send_q_limit_grow;
-        send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
     }
+    /* find high speed channel */
+    for (int i = 0; i < 32; i++) {
+#ifdef TRACE
+        vtun_syslog(LOG_INFO, "Checking channel %i",i);
+#endif
+        /* check alive channel*/
+        if (chan_mask & (1 << i)) {
+            high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
+#ifdef TRACE
+        vtun_syslog(LOG_INFO, "Channel %i alive",i);
+#endif
+        }
+    }
+    /*ag switching enable*/
+
+    int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
+    int EBL = (90 - (int) miss_packets_max) * 1300;
+    if (high_speed_chan == info.process_num) {
+        send_q_limit_grow = (EBL - send_q_limit) / 2;
+    } else {
+        // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
+        send_q_limit_grow = (((((int) (shm_conn_info->stats[high_speed_chan].max_send_q_avg)) * shm_conn_info->stats[info.process_num].ACK_speed)
+                / ACK_speed_high_speed) - send_q_limit) / 2;
+    }
+    sem_post(&(shm_conn_info->stats_sem));
+    send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
+    send_q_limit += send_q_limit_grow;
+    send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
+    //}
 
     int hold_mode_previous = hold_mode;
     if ((((int) send_q_eff) < send_q_limit)) {
@@ -2348,10 +2352,9 @@ int lfd_linker(void)
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            info.max_send_q_avg =
-                                    info.max_send_q_avg > my_max_send_q ?
-                                            info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4 :
-                                            info.max_send_q_avg + (my_max_send_q - info.max_send_q_avg) / 4;
+                            
+                            info.max_send_q_avg = info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4;
+                            
 #if !defined(DEBUGG)
                             info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
                             info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
