@@ -2623,30 +2623,67 @@ int lfd_linker(void)
              *
              * */
         sem_wait(&shm_conn_info->hard_sem);
-        len = retransmit_send(out2);
-        if (len == CONTINUE_ERROR) {
+        if (0) {
+            len = retransmit_send(out2);
+            if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
+                vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
 #endif
-            len = 0;
-        } else if (len == BREAK_ERROR) {
-            vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
-            linker_term = TERM_NONFATAL;
+                len = 0;
+            } else if (len == BREAK_ERROR) {
+                vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
+                linker_term = TERM_NONFATAL;
 //            break;
-        } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
+            } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "debug: R_MODE main send");
+                    vtun_syslog(LOG_INFO, "debug: R_MODE main send");
+#endif
+                len = select_devread_send(buf, out2);
+                if (len > 0) {
+                } else if (len == BREAK_ERROR) {
+                    vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
+                    linker_term = TERM_NONFATAL;
+//                break;
+                } else if (len == CONTINUE_ERROR) {
+                    len = 0;
+                } else if (len == TRYWAIT_NOTIFY) {
+                    len = 0; //todo need to check resend_buf for new packet again ????
+                }
+            }
+        } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "debug: AG_MODE");
 #endif
             len = select_devread_send(buf, out2);
             if (len > 0) {
+                dirty_seq_num++;
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);
+#endif
             } else if (len == BREAK_ERROR) {
-                vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
+                vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
-//                break;
+                break;
             } else if (len == CONTINUE_ERROR) {
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
+#endif
                 len = 0;
             } else if (len == TRYWAIT_NOTIFY) {
-                len = 0; //todo need to check resend_buf for new packet again ????
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
+#endif
+                len = 0;
+            } else if (len == NET_WRITE_BUSY_NOTIFY) {
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
+#endif
+                len = 0;
+            } else if (len == SEND_Q_NOTIFY) {
+#ifdef DEBUGG
+                vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
+#endif
+                len = 0;
             }
         }
         sem_post(&shm_conn_info->hard_sem);
