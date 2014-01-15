@@ -1263,11 +1263,18 @@ int ag_switcher() {
         // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
         send_q_limit_grow = (((((int) (shm_conn_info->stats[high_speed_chan].max_send_q_avg)) * shm_conn_info->stats[info.process_num].ACK_speed)
                 / ACK_speed_high_speed) - send_q_limit) / 2;
+        vtun_syslog(LOG_INFO, "maxest send_q %d my speed %"PRId32" hi speed %d", shm_conn_info->stats[high_speed_chan].max_send_q_avg, shm_conn_info->stats[info.process_num].ACK_speed, ACK_speed_high_speed);
+
     }
     sem_post(&(shm_conn_info->stats_sem));
+
+    vtun_syslog(LOG_INFO, "send_q lim grow %d last send_q_lim %"PRId32"",send_q_limit_grow, send_q_limit);
+
     send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
     send_q_limit += send_q_limit_grow;
     send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
+    vtun_syslog(LOG_INFO, "send_q lim new %"PRId32"", send_q_limit);
+
     //}
 
     int hold_mode_previous = hold_mode;
