@@ -769,8 +769,9 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        if (info.channel[chan_num].local_seq_num == (UINT32_MAX-1))
+        if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
             info.channel[chan_num].local_seq_num = 0;
+        }
         len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
@@ -2367,12 +2368,12 @@ int lfd_linker(void)
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = info.channel[chan_num].packet_recv_upload;
                             sem_post(&(shm_conn_info->AG_flags_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
-#ifdef DEBUGG
+//#ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
-                                    "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32"",
+                                    "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32" send_q %"PRIu32"",
                                     chan_num, info.channel[chan_num].send_q, info.channel[chan_num].packet_recv, (int16_t)info.channel[chan_num].packet_loss,
-                                    info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload);
-#endif
+                                    info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].send_q);
+//#endif
                             continue;
                         } else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
@@ -2490,7 +2491,7 @@ int lfd_linker(void)
                     /* Accumulate loss packet*/
                     uint32_t local_seq_tmp;
                     memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
-                    if (ntohl(local_seq_tmp) > info.channel[chan_num].local_seq_num_recv + 1) {
+                    if (ntohl(local_seq_tmp) > (info.channel[chan_num].local_seq_num_recv + 1)) {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRIu16"", info.channel[chan_num].packet_loss_counter);
 #endif
