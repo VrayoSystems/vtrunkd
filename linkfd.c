@@ -1231,8 +1231,6 @@ int ag_switcher() {
     uint32_t chan_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
     sem_wait(&(shm_conn_info->stats_sem));
-    //shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
-    shm_conn_info->stats[info.process_num].ACK_speed = info.channel[my_max_send_q_chan_num].packet_recv_upload;
     miss_packets_max = shm_conn_info->miss_packets_max;
         
     int send_q_limit_grow;
@@ -2365,9 +2363,13 @@ int lfd_linker(void)
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
-                            sem_wait(&(shm_conn_info->AG_flags_sem));
-                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = info.channel[chan_num].packet_recv_upload;
-                            sem_post(&(shm_conn_info->AG_flags_sem));
+                            sem_wait(&(shm_conn_info->stats_sem));
+                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
+                                    info.channel[chan_num].packet_recv_upload;
+                            if (my_max_send_q_chan_num == chan_num) {
+                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload;
+                            }
+                            sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 //#ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
