@@ -2370,7 +2370,7 @@ int lfd_linker(void)
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
-                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload;
+                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload == 0 ? 1 : info.channel[chan_num].packet_recv_upload;
                             }
                             shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                             shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
