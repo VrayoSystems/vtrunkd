@@ -1165,11 +1165,6 @@ int ag_switcher() {
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
 #endif
-    /* store my max send_q in shm */
-    sem_wait(&(shm_conn_info->stats_sem));
-    shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
-    shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
-    sem_post(&(shm_conn_info->stats_sem));
 
     int speed_success = 0;
 
@@ -2364,11 +2359,14 @@ int lfd_linker(void)
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
                             sem_wait(&(shm_conn_info->stats_sem));
+                            /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
                                 shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload;
                             }
+                            shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
+                            shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
                             sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 //#ifdef DEBUGG
