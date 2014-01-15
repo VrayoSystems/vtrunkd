@@ -1256,7 +1256,7 @@ int ag_switcher() {
     /*ag switching enable*/
 
     int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-    int EBL = (90 - (int) miss_packets_max) * 1300;
+    int EBL = (90) * 1300;
     if (high_speed_chan == info.process_num) {
         send_q_limit_grow = (EBL - send_q_limit) / 2;
     } else {
