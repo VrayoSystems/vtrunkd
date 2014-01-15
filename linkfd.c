@@ -2354,7 +2354,8 @@ int lfd_linker(void)
                                 }
                             }
                             
-                            info.max_send_q_avg = info.max_send_q_avg - (info.max_send_q_avg - my_max_send_q) / 4;
+                            info.max_send_q_avg = (uint32_t) ((int32_t) info.max_send_q_avg
+                                    - ((int32_t) info.max_send_q_avg - (int32_t) my_max_send_q) / 4);
                             
 #if !defined(DEBUGG)
                             info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
