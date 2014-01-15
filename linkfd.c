@@ -1278,12 +1278,14 @@ int ag_switcher() {
     //}
 
     int hold_mode_previous = hold_mode;
-    if ((((int) send_q_eff) < send_q_limit)) {
+    vtun_syslog(LOG_INFO, "send_q eff %"PRIu32" lim %"PRId32"", send_q_eff, send_q_limit);
+    if (((int) send_q_eff) < send_q_limit) {
         hold_mode = 0;
     } else {
         hold_mode = 1;
         force_hold_mode = 0;
     }
+    vtun_syslog(LOG_INFO, "hold_mode %d", hold_mode);
 
     max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num].mss;
     info.max_send_q_calc = (chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd) / 1000;
