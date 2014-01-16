@@ -1661,6 +1661,8 @@ int lfd_linker(void)
     struct timeval recv_n_loss_time = { 0, 500000 };
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
 
+    struct timer_obj *hold_timer = create_timer();
+
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1671,6 +1673,16 @@ int lfd_linker(void)
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&info.current_time, NULL);
+        if ((hold_mode == 1)) {
+            if (fast_check_timer(hold_timer, &info.current_time)) {
+                hold_mode = 0;
+            } else {
+                timersub(&info.current_time, &(hold_timer->start_time), &(hold_timer->tmp));
+                timersub(&(info.hold_timeout), &(hold_timer->tmp), &(info.hold_timeout_left));
+                set_timer(hold_timer, &(info.hold_timeout_left));
+            }
+        }
+
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
@@ -1995,8 +2007,7 @@ int lfd_linker(void)
             tv.tv_sec = 0;
             tv.tv_usec = 200000;
         } else {
-            tv.tv_sec = get_info_time.tv_sec;
-            tv.tv_usec = get_info_time.tv_usec;
+            tv = info.hold_timeout_left;
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "tun read select skip");
             vtun_syslog(LOG_INFO, "debug: HOLD_MODE");
@@ -2638,7 +2649,12 @@ int lfd_linker(void)
         sem_wait(&shm_conn_info->hard_sem);
         if (0) {
             len = retransmit_send(out2);
-            if (len == CONTINUE_ERROR) {
+            if (len > 0) {
+                if ((hold_mode == 0)) {
+                    hold_mode = 1;
+                    set_timer(hold_timer, &(info.hold_timeout));
+                }
+            } else if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
 #endif
@@ -2653,6 +2669,9 @@ int lfd_linker(void)
 #endif
                 len = select_devread_send(buf, out2);
                 if (len > 0) {
+                    if ((hold_mode == 0)) {
+                        hold_mode = 1;
+                    }
                 } else if (len == BREAK_ERROR) {
                     vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                     linker_term = TERM_NONFATAL;
@@ -2669,6 +2688,10 @@ int lfd_linker(void)
 #endif
             len = select_devread_send(buf, out2);
             if (len > 0) {
+                if ((hold_mode == 0)) {
+                    hold_mode = 1;
+                    set_timer(hold_timer, &(info.hold_timeout));
+                }
                 dirty_seq_num++;
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);

@@ -39,3 +39,6 @@ int fast_check_timer(struct timer_obj *timer, struct timeval *cur_time){
     return timercmp(&(timer->timer_time), &(timer->tmp), <=);
 }
 
+struct timeval* get_start_time(struct timer_obj *timer) {
+    return &(timer->start_time);
+}
