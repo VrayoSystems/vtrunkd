@@ -430,6 +430,7 @@ struct phisical_status {
     struct timeval hold_timeout;
     struct timeval hold_timeout_left;
     struct timer_obj *hold_timer;
+    int rtt;
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
