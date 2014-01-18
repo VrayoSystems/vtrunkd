@@ -24,6 +24,5 @@ void set_timer(struct timer_obj *timer, struct timeval *timer_time);
 void update_timer(struct timer_obj *timer);
 int check_timer(struct timer_obj *timer);
 int fast_check_timer(struct timer_obj *timer, struct timeval *cur_time);
-struct timeval* get_start_time(struct timer_obj *timer);
 
 #endif /* TIMER_H_ */

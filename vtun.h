@@ -427,10 +427,6 @@ struct phisical_status {
     unsigned int byte_efficient;
     unsigned int byte_resend;
     unsigned int byte_r_mode;
-    struct timeval hold_timeout;
-    struct timeval hold_timeout_left;
-    struct timer_obj *hold_timer;
-    int rtt;
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
