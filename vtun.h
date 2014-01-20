@@ -427,6 +427,11 @@ struct phisical_status {
     unsigned int byte_efficient;
     unsigned int byte_resend;
     unsigned int byte_r_mode;
+    int rtt;
+
+    /** Calculated values*/
+    uint32_t send_q_limit;
+    uint32_t send_q_limit_last;
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/

@@ -56,6 +56,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <math.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -119,7 +120,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-int buf_len, incomplete_seq_len = 0, rtt = 0, rtt_shift=0;
+int buf_len, incomplete_seq_len = 0, rtt_shift=0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
@@ -1169,7 +1170,7 @@ int ag_switcher() {
     int speed_success = 0;
 
     /* ACK_coming_speed recalculation */
-    int skip_time_usec = rtt / 10 * 1000;
+    int skip_time_usec = info.rtt / 10 * 1000;
     skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
     skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
     for (int i = 0; i < info.channel_amount; i++) {
@@ -1292,8 +1293,8 @@ int ag_switcher() {
 #if defined(DEBUGG) && defined(JSON)
     vtun_syslog(LOG_INFO,
             "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":120000,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"r_buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u}",
-            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].rtt,
-            chan_info[my_max_send_q_chan_num].rtt_var, rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
+            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit, my_max_send_q, chan_info[my_max_send_q_chan_num].info.info.rtt,
+            chan_info[my_max_send_q_chan_num].rtt_var, info.info.rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
             chan_info[my_max_send_q_chan_num].send,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
             shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg, shm_conn_info->miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend);
@@ -1661,6 +1662,17 @@ int lfd_linker(void)
     struct timeval recv_n_loss_time = { 0, 500000 };
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
 
+    struct timer_obj *send_q_limit_change_timer = create_timer();
+    struct timeval send_q_limit_change_time = { 0, 500000 };
+    set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
+
+    struct timer_obj *s_q_lim_drop_timer = create_timer();
+    update_timer(s_q_lim_drop_timer);
+
+    struct timeval t_tv;
+    struct timeval loss_time;
+    gettimeofday(&loss_time, NULL);
+
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1671,6 +1683,44 @@ int lfd_linker(void)
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
         errno = 0;
         gettimeofday(&info.current_time, NULL);
+
+        if (fast_check_timer(send_q_limit_change_timer, &info.current_time)) {
+            send_q_limit_change_time.tv_sec = info.rtt / 1000000;
+            if (send_q_limit_change_time.tv_sec > 4) {
+                send_q_limit_change_time.tv_sec = 5;
+                send_q_limit_change_time.tv_usec = 0;
+            } else {
+                send_q_limit_change_time.tv_usec = info.rtt % 1000000;
+            }
+            timersub(&(info.current_time), &loss_time, &t_tv);
+            int t = t_tv.tv_sec*1000000 + t_tv.tv_usec;
+            t = t/10000000;
+            double C = 1;
+            double B = 0.9;
+            info.send_q_limit_last = info.send_q_limit;
+            double K = cbrt((((double) info.send_q_limit_last) * B) / C);
+            info.send_q_limit = (uint32_t) (C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
+            set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
+        }
+
+        uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
+
+        uint32_t bytes_pass = 0;
+
+        timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
+        //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
+        //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
+        bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
+                + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
+
+        uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
+
+        if (send_q_eff < info.send_q_limit) {
+            hold_mode = 0;
+        } else {
+            hold_mode = 1;
+        }
+
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
@@ -1682,7 +1732,7 @@ int lfd_linker(void)
         }
         
         if (timercmp_result || ag_switch_flag) {
-            info.mode = ag_switcher();
+//            info.mode = ag_switcher();
             get_info_time_last.tv_sec = info.current_time.tv_sec;
             get_info_time_last.tv_usec = info.current_time.tv_usec;
 #if !defined(DEBUGG) && defined(JSON)
@@ -1695,9 +1745,9 @@ int lfd_linker(void)
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
                 vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
+                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"info.rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
                         lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
-                        rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
+                        info.rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
                         hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
                 json_timer.tv_sec = info.current_time.tv_sec;
@@ -1906,7 +1956,7 @@ int lfd_linker(void)
                     delay_cnt = 1;
                 mean_delay = (delay_acc / delay_cnt);
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, rtt, (info.current_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
+                vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, info.rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, info.info.rtt, (info.current_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
                 vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5], statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
 #endif
                 dev_my_cnt = 0;
@@ -2340,11 +2390,21 @@ int lfd_linker(void)
                             int chan_num;
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
                             chan_num = (int)ntohs(tmp_n);
-                            gettimeofday(&info.channel[chan_num].send_q_time, NULL);
+                            gettimeofday(&info.current_time, NULL);
+                            info.channel[chan_num].send_q_time = info.current_time;
                             memcpy(&tmp_n, buf, sizeof(uint16_t));
                             info.channel[chan_num].packet_recv = ntohs(tmp_n);
                             memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
                             info.channel[chan_num].packet_loss = ntohs(tmp_n);
+                            if (info.channel[chan_num].packet_loss > 0) {
+                                loss_time = info.current_time;
+                                info.send_q_limit_last = info.send_q_limit;
+                                int t = 0;
+                                double C = 1;
+                                double B = 0.9;
+                                double K = cbrt((((double) info.send_q_limit_last) * B) / C);
+                                info.send_q_limit = (uint32_t) (C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
+                            }
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
                             info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
@@ -2473,11 +2533,11 @@ int lfd_linker(void)
                         gettimeofday(&info.current_time, NULL);
 
                         if (chan_num == my_max_send_q_chan_num) {
-                            rtt = (int) ((info.current_time.tv_sec * 1000000 + info.current_time.tv_usec) - ping_req_ts[chan_num]); // us
+                            info.rtt = (int) ((info.current_time.tv_sec * 1000000 + info.current_time.tv_usec) - ping_req_ts[chan_num]); // us
 
                             sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->stats[info.process_num].rtt_phys_avg += (rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 8;
-                            rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
+                            shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 8;
+                            info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
                             sem_post(&(shm_conn_info->stats_sem));
                         }
 
@@ -2794,7 +2854,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     hold_mode = 0; // 1 - hold 0 - normal
     force_hold_mode = 1;
     incomplete_seq_len = 0;
-    rtt = 0;
+    info.rtt = 0;
     rtt_shift=0;
     my_miss_packets_max = 0; // in ms; calculated here
     miss_packets_max = 0; // get from another side
