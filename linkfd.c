@@ -575,6 +575,18 @@ int check_fast_resend() {
     return 1;
 }
 
+
+/*
+          _                                 _ _                            _ 
+         | |                               (_) |                          | |
+ _ __ ___| |_ _ __ __ _ _ __  ___ _ __ ___  _| |_       ___  ___ _ __   __| |
+| '__/ _ \ __| '__/ _` | '_ \/ __| '_ ` _ \| | __|     / __|/ _ \ '_ \ / _` |
+| | |  __/ |_| | | (_| | | | \__ \ | | | | | | |_      \__ \  __/ | | | (_| |
+|_|  \___|\__|_|  \__,_|_| |_|___/_| |_| |_|_|\__|     |___/\___|_| |_|\__,_|
+                                               ______                        
+                                              |______|                       
+*/
+
 /**
  * Function for trying resend
  */ 
@@ -669,6 +681,16 @@ int retransmit_send(char *out2) {
     return 1;
 }
 
+/*
+          _           _                            _ 
+         | |         | |                          | |
+ ___  ___| | ___  ___| |_       ___  ___ _ __   __| |
+/ __|/ _ \ |/ _ \/ __| __|     / __|/ _ \ '_ \ / _` |
+\__ \  __/ |  __/ (__| |_      \__ \  __/ | | | (_| |
+|___/\___|_|\___|\___|\__|     |___/\___|_| |_|\__,_|
+                       ______                        
+                      |______|                       
+*/
 /**
  * Procedure select all(only tun_device now) file descriptors and if data available read from tun device, pack and write to net
  *
@@ -910,6 +932,18 @@ int write_buf_check_n_flush(int logical_channel) {
     }
 }
 
+
+/*
+               _ _             _            __               _     _ 
+              (_) |           | |          / _|             | |   | |
+__      ___ __ _| |_ ___      | |__  _   _| |_      __ _  __| | __| |
+\ \ /\ / / '__| | __/ _ \     | '_ \| | | |  _|    / _` |/ _` |/ _` |
+ \ V  V /| |  | | ||  __/     | |_) | |_| | |     | (_| | (_| | (_| |
+  \_/\_/ |_|  |_|\__\___|     |_.__/ \__,_|_|      \__,_|\__,_|\__,_|
+                      ______              ______                     
+                     |______|            |______|                    
+*/
+
 int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t incomplete_seq_buf[], int *buf_len, int mypid, char *succ_flag) {
     char *ptr;
     int mlen = 0;
@@ -1117,9 +1151,16 @@ int sem_wait_tw(sem_t *sem) {
 }
 
 /**
+                                   .__  __         .__                  
+_____     ____       ________  _  _|__|/  |_  ____ |  |__   ___________ 
+\__  \   / ___\     /  ___/\ \/ \/ /  \   __\/ ___\|  |  \_/ __ \_  __ \
+ / __ \_/ /_/  >    \___ \  \     /|  ||  | \  \___|   Y  \  ___/|  | \/
+(____  /\___  /____/____  >  \/\_/ |__||__|  \___  >___|  /\___  >__|   
+     \//_____/_____/    \/                       \/     \/     \/       
  * Modes switcher and socket status collector
  * @return - 0 for R_MODE and 1 for AG_MODE
  */
+
 int ag_switcher() {
 #ifdef TRACE
     vtun_syslog(LOG_INFO, "Process %i is calling ag_switcher()", info.process_num);
@@ -1304,6 +1345,15 @@ int ag_switcher() {
     }
     return R_MODE;
 }
+
+/*
+.__   _____   .___    .__  .__        __                     ___  ___    
+|  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
+|  |\   __\/ __ |     |  | |  |/    \|  |/ // __ \_  __ \  /  /    \  \  
+|  |_|  | / /_/ |     |  |_|  |   |  \    <\  ___/|  | \/ (  (      )  ) 
+|____/__| \____ |_____|____/__|___|  /__|_ \\___  >__|     \  \    /  /  
+               \/_____/            \/     \/    \/          \__\  /__/   
+*/
 
 int lfd_linker(void)
 {
@@ -1677,6 +1727,16 @@ int lfd_linker(void)
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
 /**
+ *
+ *
+    _________                         .__                        
+   /   _____/__ ________   ___________|  |   ____   ____ ______  
+   \_____  \|  |  \____ \_/ __ \_  __ \  |  /  _ \ /  _ \\____ \ 
+   /        \  |  /  |_> >  ___/|  | \/  |_(  <_> |  <_> )  |_> >
+  /_______  /____/|   __/ \___  >__|  |____/\____/ \____/|   __/ 
+          \/      |__|        \/                         |__|                                                            
+ *
+ *
  * Main program loop
  */
     while( !linker_term ) {
@@ -1855,6 +1915,13 @@ int lfd_linker(void)
           // do an expensive thing
           timersub(&info.current_time, &last_timing, &tv_tmp);
           /**
+           *
+           *    ___________.__        __     
+           *    \__    ___/|__| ____ |  | __ 
+           *      |    |   |  |/ ___\|  |/ / 
+           *      |    |   |  \  \___|    <  
+           *      |____|   |__|\___  >__|_ \ 
+           *                       \/     \/ 
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
@@ -2025,6 +2092,19 @@ int lfd_linker(void)
         }
 
                     /*
+                     *
+                        _____         .__                   
+                      /     \ _____  |__| ____             
+                     /  \ /  \\__  \ |  |/    \            
+                    /    Y    \/ __ \|  |   |  \           
+                    \____|__  (____  /__|___|  /           
+                            \/     \/        \/            
+                                  .__                 __   
+                      ______ ____ |  |   ____   _____/  |_ 
+                     /  ___// __ \|  | _/ __ \_/ ___\   __\
+                     \___ \\  ___/|  |_\  ___/\  \___|  |  
+                    /____  >\___  >____/\___  >\___  >__|  
+                         \/     \/          \/     \/      
                      * Now do a select () from all devices and channels
                      */
         sem_wait(write_buf_sem);
@@ -2114,6 +2194,23 @@ int lfd_linker(void)
         /*
              *
              *
+
+            _   _  _____ _____ _    _  ___________ _   __
+           | \ | ||  ___|_   _| |  | ||  _  | ___ \ | / /
+           |  \| || |__   | | | |  | || | | | |_/ / |/ / 
+           | . ` ||  __|  | | | |/\| || | | |    /|    \ 
+           | |\  || |___  | | \  /\  /\ \_/ / |\ \| |\  \
+           \_| \_/\____/  \_/  \/  \/  \___/\_| \_\_| \_/
+                                                         
+                                                         
+           ______ _____  ___ ______                      
+           | ___ \  ___|/ _ \|  _  \                     
+           | |_/ / |__ / /_\ \ | | |                     
+           |    /|  __||  _  | | | |                     
+           | |\ \| |___| | | | |/ /                      
+           \_| \_\____/\_| |_/___/                       
+                                                         
+                                                 
              *
              * Read frames from network(service_channel), decode and pass them to
              * the local device (tun_device)
@@ -2248,6 +2345,17 @@ int lfd_linker(void)
                             }
                             continue;
                         } else if (flag_var == FRAME_PRIO_PORT_NOTIFY) {
+                            /*
+                                
+                    ______     _                     _   _  __       
+                    | ___ \   (_)                   | | (_)/ _|      
+                    | |_/ / __ _  ___    _ __   ___ | |_ _| |_ _   _ 
+                    |  __/ '__| |/ _ \  | '_ \ / _ \| __| |  _| | | |
+                    | |  | |  | | (_) | | | | | (_) | |_| | | | |_| |
+                    \_|  |_|  |_|\___/  |_| |_|\___/ \__|_|_|  \__, |
+                                                                __/ |
+                                                               |___/  
+                            */
                             // connect to port specified
                             if (server_addr(&rmaddr, lfd_host) < 0) {
                                 vtun_syslog(LOG_ERR, "Could not set server address!");
@@ -2550,6 +2658,24 @@ int lfd_linker(void)
                         break;
                     }
                 } else {
+                    
+                    /*
+
+                    __________               .__                    .___
+                    \______   \_____  ___.__.|  |   _________     __| _/
+                     |     ___/\__  \<   |  ||  |  /  _ \__  \   / __ | 
+                     |    |     / __ \\___  ||  |_(  <_> ) __ \_/ /_/ | 
+                     |____|    (____  / ____||____/\____(____  /\____ | 
+                                    \/\/                     \/      \/ 
+                    __________                __           __           
+                    \______   \_____    ____ |  | __ _____/  |_         
+                     |     ___/\__  \ _/ ___\|  |/ // __ \   __\        
+                     |    |     / __ \\  \___|    <\  ___/|  |          
+                     |____|    (____  /\___  >__|_ \\___  >__|          
+                                    \/     \/     \/    \/              
+                    
+                     */
+                    
                     gettimeofday(&info.current_time, NULL);
                     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
                     last_net_read = info.current_time.tv_sec;
@@ -2687,9 +2813,22 @@ int lfd_linker(void)
 
         } // for chans..
 
-        /* Read data from the local device(tun_device), encode and pass it to
-             * the network (retransmit hardcoded)
+                /* Read data from the local device(tun_device), encode and pass it to
+             * the network (service_channel)
              *
+
+                .___         _________                  .___
+              __| _/____    /   _____/ ____   ____    __| _/
+             / __ |/  _ \   \_____  \_/ __ \ /    \  / __ | 
+            / /_/ (  <_> )  /        \  ___/|   |  \/ /_/ | 
+            \____ |\____/  /_______  /\___  >___|  /\____ | 
+                 \/                \/     \/     \/      \/ 
+                                 __           __            
+            ___________    ____ |  | __ _____/  |_          
+            \____ \__  \ _/ ___\|  |/ // __ \   __\         
+            |  |_> > __ \\  \___|    <\  ___/|  |           
+            |   __(____  /\___  >__|_ \\___  >__|           
+            |__|       \/     \/     \/    \/               
              *
              * ****************************************************************************************
              *
@@ -2836,6 +2975,14 @@ int lfd_linker(void)
 }
 
 /**
+ *
+___________       __                    _____       
+\_   _____/ _____/  |________ ___.__. _/ ____\____  
+ |    __)_ /    \   __\_  __ <   |  | \   __\/    \ 
+ |        \   |  \  |  |  | \/\___  |  |  | |   |  \
+/_______  /___|  /__|  |__|   / ____|  |__| |___|  /
+        \/     \/             \/                 \/
+
  *  Link remote and local file descriptors.
  *  We should initialize all global variable here if it possible.
  */
