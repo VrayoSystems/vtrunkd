@@ -20,7 +20,7 @@
 #  
 CC = @CC@
 CFLAGS = @CFLAGS@ @CPPFLAGS@ -W
-LDFLAGS = @LIBS@ -lutil -lrt -lresolv -lnetlink
+LDFLAGS = @LIBS@ -lutil -lrt -lresolv -lnetlink -lm
 
 YACC = @YACC@
 YACCFLAGS = -d
