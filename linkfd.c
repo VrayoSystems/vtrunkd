@@ -2517,8 +2517,7 @@ int lfd_linker(void)
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
                             info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
                             if (info.channel[chan_num].packet_loss > 0) {
-                                vtun_syslog(LOG_ERR, "loss %"PRIu16" chan_num %d send_q", info.channel[chan_num].packet_loss, chan_num,
-                                        info.channel[chan_num].send_q);
+                                vtun_syslog(LOG_ERR, "loss %"PRIu16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num, info.channel[chan_num].send_q);
                             }
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
