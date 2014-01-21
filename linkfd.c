@@ -1778,7 +1778,7 @@ int lfd_linker(void)
         if (send_q_eff < info.send_q_limit) {
             hold_mode = 0;
         } else {
-            hold_mode = 1;
+//            hold_mode = 1;
         }
 
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
@@ -1872,12 +1872,12 @@ int lfd_linker(void)
                 tmp_n = htonl(shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
-//#ifdef DEBUGG
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-//#endif
+#endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -2516,6 +2516,10 @@ int lfd_linker(void)
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
                             info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
+                            if (info.channel[chan_num].packet_loss > 0) {
+                                vtun_syslog(LOG_ERR, "loss %"PRIu16" chan_num %d send_q", info.channel[chan_num].packet_loss, chan_num,
+                                        info.channel[chan_num].send_q);
+                            }
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
                                 if (my_max_send_q < info.channel[i].send_q) {
@@ -2546,12 +2550,12 @@ int lfd_linker(void)
                             shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
                             sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
-//#ifdef DEBUGG
+#ifdef DEBUGG
                             vtun_syslog(LOG_ERR,
                                     "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32" send_q %"PRIu32"",
                                     chan_num, info.channel[chan_num].send_q, info.channel[chan_num].packet_recv, (int16_t)info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].send_q);
-//#endif
+#endif
                             continue;
                         } else {
 							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
