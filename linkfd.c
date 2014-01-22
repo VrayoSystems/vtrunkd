@@ -1785,7 +1785,7 @@ int lfd_linker(void)
             info.C = C_MED;
         }
         if ((shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg) == 0) {
-            info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed)
+            info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed);
         } else {
             info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed)
                     / (shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg);
