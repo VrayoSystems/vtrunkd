@@ -279,6 +279,10 @@ struct vtun_host {
 #define TERM_NONFATAL 1000
 #define TERM_FATAL 1001
 
+#define C_LOW 0.1
+#define C_MED 0.2
+#define C_HI 0.5
+
 #define AG_MODE 0
 #define R_MODE 1
 
@@ -328,6 +332,7 @@ struct speed_chan_data_struct {
 
     uint32_t down_packets; // per last_tick. need for speed calculation
     uint32_t down_packet_speed;
+    uint32_t send_q_loss;
 
 };
 
@@ -351,6 +356,7 @@ struct conn_stats {
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
     int rtt_phys_avg;
+    int my_max_send_q_chan_num;
 };
 
 /**
@@ -430,8 +436,11 @@ struct phisical_status {
     int rtt;
 
     /** Calculated values*/
+    uint32_t send_q_limit_cubic;
     uint32_t send_q_limit;
     uint32_t send_q_limit_last;
+    double C;
+    double B;
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
