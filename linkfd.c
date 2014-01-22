@@ -1784,9 +1784,12 @@ int lfd_linker(void)
         } else {
             info.C = C_MED;
         }
-        info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed)
-                / (shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg);
-
+        if ((shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg) == 0) {
+            info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed)
+        } else {
+            info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed)
+                    / (shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg);
+        }
         sem_post(&(shm_conn_info->stats_sem));
 
         if (fast_check_timer(send_q_limit_change_timer, &info.current_time)) {
