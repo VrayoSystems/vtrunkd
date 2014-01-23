@@ -1778,11 +1778,11 @@ int lfd_linker(void)
 
         }
         if (min_speed == shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg) {
-            info.C = C_LOW;
+//            info.C = C_LOW;
         } else if (max_speed == shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg){
             info.C = C_HI;
         } else {
-            info.C = C_MED;
+//            info.C = C_MED;
         }
         if ((shm_conn_info->stats[info.process_num].max_send_q * shm_conn_info->stats[info.process_num].rtt_phys_avg) == 0) {
             info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q * max_speed);
@@ -1803,16 +1803,15 @@ int lfd_linker(void)
             timersub(&(info.current_time), &loss_time, &t_tv);
             int t = t_tv.tv_sec*1000000 + t_tv.tv_usec;
             t = t/10000000;
-            info.send_q_limit_last = info.send_q_limit_cubic;
             double K = cbrt((((double) info.send_q_limit_last) * info.B) / info.C);
-            info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
+            info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_last);
             set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
         }
-
+        vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"", info.send_q_limit_cubic, info.send_q_limit);
         if ((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) {
             hold_mode = 0;
         } else {
-            hold_mode = 1;
+//            hold_mode = 1;
         }
 
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
@@ -2548,7 +2547,7 @@ int lfd_linker(void)
                                 info.send_q_limit_last = info.send_q_limit_cubic;
                                 int t = 0;
                                 double K = cbrt((((double) info.send_q_limit_last) * info.B) / info.C);
-                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
+//                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
                                 sem_post(&(shm_conn_info->stats_sem));
