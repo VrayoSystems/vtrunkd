@@ -1722,7 +1722,6 @@ int lfd_linker(void)
     struct timeval t_tv;
     struct timeval loss_time;
     gettimeofday(&loss_time, NULL);
-    info.send_q_limit_last = 5000;
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -1768,59 +1767,55 @@ int lfd_linker(void)
 
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if (chan_mask & (1 << i)) {
-//                vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d", shm_conn_info->stats[i].max_send_q, shm_conn_info->stats[i].rtt_phys_avg);
+                vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d", shm_conn_info->stats[i].max_send_q, shm_conn_info->stats[i].rtt_phys_avg);
                 if (shm_conn_info->stats[i].rtt_phys_avg == 0) {
-                    shm_conn_info->stats[i].rtt_phys_avg = 1;
+                    continue;
                 }
-                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[i].rtt_phys_avg) > max_speed) {
-                    max_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[i].rtt_phys_avg;
+                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg) > max_speed) {
+                    max_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg;
                     max_chan = i;
                 }
-                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[i].rtt_phys_avg) < min_speed) {
-                    min_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[i].rtt_phys_avg;
+                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg) < min_speed) {
+                    min_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg;
                 }
             }
 
         }
-/*        vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
-                shm_conn_info->stats[info.process_num].rtt_phys_avg,
-                (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));
-*/
-        if (min_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
-            info.C = C_LOW;
-        } else if (max_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[info.process_num].rtt_phys_avg){
-            info.C = C_HI;
-        } else {
-            info.C = C_MED;
-        }
-        if (((shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == 0) {
-            info.send_q_limit = 90000;//(shm_conn_info->stats[max_chan].max_send_q / max_speed);
-        } else {
-            info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q *((shm_conn_info->stats[info.process_num].max_send_q * 1000000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) / max_speed);
 
+        if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
+            vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
+                    shm_conn_info->stats[info.process_num].rtt_phys_avg,
+                    (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));
+            if (min_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
+                info.C = C_LOW;
+            } else if (max_speed
+                    == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
+                info.C = C_HI;
+            } else {
+                info.C = C_MED;
+            }
+            if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
+                info.send_q_limit = 90000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
+            } else {
+                info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q
+                        * ((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg)
+                        / max_speed);
+
+            }
         }
         sem_post(&(shm_conn_info->stats_sem));
 
-        if (fast_check_timer(send_q_limit_change_timer, &info.current_time)) {
-            send_q_limit_change_time.tv_sec = info.rtt / 1000000;
-            if (send_q_limit_change_time.tv_sec > 4) {
-                send_q_limit_change_time.tv_sec = 5;
-                send_q_limit_change_time.tv_usec = 0;
-            } else {
-                send_q_limit_change_time.tv_usec = info.rtt % 1000000;
-            }
-            timersub(&(info.current_time), &loss_time, &t_tv);
-            int t = t_tv.tv_sec*1000000 + t_tv.tv_usec;
-            t = t/100000;//0;
-            double K = cbrt((((double) info.send_q_limit_last) * info.B) / info.C);
-            info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_last);
-            set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
+        timersub(&(info.current_time), &loss_time, &t_tv);
+        int t = t_tv.tv_sec * 1000000 + t_tv.tv_usec;
+        t = t / 1000 / 100;
+        double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+        info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
 
-        vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"", info.send_q_limit_cubic, info.send_q_limit);}
-        if ((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) {
+        vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"", info.send_q_limit_cubic, info.send_q_limit);
+        if (((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) || (info.send_q_limit_cubic_max == 0) || (max_chan = info.process_num) ) {
             hold_mode = 0;
         } else {
-//            hold_mode = 1;
+            hold_mode = 1;
         }
 
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
@@ -2549,13 +2544,13 @@ int lfd_linker(void)
                                   memcpy(&tmp_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
                             info.channel[chan_num].send_q = 1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked);
-                            if (0){//info.channel[chan_num].packet_loss > 0) {
+                            if (info.channel[chan_num].packet_loss > 0) {
                                 vtun_syslog(LOG_ERR, "loss %"PRIu16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time;
-                                info.send_q_limit_last = info.send_q_limit_cubic;
+                                info.send_q_limit_cubic_max = info.channel[chan_num].send_q;
                                 int t = 0;
-                                double K = cbrt((((double) info.send_q_limit_last) * info.B) / info.C);
+//                                double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
 //                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
@@ -2688,7 +2683,7 @@ int lfd_linker(void)
                         gettimeofday(&info.current_time, NULL);
 
                         if (chan_num == my_max_send_q_chan_num) {
-                            info.rtt = (int) ((info.current_time.tv_sec * 1000000 + info.current_time.tv_usec) - ping_req_ts[chan_num]); // us
+                            info.rtt = (int) ((info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000) - ping_req_ts[chan_num]); // ms
 
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 8;

@@ -438,7 +438,7 @@ struct phisical_status {
     /** Calculated values*/
     uint32_t send_q_limit_cubic;
     uint32_t send_q_limit;
-    uint32_t send_q_limit_last;
+    uint32_t send_q_limit_cubic_max;
     double C;
     double B;
 
