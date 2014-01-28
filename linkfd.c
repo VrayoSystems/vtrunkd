@@ -2551,8 +2551,9 @@ int lfd_linker(void)
                                 loss_time = info.current_time;
                                 info.send_q_limit_cubic_max = info.channel[chan_num].send_q;
                                 int t = 0;
-//                                double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-//                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t / 10000000)) - K, 3) + info.send_q_limit_last);
+                                double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+                                vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f", info.send_q_limit_cubic_max, info.B, info.C, K);
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
                                 sem_post(&(shm_conn_info->stats_sem));
@@ -2731,28 +2732,33 @@ int lfd_linker(void)
                     uint32_t local_seq_tmp;
                     memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
                     if (ntohl(local_seq_tmp) > (info.channel[chan_num].local_seq_num_recv + 1)) {
-//#ifdef DEBUGG
+#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
-//#endif
+#endif
                         info.channel[chan_num].packet_loss_counter += (((int32_t) ntohl(local_seq_tmp))
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
-//#ifdef DEBUGG
+#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
                                 ntohl(local_seq_tmp), info.channel[chan_num].packet_loss_counter);
-//#endif
+#endif
                     } else if (ntohl(local_seq_tmp) < info.channel[chan_num].local_seq_num_recv) {
+#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
+#endif
                         info.channel[chan_num].packet_loss_counter--;
+#ifdef DEBUGG
+
                         vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
                                 ntohl(local_seq_tmp), (int)info.channel[chan_num].packet_loss_counter);
+#endif
                     }
                     if (ntohl(local_seq_tmp) > info.channel[chan_num].local_seq_num_recv) {
                         info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
                     }
                     info.channel[chan_num].packet_recv_counter++;
-//#ifdef DEBUGG
+#ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
-//#endif
+#endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
