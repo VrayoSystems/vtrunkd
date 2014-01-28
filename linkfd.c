@@ -2734,7 +2734,8 @@ int lfd_linker(void)
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRIu16"", info.channel[chan_num].packet_loss_counter);
 //#endif
-                        info.channel[chan_num].packet_loss_counter += ntohs(local_seq_tmp) - (info.channel[chan_num].local_seq_num_recv + 1);
+                        info.channel[chan_num].packet_loss_counter += (((int32_t) ntohs(local_seq_tmp))
+                                - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
                                 ntohl(local_seq_tmp), (int)info.channel[chan_num].packet_loss_counter);
