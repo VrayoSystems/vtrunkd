@@ -1811,13 +1811,13 @@ int lfd_linker(void)
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
 
-        vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"", info.send_q_limit_cubic, info.send_q_limit);
-        if (((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) || (info.send_q_limit_cubic_max == 0) || (max_chan = info.process_num) ) {
+        vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit, max_chan);
+        if (((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) || (info.send_q_limit_cubic_max == 0) || (max_chan == info.process_num) ) {
             hold_mode = 0;
         } else {
             hold_mode = 1;
         }
-
+        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
@@ -2207,7 +2207,7 @@ int lfd_linker(void)
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                        ping_req_ts[i] = ((info.current_time.tv_sec) * 1000000) + info.current_time.tv_usec; //save time
+                        ping_req_ts[i] = info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000; //save time
                         int len_ret;
                         if (i == 0) {
                             len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
@@ -2952,7 +2952,7 @@ int lfd_linker(void)
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                ping_req_ts[i] = ((info.current_time.tv_sec) * 1000000) + info.current_time.tv_usec; //save time
+                ping_req_ts[i] = info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000; //save time
                 int len_ret;
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
