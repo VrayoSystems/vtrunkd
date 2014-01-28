@@ -2732,7 +2732,7 @@ int lfd_linker(void)
                     memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
                     if (ntohl(local_seq_tmp) > (info.channel[chan_num].local_seq_num_recv + 1)) {
 //#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss was %"PRIu16"", info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
 //#endif
                         info.channel[chan_num].packet_loss_counter += (((int32_t) ntohs(local_seq_tmp))
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
@@ -2741,7 +2741,10 @@ int lfd_linker(void)
                                 ntohl(local_seq_tmp), (int)info.channel[chan_num].packet_loss_counter);
 //#endif
                     } else if (ntohl(local_seq_tmp) < info.channel[chan_num].local_seq_num_recv) {
+                        vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
                         info.channel[chan_num].packet_loss_counter--;
+                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
+                                ntohl(local_seq_tmp), (int)info.channel[chan_num].packet_loss_counter);
                     }
                     if (ntohl(local_seq_tmp) > info.channel[chan_num].local_seq_num_recv) {
                         info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
