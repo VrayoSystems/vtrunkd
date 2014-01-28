@@ -2553,7 +2553,7 @@ int lfd_linker(void)
                                 int t = 0;
                                 double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
                                 info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-                                vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f", info.send_q_limit_cubic_max, info.B, info.C, K);
+                                vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f W %"PRIu32"", info.send_q_limit_cubic_max, info.B, info.C, K, info.send_q_limit_cubic);
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
                                 sem_post(&(shm_conn_info->stats_sem));
