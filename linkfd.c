@@ -1809,7 +1809,9 @@ int lfd_linker(void)
         int t = t_tv.tv_sec * 1000000 + t_tv.tv_usec;
         t = t / 1000 / 100;
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+        uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+        vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K, t, limit_last, info.send_q_limit_cubic);
 
         vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit, max_chan);
         if (((send_q_eff < info.send_q_limit_cubic) && (send_q_eff < info.send_q_limit)) || (info.send_q_limit_cubic_max == 0) || (max_chan == info.process_num) ) {
@@ -2552,8 +2554,9 @@ int lfd_linker(void)
                                 info.send_q_limit_cubic_max = info.channel[chan_num].send_q;
                                 int t = 0;
                                 double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+                                uint32_t limit_last = info.send_q_limit_cubic;
                                 info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-                                vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f W %"PRIu32"", info.send_q_limit_cubic_max, info.B, info.C, K, info.send_q_limit_cubic);
+                                vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t 0 W was %"PRIu32" now %"PRIu32" loss now", info.send_q_limit_cubic_max, info.B, info.C, K, limit_last, info.send_q_limit_cubic);
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
                                 sem_post(&(shm_conn_info->stats_sem));
