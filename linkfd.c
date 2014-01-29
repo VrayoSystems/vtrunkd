@@ -3066,7 +3066,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     max_reorder_byte = 0;
     last_channels_mask = 0;
     info.C = C_LOW;
-    info.B = 0.9;
+    info.B = 0.2;
     /*Variables for the exact way of measuring speed*/
     send_q_read_timer = (struct timeval) {0, 0};
     send_q_read_drop_time = (struct timeval) {0, 100000};
