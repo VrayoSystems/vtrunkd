@@ -1810,7 +1810,7 @@ int lfd_linker(void)
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
         t = t / 100;
-        t = t > 100 ? 100 : t; // 10s limit
+        t = t > 30 ? 30 : t; // 10s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
