@@ -1753,7 +1753,9 @@ int lfd_linker(void)
         bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
                 + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-        uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
+        uint32_t send_q_eff =
+            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
+                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
         int max_chan=info.process_num;
         uint32_t max_speed=0;
@@ -1783,9 +1785,9 @@ int lfd_linker(void)
         }
 
         if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
-            vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
+           /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
                     shm_conn_info->stats[info.process_num].rtt_phys_avg,
-                    (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));
+                    (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
             if (min_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
                 info.C = C_LOW;
             } else if (max_speed
