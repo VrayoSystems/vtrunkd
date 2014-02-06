@@ -1795,16 +1795,16 @@ int lfd_linker(void)
            /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
                     shm_conn_info->stats[info.process_num].rtt_phys_avg,
                     (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
-            if (min_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
-                info.C = C_LOW;
-            } else if (max_speed
-                    == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
+            if (max_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
                 info.C = C_HI;
+            } else if (min_speed
+                    == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
+                info.C = C_LOW/2;
             } else {
-                info.C = C_MED;
+                info.C = C_MED/2;
             }
             if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
-                info.send_q_limit = 90000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
+                info.send_q_limit = 120000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
             } else {
                 info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q
                         * ((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg)
@@ -1822,10 +1822,10 @@ int lfd_linker(void)
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
        // vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K, t, limit_last, info.send_q_limit_cubic);
-
+        info.send_q_limit_cubic = info.send_q_limit_cubic > 120000 ? 120000 : info.send_q_limit_cubic;
         //vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit, max_chan);
         int hold_mode_previous = hold_mode;
-        if (my_max_send_q < info.send_q_limit_cubic) {
+        if ((my_max_send_q < info.send_q_limit_cubic)) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
         } else {
             hold_mode = 1;
