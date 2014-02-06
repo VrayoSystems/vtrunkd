@@ -1825,7 +1825,7 @@ int lfd_linker(void)
         }
         if ((limit_last != info.send_q_limit_cubic) || (hold_mode_previous != hold_mode))
         vtun_syslog(LOG_INFO, "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\"}",
-                lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q, info.channel[max_chan].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max);
+                lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q, info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max);
 
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
