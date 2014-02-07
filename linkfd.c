@@ -1836,7 +1836,7 @@ int lfd_linker(void)
         } else {
             hold_mode = 1;
         }
-        if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (i_am_max == 1)) {
+        if ((hold_mode_previous != hold_mode) && (hold_mode == 1)){// && (i_am_max == 1)) {
             drop_packet_flag = 1;
         } else {
             drop_packet_flag = 0;
