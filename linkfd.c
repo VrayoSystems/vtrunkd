@@ -1790,13 +1790,14 @@ int lfd_linker(void)
             }
 
         }
-
+        int i_am_max=0;
         if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
            /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
                     shm_conn_info->stats[info.process_num].rtt_phys_avg,
                     (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
             if (max_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
                 info.C = C_HI;
+                i_am_max = 1;
             } else if (min_speed
                     == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
                 info.C = C_LOW/2;
@@ -1825,12 +1826,20 @@ int lfd_linker(void)
         info.send_q_limit_cubic = info.send_q_limit_cubic > 120000 ? 120000 : info.send_q_limit_cubic;
         //vtun_syslog(LOG_INFO, "send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit, max_chan);
         int hold_mode_previous = hold_mode;
-        if ((my_max_send_q < info.send_q_limit_cubic)) { // && (my_max_send_q < info.send_q_limit)) {
-            hold_mode = 0;
+        if (i_am_max) {
+            if ((my_max_send_q < 120000)) { // && (my_max_send_q < info.send_q_limit)) {
+                hold_mode = 0;
+            } else {
+                hold_mode = 1;
+            }
         } else {
-            hold_mode = 1;
+            if ((my_max_send_q < info.send_q_limit_cubic)) { // && (my_max_send_q < info.send_q_limit)) {
+                hold_mode = 0;
+            } else {
+                hold_mode = 1;
+            }
         }
-        if ((hold_mode_previous != hold_mode) && (hold_mode == 1)) {
+        if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (i_am_max)) {
             drop_packet_flag = 1;
         } else {
             drop_packet_flag = 0;
