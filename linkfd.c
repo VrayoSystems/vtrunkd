@@ -1725,6 +1725,11 @@ int lfd_linker(void)
     struct timer_obj *s_q_lim_drop_timer = create_timer();
     update_timer(s_q_lim_drop_timer);
 
+    struct timer_obj *cubic_log_timer = create_timer();
+    struct timeval cubic_log_time = { 0, 5000 };
+    set_timer(cubic_log_timer, &cubic_log_time);
+
+
     struct timeval t_tv;
     struct timeval loss_time;
     gettimeofday(&loss_time, NULL);
@@ -1844,9 +1849,19 @@ int lfd_linker(void)
         } else {
             drop_packet_flag = 0;
         }
-        vtun_syslog(LOG_INFO, "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\"}",
-                lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q, info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max);
+        if (check_timer(cubic_log_timer)) {
+            update_timer(cubic_log_timer);
+            vtun_syslog(LOG_INFO,
+                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\"}",
+                    lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max);
+        } else if (info.channel[my_max_send_q_chan_num].packet_loss != 0) {
+            vtun_syslog(LOG_INFO,
+                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\"}",
+                    lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max);
 
+        }
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
