@@ -1833,10 +1833,10 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }
-        info.send_q_limit_cubic = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
+        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
 
         int hold_mode_previous = hold_mode;
-        if ((my_max_send_q < info.send_q_limit_cubic)) { // && (my_max_send_q < info.send_q_limit)) {
+        if ((my_max_send_q < send_q_limit_cubic_apply)) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
         } else {
             hold_mode = 1;
@@ -1851,12 +1851,12 @@ int lfd_linker(void)
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
                     "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\"}",
-                    lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+                    lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
                     info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0)) {
             vtun_syslog(LOG_INFO,
                     "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\"}",
-                    lfd_host->host, info.send_q_limit, info.send_q_limit_cubic, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+                    lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
                     info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t);
 
         }
