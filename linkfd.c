@@ -1798,7 +1798,7 @@ int lfd_linker(void)
         if (info.process_num == 0)
             info.C = C_HI;
         else
-            info.C = C_LOW;
+            info.C = C_LOW/2;
 
 
         int i_am_max=0;
@@ -1833,12 +1833,12 @@ int lfd_linker(void)
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-        if (info.send_q_limit_cubic > 90000) {
+        /*if (info.send_q_limit_cubic > 90000) {
             vtun_syslog(LOG_ERR, "overflow_test W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K,
                     t, limit_last, info.send_q_limit_cubic);
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
-        }
+        }*/
         uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
 
         int hold_mode_previous = hold_mode;
