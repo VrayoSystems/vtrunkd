@@ -1847,7 +1847,7 @@ int lfd_linker(void)
         } else {
             hold_mode = 1;
         }
-        if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (i_am_max == 1)) {
+        if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (info.process_num == 0)) {
             drop_packet_flag = 1;
             info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
