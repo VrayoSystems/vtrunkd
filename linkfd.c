@@ -1795,7 +1795,11 @@ int lfd_linker(void)
             }
 
         }
-        info.C = C_LOW;
+        if (info.process_num == 0)
+            info.C = C_HI;
+        else
+            info.C = C_LOW;
+
 
         int i_am_max=0;
         if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
