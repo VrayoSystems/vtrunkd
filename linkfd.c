@@ -774,9 +774,9 @@ int select_devread_send(char *buf, char *out2) {
 #endif
             return CONTINUE_ERROR;
         } else if (drop_packet_flag == 1){
-//#ifdef DEBUGG
+#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
-//#endif
+#endif
             return CONTINUE_ERROR;
         }
 #ifdef DEBUGG
