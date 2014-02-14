@@ -774,9 +774,9 @@ int select_devread_send(char *buf, char *out2) {
 #endif
             return CONTINUE_ERROR;
         } else if (drop_packet_flag == 1){
-#ifdef DEBUGG
+//#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
-#endif
+//#endif
             return CONTINUE_ERROR;
         }
 #ifdef DEBUGG
@@ -1853,7 +1853,7 @@ int lfd_linker(void)
         } else {
             drop_packet_flag = 0;
         }
-        if (check_timer(cubic_log_timer)) {
+        /*if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
                     "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\"}",
@@ -1869,7 +1869,7 @@ int lfd_linker(void)
                     lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
                     info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t);
 
-        }
+        }*/
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
