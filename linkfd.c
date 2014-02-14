@@ -1762,8 +1762,8 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        bytes_pass = 0;//t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
-                //+ (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
+        bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
+                + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
         uint32_t send_q_eff =
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
@@ -2933,8 +2933,8 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        bytes_pass = 0;//t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
-                //+ (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
+        bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
+                + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
         send_q_eff =
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
