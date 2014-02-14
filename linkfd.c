@@ -773,7 +773,7 @@ int select_devread_send(char *buf, char *out2) {
             vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
 #endif
             return CONTINUE_ERROR;
-        } else if (drop_packet_flag){
+        } else if (drop_packet_flag == 1){
 //#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
 //#endif
@@ -1847,7 +1847,7 @@ int lfd_linker(void)
         } else {
             hold_mode = 1;
         }
-        if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (info.process_num == 0)) {
+        if ((hold_mode == 1) && (info.process_num == 0)) {
             drop_packet_flag = 1;
             info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
@@ -2923,7 +2923,7 @@ int lfd_linker(void)
         } // for chans..
 
 
-
+/*
         gettimeofday(&info.current_time, NULL);
 
         my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
@@ -2973,9 +2973,7 @@ int lfd_linker(void)
 
 
         if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
-           /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
-                    shm_conn_info->stats[info.process_num].rtt_phys_avg,
-                    (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
+
             if (max_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
             //    info.C = C_HI;
                 i_am_max = 1;
@@ -3007,7 +3005,7 @@ int lfd_linker(void)
         send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
 
         hold_mode_previous = hold_mode;
-        if ((my_max_send_q < send_q_limit_cubic_apply)) { // && (my_max_send_q < info.send_q_limit)) {
+        if ((my_max_send_q < send_q_limit_cubic_apply)) {
             hold_mode = 0;
         } else {
             hold_mode = 1;
@@ -3037,7 +3035,7 @@ int lfd_linker(void)
         }
 
 
-
+*/
 
                 /* Read data from the local device(tun_device), encode and pass it to
              * the network (service_channel)
