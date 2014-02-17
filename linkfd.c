@@ -1727,7 +1727,7 @@ int lfd_linker(void)
     update_timer(s_q_lim_drop_timer);
 
     struct timer_obj *cubic_log_timer = create_timer();
-    struct timeval cubic_log_time = { 0, 5000 };
+    struct timeval cubic_log_time = { 0, 1000 };
     set_timer(cubic_log_timer, &cubic_log_time);
 
 
