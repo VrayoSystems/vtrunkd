@@ -3073,7 +3073,7 @@ int lfd_linker(void)
              *
              *
              * */
-        if (hold_mode) continue;
+      //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
         if (0) {
             len = retransmit_send(out2);
