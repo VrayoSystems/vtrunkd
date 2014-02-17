@@ -2214,7 +2214,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
 #endif
-        if (((hold_mode == 0)) && (info.just_started_recv == 1)) {
+        if (((hold_mode == 0) ||(info.process_num == 0)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
             tv.tv_usec = 200000;
@@ -2236,8 +2236,12 @@ int lfd_linker(void)
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
         if ((drop_packet_flag == 1)) {
+            vtun_syslog(LOG_INFO, "drop_packet_flag selecting");
+
             if (FD_ISSET(info.tun_device, &fdset)) {
                 skip_write_flag = 1;
+                vtun_syslog(LOG_INFO, "drop_packet_flag selecting");
+
                 vtun_syslog(LOG_INFO, "drop_packet_flag skip");
 
             }
