@@ -2236,6 +2236,8 @@ int lfd_linker(void)
         if ((drop_packet_flag == 1)) {
             if (FD_ISSET(info.tun_device, &fdset)) {
                 skip_write_flag = 1;
+                vtun_syslog(LOG_INFO, "drop_packet_flag skip");
+
             }
         }
 #ifdef DEBUGG
