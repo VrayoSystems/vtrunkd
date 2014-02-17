@@ -115,7 +115,7 @@ int sendbuff;
 
 #define START_SQL 5000
 int drop_packet_flag = 0;
-
+int skip_write_flag = 0;
 // these are for retransmit mode... to be removed
 short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
@@ -758,7 +758,7 @@ int select_devread_send(char *buf, char *out2) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
-        if (drop_packet_flag == 1) {
+        if (skip_write_flag == 1) {
             //#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
             //#endif
@@ -2232,6 +2232,11 @@ int lfd_linker(void)
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
+        if ((drop_packet_flag == 1)()) {
+            if (FD_ISSET(info.tun_device, &fdset_tun)){
+                skip_write_flag = 1;
+            }
+        }
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
         vtun_syslog(LOG_INFO, "First select time: %"PRIu32" us descriptors num: %i", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)), len);
