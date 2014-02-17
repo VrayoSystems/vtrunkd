@@ -758,6 +758,12 @@ int select_devread_send(char *buf, char *out2) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
+        if (drop_packet_flag == 1) {
+            //#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "drop_packet_flag");
+            //#endif
+            return CONTINUE_ERROR;
+        }
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
                 vtun_syslog(LOG_INFO, "sem_post! dev read err");
@@ -772,11 +778,6 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
 #endif
-            return CONTINUE_ERROR;
-        } else if (drop_packet_flag == 1){
-//#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "drop_packet_flag");
-//#endif
             return CONTINUE_ERROR;
         }
 #ifdef DEBUGG
