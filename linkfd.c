@@ -1850,9 +1850,11 @@ int lfd_linker(void)
             hold_mode = 1;
         }
         if ( (hold_mode == 1) && (info.process_num == 0)) {
+            vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
             drop_packet_flag = 1;
             info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
+            vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
         /*if (check_timer(cubic_log_timer)) {
