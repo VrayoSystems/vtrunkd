@@ -2233,8 +2233,8 @@ int lfd_linker(void)
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
-        if ((drop_packet_flag == 1)()) {
-            if (FD_ISSET(info.tun_device, &fdset)){
+        if ((drop_packet_flag == 1)) {
+            if (FD_ISSET(info.tun_device, &fdset)) {
                 skip_write_flag = 1;
             }
         }
