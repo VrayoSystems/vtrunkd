@@ -1766,9 +1766,9 @@ int lfd_linker(void)
         bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
                 + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-        uint32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
-            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
-                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
+        uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
+        //    (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
+        //            my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
         int max_chan=info.process_num;
         uint32_t max_speed=0;
@@ -1856,6 +1856,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
+        send_q_eff = bytes_pass;
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
