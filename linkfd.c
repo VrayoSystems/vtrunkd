@@ -1840,8 +1840,8 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }*/
-        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
-
+        uint32_t send_q_limit_cubic_apply = 40000;//info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
+if(info.process_num == 0)send_q_limit_cubic_apply = 70000;
         int hold_mode_previous = hold_mode;
         if ((my_max_send_q < send_q_limit_cubic_apply)) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
