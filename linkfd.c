@@ -758,8 +758,7 @@ int select_devread_send(char *buf, char *out2) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
-        if (skip_write_flag == 1) {
-            skip_write_flag = 0;
+        if (drop_packet_flag == 1) {
             //#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
             //#endif
@@ -1850,14 +1849,14 @@ int lfd_linker(void)
             hold_mode = 1;
         }
         if ( (hold_mode == 1) && (info.process_num == 0)) {
-            vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
+          //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
             drop_packet_flag = 1;
             info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
-            vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
+        //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
-        /*if (check_timer(cubic_log_timer)) {
+        if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
                     "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\"}",
@@ -1873,7 +1872,7 @@ int lfd_linker(void)
                     lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
                     info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t);
 
-        }*/
+        }
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
@@ -1898,13 +1897,13 @@ int lfd_linker(void)
                 sem_wait(&(shm_conn_info->AG_flags_sem));
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
-/*                vtun_syslog(LOG_INFO,
+                vtun_syslog(LOG_INFO,
                         "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"info.rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
                         lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
                         info.rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
                         shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
                         hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
-*/              json_timer.tv_sec = info.current_time.tv_sec;
+                json_timer.tv_sec = info.current_time.tv_sec;
                 json_timer.tv_usec = info.current_time.tv_usec;
                 info.max_send_q_max = 0;
                 info.max_send_q_min = 120000;
@@ -2214,7 +2213,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
 #endif
-        if (((hold_mode == 0) ||(info.process_num == 0)) && (info.just_started_recv == 1)) {
+        if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
             tv.tv_usec = 200000;
@@ -2235,17 +2234,7 @@ int lfd_linker(void)
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
-        if ((drop_packet_flag == 1)) {
-            vtun_syslog(LOG_INFO, "drop_packet_flag selecting");
 
-            if (FD_ISSET(info.tun_device, &fdset)) {
-                skip_write_flag = 1;
-                vtun_syslog(LOG_INFO, "drop_packet_flag selecting");
-
-                vtun_syslog(LOG_INFO, "drop_packet_flag skip");
-
-            }
-        }
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
         vtun_syslog(LOG_INFO, "First select time: %"PRIu32" us descriptors num: %i", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)), len);
