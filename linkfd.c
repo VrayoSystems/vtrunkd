@@ -759,6 +759,7 @@ int select_devread_send(char *buf, char *out2) {
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
         if (skip_write_flag == 1) {
+            skip_write_flag = 0;
             //#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "drop_packet_flag");
             //#endif
