@@ -1766,7 +1766,7 @@ int lfd_linker(void)
         bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
                 + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-        uint32_t send_q_eff =info.channel[my_max_send_q_chan_num].bytes_put * 1000;
+        uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
       //      (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
       //              my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
