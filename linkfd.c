@@ -2643,8 +2643,8 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                                     ntohl(tmp_n) > info.channel[chan_num].packet_recv_upload ?
                                             (ntohl(tmp_n) - info.channel[chan_num].packet_recv_upload) / 4
                                                     + info.channel[chan_num].packet_recv_upload :
-                                            (info.channel[chan_num].packet_recv_upload - ntohl(tmp_n)) / 4
-                                                    + info.channel[chan_num].packet_recv_upload;
+                                            info.channel[chan_num].packet_recv_upload
+                                                    - (info.channel[chan_num].packet_recv_upload - ntohl(tmp_n)) / 4;
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
