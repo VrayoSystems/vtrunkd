@@ -375,6 +375,8 @@ struct logical_status {
     uint32_t up_packets; /**< how much packets are uploaded */
     uint32_t download;  /**< download speed */
     uint32_t down_len;    /**< how much bytes are downloaded */
+    uint32_t packet_download;
+    uint32_t down_packets;
     uint32_t rtt;       /**< rtt is measured by vtrunkd */
     uint32_t tcp_rtt;   /**< rtt is said by @see get_format_tcp_info() */
     uint32_t magic_rtt;   /**< rtt based on @see ACK_speed_avg */

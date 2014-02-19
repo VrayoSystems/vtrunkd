@@ -1730,6 +1730,9 @@ int lfd_linker(void)
     struct timeval cubic_log_time = { 0, 1000 };
     set_timer(cubic_log_timer, &cubic_log_time);
 
+    struct timer_obj *packet_speed_timer = create_timer();
+    struct timeval packet_speed_timer_time = { 0, 100000 };
+    set_timer(packet_speed_timer, &packet_speed_timer_time);
 
     struct timeval t_tv;
     struct timeval loss_time;
@@ -1857,6 +1860,21 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             drop_packet_flag = 0;
         }
         send_q_eff = bytes_pass;
+
+        if (fast_check_timer(packet_speed_timer, &info.current_time)) {
+            gettimeofday(&info.current_time, NULL );
+            uint32_t tv;
+            tv = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
+                    + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
+            if (tv != 0) {
+                for (i = 1; i < info.channel_amount; i++) {
+                    info.channel[i].packet_download = (info.channel[i].down_packets * 1000000) / tv;
+                    info.channel[i].down_packets = 0;
+                }
+                update_timer(packet_speed_timer);
+            }
+        }
+
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
@@ -1963,7 +1981,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
                 memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // pkt recv period
-                tmp_n = htonl(shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed);
+                tmp_n = htonl(info.channel[i].down_packets);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
 #ifdef DEBUGG
@@ -2787,7 +2805,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                      */
                     
                     gettimeofday(&info.current_time, NULL);
-                    shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_packets++;// accumulate number of packets
+                    info.channel[i].down_packets++; // accumulate number of packets
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
