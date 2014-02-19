@@ -1869,7 +1869,10 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             if (tv != 0) {
                 for (i = 1; i < info.channel_amount; i++) {
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 10000) / tv)*100;
+                    if (info.channel[i].down_packets > 0)
+                        vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets);
                     info.channel[i].down_packets = 0;
+
                 }
                 update_timer(packet_speed_timer);
             }
