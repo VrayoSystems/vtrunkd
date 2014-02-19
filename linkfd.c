@@ -2808,7 +2808,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                      */
                     
                     gettimeofday(&info.current_time, NULL);
-                    info.channel[i].down_packets++; // accumulate number of packets
+                    info.channel[chan_num].down_packets++; // accumulate number of packets
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
