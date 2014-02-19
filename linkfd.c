@@ -1859,7 +1859,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
-//        send_q_eff = bytes_pass;
+        send_q_eff = bytes_pass;
 
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
