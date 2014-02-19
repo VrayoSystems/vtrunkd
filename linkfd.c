@@ -1766,12 +1766,12 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        bytes_pass = t_tv.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
-                + (t_tv.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
+        bytes_pass = t_tv.tv_sec * info.channel[my_max_send_q_chan_num].packet_recv_upload
+                + ((t_tv.tv_usec/10) * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 10000;
 
-        uint32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
-            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
-                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
+        uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
+            //(my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
+            //        my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
         int max_chan=info.process_num;
         uint32_t max_speed=0;
@@ -1859,7 +1859,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
-        send_q_eff = bytes_pass;
+//        send_q_eff = bytes_pass;
 
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
