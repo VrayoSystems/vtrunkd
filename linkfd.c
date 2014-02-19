@@ -1868,7 +1868,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                     + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
             if (tv != 0) {
                 for (i = 1; i < info.channel_amount; i++) {
-                    info.channel[i].packet_download = (info.channel[i].down_packets * 1000000) / tv;
+                    info.channel[i].packet_download = ((info.channel[i].down_packets * 10000) / tv)*100;
                     info.channel[i].down_packets = 0;
                 }
                 update_timer(packet_speed_timer);
