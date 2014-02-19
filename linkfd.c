@@ -1736,6 +1736,10 @@ int lfd_linker(void)
     struct timeval packet_speed_timer_time = { 0, 100000 };
     set_timer(packet_speed_timer, &packet_speed_timer_time);
 
+    struct timer_obj *hold_timer = create_timer();
+    struct timeval hold_timer_time = { 999999, 0 };
+    set_timer(hold_timer, &hold_timer_time);
+
     struct timeval t_tv;
     struct timeval loss_time;
     gettimeofday(&loss_time, NULL);
@@ -1879,22 +1883,30 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                 update_timer(packet_speed_timer);
             }
         }
-
+        uint32_t hold_time = 0;
+        if (hold_mode_previous != hold_mode) {
+            if (hold_mode == 0) {
+                hold_time = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
+                        + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
+            } else {
+                update_timer(hold_timer);
+            }
+        }
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\"}",
                     lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\"}",
                     lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time);
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\"}",
                     lfd_host->host, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time);
 
         }
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
