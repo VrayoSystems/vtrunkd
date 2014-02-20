@@ -102,6 +102,14 @@ struct my_ip {
 };
 
 #define SEND_Q_LIMIT_MINIMAL 10000
+
+#define TIMEWARP
+
+#ifdef TIMEWARP
+    #define TW_MAX 10000000
+    #include <stdarg.h>
+#endif
+
 // flags:
 uint8_t time_lag_ready;
 
@@ -1355,6 +1363,41 @@ int ag_switcher() {
     return R_MODE;
 }
 
+
+#ifdef TIMEWARP
+int print_tw(char *buf, int *pos, const char *format, ...) {
+    va_list args;
+    int slen;
+    struct timeval dt;
+    gettimeofday(&dt, NULL);
+    
+    sprintf(buf + *pos, "%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
+    *pos = *pos + 19;
+    
+    va_start(args, format);
+    int out = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    slen = strlen(buf+*pos);
+    *pos = *pos + slen;
+    if(*pos > TW_MAX - 10000) { // WARNING: 10000 max per line!
+        sprintf(buf + *pos, "---- Overflow!\n");
+        *pos = 0;
+    }
+    return out;
+}
+
+int flush_tw(char *buf) {
+    // flush, memset
+    int fd = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRWXU);
+    int slen = strlen(buf);
+    int len = write(fd, buf, slen);
+    close(fd);
+    memset(buf, 0, TW_MAX);
+    return len;
+}
+#endif
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -1747,6 +1790,14 @@ int lfd_linker(void)
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
     drop_packet_flag = 0;
+    
+    #ifdef TIMEWARP
+        char *timewarp = malloc(TW_MAX); // 10mb time-warp
+        memset(timewarp, 0, TW_MAX);
+        int tw_cur = 0;
+        sprintf(timewarp+tw_cur, "started\n");
+    #endif
+    
 /**
  *
  *
@@ -1762,6 +1813,8 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
 //        usleep(100); // todo need to tune; Is it necessary? I don't know
+
+
         errno = 0;
         gettimeofday(&info.current_time, NULL);
 
@@ -1854,8 +1907,21 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         int hold_mode_previous = hold_mode;
         if ((send_q_eff < send_q_limit_cubic_apply + 5000)) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
+            #ifdef TIMEWARP
+            if (hold_mode_previous != hold_mode) {
+                print_tw(timewarp, &tw_cur, "hold_mode end");
+                flush_tw(timewarp);
+                vtun_syslog(LOG_INFO, "Time warp FLUSH!");
+            }
+            #endif
         } else {
             hold_mode = 1;
+            #ifdef TIMEWARP
+            if (hold_mode_previous != hold_mode) {
+                print_tw(timewarp, &tw_cur, "hold_mode start");
+                vtun_syslog(LOG_INFO, "Time warp func!");
+            }
+            #endif
         }
         if ( (hold_mode == 1) && (info.process_num == 0)) {
           //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
@@ -2640,6 +2706,9 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
+                            #ifdef TIMEWARP
+                            print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d", info.channel[chan_num].send_q, chan_num);
+                            #endif
                             if (info.channel[chan_num].packet_loss > 0) {
         //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
         //                                info.channel[chan_num].send_q);
