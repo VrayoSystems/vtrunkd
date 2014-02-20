@@ -298,7 +298,7 @@ int flush_tw(char *buf, int *tw_cur) {
     // flush, memset
     int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
     int slen = strlen(buf);
-    vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
+    //vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
     int len = write(fd, buf, slen);
     close(fd);
     memset(buf, 0, TW_MAX);
@@ -1436,7 +1436,10 @@ int lfd_linker(void)
         sprintf(timewarp+tw_cur, "started\n");
         int fdc = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         close(fdc);
+        int send_q_min = 999999999;
+        int send_q_eff_min = 999999999;
     #endif
+    
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
     int err=0;
@@ -1852,10 +1855,23 @@ int lfd_linker(void)
         bytes_pass = t_tv.tv_sec * info.channel[my_max_send_q_chan_num].packet_recv_upload
                 + ((t_tv.tv_usec/10) * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 100000;
 
+        
         uint32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
+                    
+        if(my_max_send_q < send_q_min) {
+            send_q_min = my_max_send_q;
+            print_tw(timewarp, &tw_cur, "send_q_min %d", send_q_min);
+            flush_tw(timewarp, &tw_cur);
+        }
+        if(send_q_eff < send_q_eff_min) {
+            send_q_eff_min = send_q_eff;
+            print_tw(timewarp, &tw_cur, "send_q_eff_min %d", send_q_eff_min);
+            flush_tw(timewarp, &tw_cur);
+        }
+        
         int max_chan=info.process_num;
         uint32_t max_speed=0;
         uint32_t min_speed=(UINT32_MAX - 1);
@@ -1935,6 +1951,8 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             if (hold_mode_previous != hold_mode) {
                 print_tw(timewarp, &tw_cur, "hold_mode end send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
                 flush_tw(timewarp, &tw_cur);
+                send_q_min = 999999999;
+                send_q_eff_min = 999999999;
                 //vtun_syslog(LOG_INFO, "Time warp FLUSH!");
             }
             #endif
