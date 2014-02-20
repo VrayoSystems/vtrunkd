@@ -108,7 +108,11 @@ struct my_ip {
 #ifdef TIMEWARP
     #define TW_MAX 10000000
     #include <stdarg.h>
+    char *timewarp;
+    int tw_cur;
 #endif
+
+
 
 // flags:
 uint8_t time_lag_ready;
@@ -263,6 +267,51 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
 }
 
 
+
+
+
+
+#ifdef TIMEWARP
+int print_tw(char *buf, int *pos, const char *format, ...) {
+    va_list args;
+    int slen;
+    struct timeval dt;
+    gettimeofday(&dt, NULL);
+    
+    sprintf(buf + *pos, "\n%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
+    *pos = *pos + 20;
+    
+    va_start(args, format);
+    int out = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    slen = strlen(buf+*pos);
+    *pos = *pos + slen;
+    if(*pos > TW_MAX - 10000) { // WARNING: 10000 max per line!
+        sprintf(buf + *pos, "---- Overflow!\n");
+        *pos = 0;
+    }
+    return out;
+}
+
+int flush_tw(char *buf, int *tw_cur) {
+    // flush, memset
+    int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
+    int slen = strlen(buf);
+    vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
+    int len = write(fd, buf, slen);
+    close(fd);
+    memset(buf, 0, TW_MAX);
+    *tw_cur = 0;
+    return len;
+}
+
+int start_tw(char *buf, int *c) {
+    memset(buf, 0, TW_MAX);
+    *c = 0;
+    return 0;
+}
+#endif
 
 
 
@@ -768,6 +817,9 @@ int select_devread_send(char *buf, char *out2) {
         sem_post(&(shm_conn_info->tun_device_sem));
         if (drop_packet_flag == 1) {
             drop_counter++;
+            #ifdef TIMEWARP
+                print_tw(timewarp, &tw_cur, "drop packet");
+            #endif
             if (drop_counter>1000) drop_counter=0;
             //#ifdef DEBUGG
             //vtun_syslog(LOG_INFO, "drop_packet_flag");
@@ -1365,48 +1417,6 @@ int ag_switcher() {
 }
 
 
-#ifdef TIMEWARP
-int print_tw(char *buf, int *pos, const char *format, ...) {
-    va_list args;
-    int slen;
-    struct timeval dt;
-    gettimeofday(&dt, NULL);
-    
-    sprintf(buf + *pos, "\n%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
-    *pos = *pos + 20;
-    
-    va_start(args, format);
-    int out = vsprintf(buf+*pos, format, args);
-    va_end(args);
-    
-    slen = strlen(buf+*pos);
-    *pos = *pos + slen;
-    if(*pos > TW_MAX - 10000) { // WARNING: 10000 max per line!
-        sprintf(buf + *pos, "---- Overflow!\n");
-        *pos = 0;
-    }
-    return out;
-}
-
-int flush_tw(char *buf, int *tw_cur) {
-    // flush, memset
-    int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
-    int slen = strlen(buf);
-    vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
-    int len = write(fd, buf, slen);
-    close(fd);
-    memset(buf, 0, TW_MAX);
-    *tw_cur = 0;
-    return len;
-}
-
-int start_tw(char *buf, int *c) {
-    memset(buf, 0, TW_MAX);
-    *c = 0;
-    return 0;
-}
-#endif
-
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -1808,6 +1818,7 @@ int lfd_linker(void)
         int fdc = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         close(fdc);
     #endif
+
     
 /**
  *
@@ -1938,9 +1949,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         if ( (hold_mode == 1) && (info.process_num == 0)) {
           //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
             drop_packet_flag = 1;
-            #ifdef TIMEWARP
-                print_tw(timewarp, &tw_cur, "drop packet");
-            #endif
+
         //    info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
@@ -2722,7 +2731,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
                             #ifdef TIMEWARP
-                            print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked);
+                            print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             #endif
                             if (info.channel[chan_num].packet_loss > 0) {
         //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
