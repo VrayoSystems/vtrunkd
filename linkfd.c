@@ -772,6 +772,7 @@ int select_devread_send(char *buf, char *out2) {
             //#ifdef DEBUGG
             //vtun_syslog(LOG_INFO, "drop_packet_flag");
             //#endif
+
             return CONTINUE_ERROR;
         }
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
@@ -1398,6 +1399,12 @@ int flush_tw(char *buf, int *tw_cur) {
     *tw_cur = 0;
     return len;
 }
+
+int start_tw(char *buf, int *c) {
+    memset(buf, 0, TW_MAX);
+    *c = 0;
+    return 0;
+}
 #endif
 
 /*
@@ -1922,6 +1929,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             hold_mode = 1;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
+                start_tw(timewarp, &tw_cur);
                 print_tw(timewarp, &tw_cur, "hold_mode start");
                 vtun_syslog(LOG_INFO, "Time warp func!");
             }
@@ -1930,6 +1938,9 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         if ( (hold_mode == 1) && (info.process_num == 0)) {
           //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
             drop_packet_flag = 1;
+            #ifdef TIMEWARP
+                print_tw(timewarp, &tw_cur, "drop packet");
+            #endif
         //    info.channel[my_max_send_q_chan_num].packet_loss++;
         } else {
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
@@ -2711,7 +2722,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
                             #ifdef TIMEWARP
-                            print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d", info.channel[chan_num].send_q, chan_num);
+                            print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked);
                             #endif
                             if (info.channel[chan_num].packet_loss > 0) {
         //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
