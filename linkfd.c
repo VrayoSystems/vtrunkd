@@ -1933,7 +1933,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             hold_mode = 0;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
-                print_tw(timewarp, &tw_cur, "hold_mode end");
+                print_tw(timewarp, &tw_cur, "hold_mode end send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
                 flush_tw(timewarp, &tw_cur);
                 //vtun_syslog(LOG_INFO, "Time warp FLUSH!");
             }
@@ -1943,7 +1943,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
                 start_tw(timewarp, &tw_cur);
-                print_tw(timewarp, &tw_cur, "hold_mode start");
+                print_tw(timewarp, &tw_cur, "hold_mode start send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
                 //vtun_syslog(LOG_INFO, "Time warp func!");
             }
             #endif
