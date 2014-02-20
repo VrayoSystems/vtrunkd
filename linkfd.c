@@ -1371,8 +1371,8 @@ int print_tw(char *buf, int *pos, const char *format, ...) {
     struct timeval dt;
     gettimeofday(&dt, NULL);
     
-    sprintf(buf + *pos, "%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
-    *pos = *pos + 19;
+    sprintf(buf + *pos, "\n%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
+    *pos = *pos + 20;
     
     va_start(args, format);
     int out = vsprintf(buf+*pos, format, args);
@@ -1387,13 +1387,15 @@ int print_tw(char *buf, int *pos, const char *format, ...) {
     return out;
 }
 
-int flush_tw(char *buf) {
+int flush_tw(char *buf, int *tw_cur) {
     // flush, memset
-    int fd = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRWXU);
+    int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
     int slen = strlen(buf);
+    vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
     int len = write(fd, buf, slen);
     close(fd);
     memset(buf, 0, TW_MAX);
+    *tw_cur = 0;
     return len;
 }
 #endif
@@ -1796,6 +1798,8 @@ int lfd_linker(void)
         memset(timewarp, 0, TW_MAX);
         int tw_cur = 0;
         sprintf(timewarp+tw_cur, "started\n");
+        int fdc = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        close(fdc);
     #endif
     
 /**
@@ -1910,7 +1914,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
                 print_tw(timewarp, &tw_cur, "hold_mode end");
-                flush_tw(timewarp);
+                flush_tw(timewarp, &tw_cur);
                 vtun_syslog(LOG_INFO, "Time warp FLUSH!");
             }
             #endif
