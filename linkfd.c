@@ -2775,26 +2775,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                                 }
                             }
                             hold_mode_previous = hold_mode;
-                            if ((my_max_send_q < send_q_limit_cubic_apply + 5000)) { // && (my_max_send_q < info.send_q_limit)) {
-                                hold_mode = 0;
-#ifdef TIMEWARP
-                                if (hold_mode_previous != hold_mode) {
-                                    print_tw(timewarp, &tw_cur, "hold_mode end send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
-                                    flush_tw(timewarp, &tw_cur);
-                                }
-#endif
-                            } else {
-                                hold_mode = 1;
-#ifdef TIMEWARP
-                                if (hold_mode_previous != hold_mode) {
-                                    start_tw(timewarp, &tw_cur);
-                                    print_tw(timewarp, &tw_cur, "hold_mode start send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
-                                }
-#endif
-                            }
-                            if ((hold_mode == 1) && (info.process_num == 0)) {
-                                drop_packet_flag = 1;
-                            } else {
+                            if (my_max_send_q < send_q_limit_cubic_apply + 5000) {
                                 drop_packet_flag = 0;
                             }
                             sem_wait(&(shm_conn_info->stats_sem));
