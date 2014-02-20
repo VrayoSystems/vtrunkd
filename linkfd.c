@@ -1979,7 +1979,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
 
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
-            uint32_t tv;
+            uint32_t tv, max_packets=0;
             tv = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
                     + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
             if (tv != 0) {
@@ -1987,10 +1987,19 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 100000) / tv)*10;
                     if (info.channel[i].down_packets > 0)
                         vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv);
+                    if (max_packets<info.channel[i].down_packets) max_packets=info.channel[i].down_packets;
                     info.channel[i].down_packets = 0;
 
                 }
-                update_timer(packet_speed_timer);
+                if (max_packets<10){
+                    if (packet_speed_timer_time.tv_usec < 500) packet_speed_timer_time.tv_usec += 20;
+                    set_timer(packet_speed_timer, &packet_speed_timer_time);
+                } else if (max_packets>200){
+                    if (packet_speed_timer_time.tv_usec > 30) packet_speed_timer_time.tv_usec -= 20;
+                    set_timer(packet_speed_timer, &packet_speed_timer_time);
+                } else {
+                    update_timer(packet_speed_timer);
+                }
             }
         }
         uint32_t hold_time = 0;
