@@ -1428,6 +1428,15 @@ int ag_switcher() {
 
 int lfd_linker(void)
 {
+    
+    #ifdef TIMEWARP
+        timewarp = malloc(TW_MAX); // 10mb time-warp
+        memset(timewarp, 0, TW_MAX);
+        tw_cur = 0;
+        sprintf(timewarp+tw_cur, "started\n");
+        int fdc = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        close(fdc);
+    #endif
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
     int err=0;
@@ -1810,14 +1819,7 @@ int lfd_linker(void)
     sem_post(&(shm_conn_info->AG_flags_sem));
     drop_packet_flag = 0;
     
-    #ifdef TIMEWARP
-        char *timewarp = malloc(TW_MAX); // 10mb time-warp
-        memset(timewarp, 0, TW_MAX);
-        int tw_cur = 0;
-        sprintf(timewarp+tw_cur, "started\n");
-        int fdc = open("/tmp/TIMEWARP.log", O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-        close(fdc);
-    #endif
+
 
     
 /**
@@ -1933,7 +1935,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             if (hold_mode_previous != hold_mode) {
                 print_tw(timewarp, &tw_cur, "hold_mode end");
                 flush_tw(timewarp, &tw_cur);
-                vtun_syslog(LOG_INFO, "Time warp FLUSH!");
+                //vtun_syslog(LOG_INFO, "Time warp FLUSH!");
             }
             #endif
         } else {
@@ -1942,7 +1944,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
             if (hold_mode_previous != hold_mode) {
                 start_tw(timewarp, &tw_cur);
                 print_tw(timewarp, &tw_cur, "hold_mode start");
-                vtun_syslog(LOG_INFO, "Time warp func!");
+                //vtun_syslog(LOG_INFO, "Time warp func!");
             }
             #endif
         }
