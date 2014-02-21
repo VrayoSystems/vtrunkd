@@ -1986,10 +1986,9 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                 for (i = 1; i < info.channel_amount; i++) {
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 100000) / tv)*10;
                     if (info.channel[i].down_packets > 0)
-                        vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv);
+                        vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
                     if (max_packets<info.channel[i].down_packets) max_packets=info.channel[i].down_packets;
                     info.channel[i].down_packets = 0;
-
                 }
                 if (max_packets<10){
                     if (packet_speed_timer_time.tv_usec < 500) packet_speed_timer_time.tv_usec += 20;
