@@ -1807,7 +1807,7 @@ int lfd_linker(void)
     set_timer(cubic_log_timer, &cubic_log_time);
 
     struct timer_obj *packet_speed_timer = create_timer();
-    struct timeval packet_speed_timer_time = { 0, 100000 };
+    struct timeval packet_speed_timer_time = { 0, 500000 };
     set_timer(packet_speed_timer, &packet_speed_timer_time);
 
     struct timer_obj *hold_timer = create_timer();
@@ -1991,10 +1991,10 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                     info.channel[i].down_packets = 0;
                 }
                 if (max_packets<10){
-                    if (packet_speed_timer_time.tv_usec < 500) packet_speed_timer_time.tv_usec += 20;
+                    if (packet_speed_timer_time.tv_usec < 700) packet_speed_timer_time.tv_usec += 20;
                     set_timer(packet_speed_timer, &packet_speed_timer_time);
                 } else if (max_packets>200){
-                    if (packet_speed_timer_time.tv_usec > 30) packet_speed_timer_time.tv_usec -= 20;
+                    if (packet_speed_timer_time.tv_usec > 400) packet_speed_timer_time.tv_usec -= 20;
                     set_timer(packet_speed_timer, &packet_speed_timer_time);
                 } else {
                     update_timer(packet_speed_timer);
