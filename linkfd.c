@@ -1852,8 +1852,8 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        bytes_pass = t_tv.tv_sec * info.channel[my_max_send_q_chan_num].packet_recv_upload
-                + ((t_tv.tv_usec/10) * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 100000;
+        bytes_pass = t_tv.tv_sec * info.channel[my_max_send_q_chan_num].packet_recv_upload_avg
+                + ((t_tv.tv_usec/10) * info.channel[my_max_send_q_chan_num].packet_recv_upload_avg) / 100000;
 
         
         uint32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
@@ -2799,12 +2799,20 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_recv_upload =
-                                    ntohl(tmp_n) > info.channel[chan_num].packet_recv_upload ?
-                                            (ntohl(tmp_n) - info.channel[chan_num].packet_recv_upload) / 4
-                                                    + info.channel[chan_num].packet_recv_upload :
-                                            info.channel[chan_num].packet_recv_upload
-                                                    - (info.channel[chan_num].packet_recv_upload - ntohl(tmp_n)) / 4;
+                            int show_speed=0;
+                            if (ntohl(tmp_n) != info.channel[chan_num].packet_recv_upload) {
+                                show_speed=1;
+                            }
+                            info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
+                            info.channel[chan_num].packet_recv_upload_avg =
+                                    info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
+                                            (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
+                                                    + info.channel[chan_num].packet_recv_upload_avg :
+                                            info.channel[chan_num].packet_recv_upload_avg
+                                                    - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
+                            if(show_speed){
+                                vtun_syslog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                            }
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =

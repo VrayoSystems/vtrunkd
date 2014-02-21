@@ -401,6 +401,7 @@ struct logical_status {
     uint32_t packet_seq_num_acked;
     uint32_t packet_recv_period;
     uint32_t packet_recv_upload;
+    uint32_t packet_recv_upload_avg;
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
 
     uint32_t bytes_put;
