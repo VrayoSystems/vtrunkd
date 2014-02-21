@@ -1975,7 +1975,7 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
         //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
             drop_packet_flag = 0;
         }
-        //send_q_eff = bytes_pass;
+        send_q_eff = bytes_pass;
 
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
@@ -2119,12 +2119,12 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                 tmp_n = htonl(info.channel[i].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
-//#ifdef DEBUGG
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-//#endif
+#endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -2799,10 +2799,12 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+#ifdef DEBUGG
                             int show_speed=0;
                             if (ntohl(tmp_n) != info.channel[chan_num].packet_recv_upload) {
                                 show_speed=1;
                             }
+#endif
                             info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
                             info.channel[chan_num].packet_recv_upload_avg =
                                     info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
@@ -2810,9 +2812,11 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                                                     + info.channel[chan_num].packet_recv_upload_avg :
                                             info.channel[chan_num].packet_recv_upload_avg
                                                     - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
+#ifdef DEBUGG
                             if(show_speed){
                                 vtun_syslog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             }
+#endif
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
