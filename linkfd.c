@@ -2116,15 +2116,15 @@ if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
                 info.channel[i].last_info_send_time = info.current_time;
                 tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
                 memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // pkt recv period
-                tmp_n = htonl(info.channel[i].down_packets);
+                tmp_n = htonl(info.channel[i].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
-#ifdef DEBUGG
+//#ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-#endif
+//#endif
                 int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
