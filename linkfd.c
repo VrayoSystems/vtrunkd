@@ -1919,20 +1919,19 @@ int lfd_linker(void)
               //  info.C = C_LOW/2;
             } else {
                // info.C = C_MED/2;
-            }
-            if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
-                info.send_q_limit = 140000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
-            } else {
-                info.send_q_limit = (shm_conn_info->stats[max_chan].max_send_q
-                        * ((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg)
-                        / max_speed);
-
-            }
+            }}
+//            if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
+        if (info.head_channel) {
+            info.send_q_limit = 140000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
+        } else {
+            info.send_q_limit = (shm_conn_info->stats[0].max_send_q * shm_conn_info->stats[info.process_num].ACK_speed)
+                    / shm_conn_info->stats[0].ACK_speed;
         }
+
         sem_post(&(shm_conn_info->stats_sem));
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-        t = t / 100;
+        t = t / 500;
         t = t > 2000 ? 2000 : t; // 200s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
@@ -2778,7 +2777,7 @@ int lfd_linker(void)
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
-                                t = t / 100;
+                                t = t / 500;
                                 t = t > 2000 ? 2000 : t; // 200s limit
                             }
                             double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
