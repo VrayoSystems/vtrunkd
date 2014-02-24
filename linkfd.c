@@ -1821,7 +1821,13 @@ int lfd_linker(void)
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
     drop_packet_flag = 0;
-    
+    if (info.process_num == 0) {
+        info.head_channel = 1;
+        info.C = C_HI;
+    } else {
+        info.head_channel = 0;
+        info.C = C_LOW/2;
+    }
 
 
     
@@ -1899,11 +1905,6 @@ int lfd_linker(void)
             }
 
         }
-        if (info.process_num == 0)
-            info.C = C_HI;
-        else
-            info.C = C_LOW/2;
-
 
         int i_am_max=0;
         if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
@@ -1929,7 +1930,6 @@ int lfd_linker(void)
             }
         }
         sem_post(&(shm_conn_info->stats_sem));
-
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
         t = t / 100;
@@ -1943,11 +1943,10 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }*/
-        uint32_t send_q_limit_cubic_apply = 20000;//info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
-if(info.process_num == 0)send_q_limit_cubic_apply = 50000;
-else send_q_limit_cubic_apply = 30000;
+        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
+
         int hold_mode_previous = hold_mode;
-        if ((send_q_eff < send_q_limit_cubic_apply + 5000)) { // && (my_max_send_q < info.send_q_limit)) {
+        if (send_q_eff < send_q_limit_cubic_apply) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
@@ -2763,20 +2762,18 @@ else send_q_limit_cubic_apply = 30000;
                             #ifdef TIMEWARP
                             print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             #endif
-                            if (info.channel[chan_num].packet_loss > 0) {
-        //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
-        //                                info.channel[chan_num].send_q);
-                                loss_time = info.current_time;
-                                info.send_q_limit_cubic_max = info.channel[chan_num].send_q;
-                                int t = 0;
-                                double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-                                uint32_t limit_last = info.send_q_limit_cubic;
-                                info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-        //                        vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t 0 W was %"PRIu32" now %"PRIu32" loss now", info.send_q_limit_cubic_max, info.B, info.C, K, limit_last, info.send_q_limit_cubic);
-                                sem_wait(&(shm_conn_info->stats_sem));
-                                shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
-                                sem_post(&(shm_conn_info->stats_sem));
-                            }
+                            //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
+                            //                                info.channel[chan_num].send_q);
+                            loss_time = info.current_time;
+                            info.send_q_limit_cubic_max = info.channel[chan_num].send_q;
+                            int t = 0;
+                            double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+                            uint32_t limit_last = info.send_q_limit_cubic;
+                            info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+                            //                        vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t 0 W was %"PRIu32" now %"PRIu32" loss now", info.send_q_limit_cubic_max, info.B, info.C, K, limit_last, info.send_q_limit_cubic);
+                            sem_wait(&(shm_conn_info->stats_sem));
+                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
+                            sem_post(&(shm_conn_info->stats_sem));
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
                                 if (my_max_send_q < info.channel[i].send_q) {
@@ -2785,7 +2782,7 @@ else send_q_limit_cubic_apply = 30000;
                                 }
                             }
                             hold_mode_previous = hold_mode;
-                            if (my_max_send_q < send_q_limit_cubic_apply + 5000) {
+                            if (my_max_send_q < send_q_limit_cubic_apply) {
                                 drop_packet_flag = 0;
                             }
                             sem_wait(&(shm_conn_info->stats_sem));

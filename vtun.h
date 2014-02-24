@@ -419,6 +419,7 @@ struct phisical_status {
     int remote_pid; /**< Pid is got from another side by net */
     int tun_device; /**< /dev/tun descriptor */
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
+    int head_channel;
 
     /** Collect statistic*/
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
