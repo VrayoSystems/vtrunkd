@@ -2011,6 +2011,7 @@ int lfd_linker(void)
                 update_timer(hold_timer);
             }
         }
+        send_q_limit_cubic_apply -= 5000;
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
