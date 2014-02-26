@@ -1924,6 +1924,9 @@ int lfd_linker(void)
         if (info.head_channel) {
             info.send_q_limit = 140000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
         } else {
+            if (shm_conn_info->stats[0].ACK_speed == 0) {
+                shm_conn_info->stats[0].ACK_speed = 1;
+            }
             info.send_q_limit = (shm_conn_info->stats[0].max_send_q * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
         }
