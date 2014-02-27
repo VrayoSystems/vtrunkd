@@ -438,6 +438,7 @@ struct phisical_status {
     unsigned int byte_resend;
     unsigned int byte_r_mode;
     int rtt;
+    uint32_t packet_recv_upload_avg;
 
     /** Calculated values*/
     uint32_t send_q_limit_cubic;
