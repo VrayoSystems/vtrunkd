@@ -430,7 +430,7 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 }
 
 int get_write_buf_wait_data() {
-    struct timeval max_latency_drop = { 0, 200000 }, tv_tmp;
+    struct timeval max_latency_drop = { 0, 800000 }, tv_tmp;
 
     for (int i = 0; i < info.channel_amount; i++) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
