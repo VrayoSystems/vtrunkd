@@ -1814,6 +1814,10 @@ int lfd_linker(void)
     struct timeval hold_timer_time = { 999999, 0 };
     set_timer(hold_timer, &hold_timer_time);
 
+    struct timer_obj *head_channel_switch_timer = create_timer();
+    struct timeval head_channel_switch_timer_time = { 0, 0 };
+    set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
+
     struct timeval t_tv;
     struct timeval loss_time;
     gettimeofday(&loss_time, NULL);
