@@ -1947,10 +1947,10 @@ int lfd_linker(void)
         }*/
         uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
 //        send_q_limit_cubic_apply += 5000;
-        if ((info.process_num == 1) && (send_q_limit_cubic_apply > 5000))
-            send_q_limit_cubic_apply = 5000;
+        if ((info.process_num == 1) && (send_q_limit_cubic_apply > 4000))
+            send_q_limit_cubic_apply = 4000;
         int hold_mode_previous = hold_mode;
-        if (send_q_eff < send_q_limit_cubic_apply) { // && (my_max_send_q < info.send_q_limit)) {
+        if ((send_q_eff < send_q_limit_cubic_apply)||(info.process_num == 0)) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
