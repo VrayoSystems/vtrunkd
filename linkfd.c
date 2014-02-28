@@ -1947,7 +1947,7 @@ int lfd_linker(void)
             if (info.send_q_limit > 90000) {
                 info.send_q_limit = 90000;
             }
-            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" 0 - %d my - %d", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
         sem_post(&(shm_conn_info->stats_sem));
 
@@ -2828,12 +2828,12 @@ int lfd_linker(void)
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
                             memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
-#ifdef DEBUGG
+//#ifdef DEBUGG
                             int show_speed=0;
                             if (ntohl(tmp_n) != info.channel[chan_num].packet_recv_upload) {
                                 show_speed=1;
                             }
-#endif
+//#endif
                             info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
                             info.channel[chan_num].packet_recv_upload_avg =
                                     info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
@@ -2841,11 +2841,11 @@ int lfd_linker(void)
                                                     + info.channel[chan_num].packet_recv_upload_avg :
                                             info.channel[chan_num].packet_recv_upload_avg
                                                     - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
-#ifdef DEBUGG
+//#ifdef DEBUGG
                             if(show_speed){
                                 vtun_syslog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             }
-#endif
+//#endif
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
