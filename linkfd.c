@@ -1389,7 +1389,7 @@ int ag_switcher() {
     send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
     vtun_syslog(LOG_INFO, "send_q lim new %"PRId32"", send_q_limit);
 
-    //}
+
 
     int hold_mode_previous = hold_mode;
     vtun_syslog(LOG_INFO, "send_q eff %"PRIu32" lim %"PRId32"", send_q_eff, send_q_limit);
