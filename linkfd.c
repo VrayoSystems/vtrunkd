@@ -126,6 +126,8 @@ uint16_t dirty_seq_num;
 int sendbuff;
 
 #define START_SQL 5000
+#define SQL_MINIMAL 3000
+
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
 // these are for retransmit mode... to be removed
@@ -939,7 +941,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int fprev = -1;
     int fold = -1;
     int len;
-    struct timeval max_latency_drop = { 0, 20000 }, tv_tmp;
+    struct timeval max_latency_drop = { 0, 200000 }, tv_tmp;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -1816,6 +1818,10 @@ int lfd_linker(void)
     struct timeval hold_timer_time = { 999999, 0 };
     set_timer(hold_timer, &hold_timer_time);
 
+    struct timer_obj *head_channel_switch_timer = create_timer();
+    struct timeval head_channel_switch_timer_time = { 0, 0 };
+    set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
+
     struct timeval t_tv;
     struct timeval loss_time;
     gettimeofday(&loss_time, NULL);
@@ -1894,50 +1900,63 @@ int lfd_linker(void)
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if (chan_mask & (1 << i)) {
                 //vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d", shm_conn_info->stats[i].max_send_q, shm_conn_info->stats[i].rtt_phys_avg);
-                if (shm_conn_info->stats[i].rtt_phys_avg == 0) {
+                if (shm_conn_info->stats[i].ACK_speed == 0) {
                     continue;
                 }
-                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg) > max_speed) {
-                    max_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg;
+                if (shm_conn_info->stats[i].ACK_speed > max_speed) {
+                    max_speed = shm_conn_info->stats[i].ACK_speed;
                     max_chan = i;
                 }
-                if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg) < min_speed) {
-                    min_speed = (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[i].rtt_phys_avg;
+                if (shm_conn_info->stats[i].ACK_speed < min_speed) {
+                    min_speed = shm_conn_info->stats[i].ACK_speed;
                 }
             }
 
         }
 
         int i_am_max=0;
-        if ((min_speed != (UINT32_MAX - 1)) && (shm_conn_info->stats[info.process_num].rtt_phys_avg != 0)) {
-           /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
-                    shm_conn_info->stats[info.process_num].rtt_phys_avg,
-                    (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
-            if (max_speed == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
-            //    info.C = C_HI;
+        if (min_speed != (UINT32_MAX - 1)) {
+            /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
+             shm_conn_info->stats[info.process_num].rtt_phys_avg,
+             (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
+            if (max_speed == info.packet_recv_upload_avg) {
+//                info.C = C_HI;
                 i_am_max = 1;
-            } else if (min_speed
-                    == (shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) {
-              //  info.C = C_LOW/2;
+            } else if (min_speed == info.packet_recv_upload_avg) {
+//                info.C = C_LOW / 2;
             } else {
-               // info.C = C_MED/2;
-            }}
-//            if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
+//                info.C = C_MED / 2;
+            }
+        }
+        int32_t rtt_shift;
+//      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
-            info.send_q_limit = 140000; //(shm_conn_info->stats[max_chan].max_send_q / max_speed);
+            info.send_q_limit = 90000;
         } else {
             if (shm_conn_info->stats[0].ACK_speed == 0) {
                 shm_conn_info->stats[0].ACK_speed = 1;
             }
-            info.send_q_limit = (shm_conn_info->stats[0].max_send_q * shm_conn_info->stats[info.process_num].ACK_speed)
+            info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
+            uint32_t rsr = info.send_q_limit;
+            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
+                    * shm_conn_info->stats[0].ACK_speed;
+            if ((int32_t)info.send_q_limit < (SQL_MINIMAL + rtt_shift)) {
+                info.send_q_limit = 3000;
+            } else {
+                info.send_q_limit -= rtt_shift;
+            }
+            if (info.send_q_limit > 90000) {
+                info.send_q_limit = 90000;
+            }
+            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" 0 - %d my - %d", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg);
         }
-
         sem_post(&(shm_conn_info->stats_sem));
+
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
         t = t / 500;
-        t = t > 2000 ? 2000 : t; // 200s limit
+        t = t > 4000 ? 4000 : t; // 400s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
@@ -1948,11 +1967,12 @@ int lfd_linker(void)
                     max_chan);
         }*/
         uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
-//        send_q_limit_cubic_apply += 5000;
-        if ((info.process_num == 1) && (send_q_limit_cubic_apply > 4000))
-            send_q_limit_cubic_apply = 4000;
+        if (send_q_limit_cubic_apply > info.send_q_limit)
+            send_q_limit_cubic_apply = info.send_q_limit;
+;
+
         int hold_mode_previous = hold_mode;
-        if ((send_q_eff < send_q_limit_cubic_apply)||(info.process_num == 0)) { // && (my_max_send_q < info.send_q_limit)) {
+        if (send_q_eff < send_q_limit_cubic_apply) { // && (my_max_send_q < info.send_q_limit)) {
             hold_mode = 0;
             #ifdef TIMEWARP
             if (hold_mode_previous != hold_mode) {
@@ -2017,7 +2037,6 @@ int lfd_linker(void)
                 update_timer(hold_timer);
             }
         }
-//        send_q_limit_cubic_apply -= 5000;
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
@@ -2834,7 +2853,8 @@ int lfd_linker(void)
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
-                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload == 0 ? 1 : info.channel[chan_num].packet_recv_upload;
+                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
+                                info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                             }
                             shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                             shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;

@@ -438,6 +438,7 @@ struct phisical_status {
     unsigned int byte_resend;
     unsigned int byte_r_mode;
     int rtt;
+    uint32_t packet_recv_upload_avg;
 
     /** Calculated values*/
     uint32_t send_q_limit_cubic;
@@ -493,6 +494,7 @@ struct conn_info {
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
     sem_t hard_sem;
+    int head_process;
 };
 
 struct resent_chk {
