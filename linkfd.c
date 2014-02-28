@@ -1946,6 +1946,7 @@ int lfd_linker(void)
             uint32_t rsr = info.send_q_limit;
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
                     * shm_conn_info->stats[0].ACK_speed;
+            rtt_shift=0;
             if ((int32_t)info.send_q_limit < (SQL_MINIMAL + rtt_shift)) {
                 info.send_q_limit = 3000;
             } else {
