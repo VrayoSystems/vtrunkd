@@ -1929,6 +1929,7 @@ int lfd_linker(void)
             }
         }
         int32_t rtt_shift;
+        // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
             info.send_q_limit = 90000;
