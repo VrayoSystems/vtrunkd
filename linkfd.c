@@ -941,7 +941,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int fprev = -1;
     int fold = -1;
     int len;
-    struct timeval max_latency_drop = { 0, 20000 }, tv_tmp;
+    struct timeval max_latency_drop = { 0, 200000 }, tv_tmp;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -1937,6 +1937,7 @@ int lfd_linker(void)
             }
             info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
+            uint32_t rsr = info.send_q_limit;
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
                     * shm_conn_info->stats[0].ACK_speed;
             if ((int32_t)info.send_q_limit < (SQL_MINIMAL + rtt_shift)) {
@@ -1944,12 +1945,13 @@ int lfd_linker(void)
             } else {
                 info.send_q_limit -= rtt_shift;
             }
+            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32"", rsr, rtt_shift, info.send_q_limit);
         }
 
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
         t = t / 500;
-        t = t > 2000 ? 2000 : t; // 200s limit
+        t = t > 4000 ? 4000 : t; // 400s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
@@ -1960,8 +1962,8 @@ int lfd_linker(void)
                     max_chan);
         }*/
         uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
-        if (send_q_limit_cubic_apply > info.send_q_limit_cubic)
-            send_q_limit_cubic_apply = info.send_q_limit_cubic;
+        if (send_q_limit_cubic_apply > info.send_q_limit)
+            send_q_limit_cubic_apply = info.send_q_limit;
 ;
 
         int hold_mode_previous = hold_mode;
