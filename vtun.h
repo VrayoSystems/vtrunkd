@@ -495,6 +495,7 @@ struct conn_info {
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
     sem_t hard_sem;
     int head_process;
+    int tflush_counter, tflush_counter_recv;
 };
 
 struct resent_chk {
