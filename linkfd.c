@@ -1945,6 +1945,9 @@ int lfd_linker(void)
             } else {
                 info.send_q_limit -= rtt_shift;
             }
+            if (info.send_q_limit > 90000) {
+                info.send_q_limit = 90000;
+            }
             vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32"", rsr, rtt_shift, info.send_q_limit);
         }
 
