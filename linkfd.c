@@ -957,6 +957,10 @@ int write_buf_check_n_flush(int logical_channel) {
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || ( timercmp(&tv_tmp, &max_latency_drop, >=))) {
+            if (!cond_flag) {
+                shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
+                        - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+            }
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
             struct timeval work_loop1, work_loop2;
@@ -1949,6 +1953,7 @@ int lfd_linker(void)
             }
             vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
+        uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
         sem_post(&(shm_conn_info->stats_sem));
 
         timersub(&(info.current_time), &loss_time, &t_tv);
@@ -2038,18 +2043,18 @@ int lfd_linker(void)
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
                     lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
                     lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
             vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\"}",
+                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
                     lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log);
+                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
 
         }
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
@@ -2272,14 +2277,20 @@ int lfd_linker(void)
                     time_lag_remote &= 0xFFFFF; // shrink to 20bit
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
                     pid_remote = shm_conn_info->stats[i].pid_remote;
-                    uint32_t miss_packet_counter_h = htonl(shm_conn_info->miss_packets_max_send_counter++);
+                    uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
+                    tmp_host &= 0xFFFFFFFF;
                     sem_post(&(shm_conn_info->stats_sem));
+                    sem_wait(write_buf_sem);
+                    tmp_host |= shm_conn_info->tflush_counter << 16;
+                    shm_conn_info->tflush_counter = 0;
+                    sem_post(write_buf_sem);
                     uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                     memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
                     memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t));
                     uint16_t pid_remote_h = htons(pid_remote);
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
+                    uint32_t miss_packet_counter_h = htonl(tmp_host);
                     memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h, sizeof(uint32_t));
                     int len_ret = proto_write(info.channel[0].descriptor, buf,
                             ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
@@ -2728,10 +2739,13 @@ int lfd_linker(void)
 							time_lag_local.time_lag = time_lag_and_miss_packets & 0xFFFFF;
 							memcpy(&(time_lag_local.pid), buf + sizeof(uint32_t) + sizeof(uint16_t), sizeof(time_lag_local.pid));
 						    time_lag_local.pid = ntohs(time_lag_local.pid);
-                            uint32_t miss_packets_max_recv_counter;
-                            memcpy(&(miss_packets_max_recv_counter), buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
-                            miss_packets_max_recv_counter = ntohl(miss_packets_max_recv_counter);
+						    uint32_t tmp_n, tmt_h;
+						    uint32_t miss_packets_max_recv_counter;
+                            memcpy(&tmp_n, buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
+                            tmt_h = ntohl(tmp_n);
+                            miss_packets_max_recv_counter = tmt_h & 0xFFFFFFFF;
 							sem_wait(&(shm_conn_info->stats_sem));
+                            shm_conn_info->tflush_counter_recv = tmt_h >> 16;
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
 							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
