@@ -1911,7 +1911,6 @@ int lfd_linker(void)
             }
 
         }
-        sem_post(&(shm_conn_info->stats_sem));
 
         int i_am_max=0;
         if (min_speed != (UINT32_MAX - 1)) {
@@ -1948,8 +1947,9 @@ int lfd_linker(void)
             if (info.send_q_limit > 90000) {
                 info.send_q_limit = 90000;
             }
-            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32"", rsr, rtt_shift, info.send_q_limit);
+            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" 0 - %d my - %d", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg);
         }
+        sem_post(&(shm_conn_info->stats_sem));
 
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
