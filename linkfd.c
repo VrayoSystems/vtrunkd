@@ -960,6 +960,7 @@ int write_buf_check_n_flush(int logical_channel) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                vtun_syslog(LOG_INFO, "tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
             }
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
@@ -2279,11 +2280,13 @@ int lfd_linker(void)
                     pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
                     tmp_host &= 0xFFFFFFFF;
+                    vtun_syslog(LOG_ERR, "tmp_host %"PRIu32"", tmp_host); //?????
                     sem_post(&(shm_conn_info->stats_sem));
                     sem_wait(write_buf_sem);
                     tmp_host |= shm_conn_info->tflush_counter << 16;
                     shm_conn_info->tflush_counter = 0;
                     sem_post(write_buf_sem);
+                    vtun_syslog(LOG_ERR, "tmp_host packed %"PRIu32"", tmp_host); //?????
                     uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                     memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
