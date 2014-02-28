@@ -126,6 +126,8 @@ uint16_t dirty_seq_num;
 int sendbuff;
 
 #define START_SQL 5000
+#define SQL_MINIMAL 3000
+
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
 // these are for retransmit mode... to be removed
@@ -1925,7 +1927,8 @@ int lfd_linker(void)
 //                info.C = C_MED / 2;
             }
         }
-//            if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
+        int32_t rtt_shift;
+//      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
             info.send_q_limit = 90000;
         } else {
@@ -1934,6 +1937,13 @@ int lfd_linker(void)
             }
             info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
+            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
+                    * shm_conn_info->stats[0].ACK_speed;
+            if ((int32_t)info.send_q_limit < (SQL_MINIMAL + rtt_shift)) {
+                info.send_q_limit = 3000;
+            } else {
+                info.send_q_limit -= rtt_shift;
+            }
         }
 
         timersub(&(info.current_time), &loss_time, &t_tv);
