@@ -960,6 +960,7 @@ int write_buf_check_n_flush(int logical_channel) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                vtun_syslog(LOG_INFO, "tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
             }
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
@@ -2274,7 +2275,7 @@ int lfd_linker(void)
                         continue;
                     }
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
+                    vtun_syslog(LOG_INFO, "DEBUGG Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
 #endif
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
                     /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
@@ -2282,12 +2283,14 @@ int lfd_linker(void)
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
                     pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
-                    tmp_host &= 0xFFFFFFFF;
+                    tmp_host &= 0xFFFF;
+//vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                     sem_post(&(shm_conn_info->stats_sem));
                     sem_wait(write_buf_sem);
                     tmp_host |= shm_conn_info->tflush_counter << 16;
                     shm_conn_info->tflush_counter = 0;
                     sem_post(write_buf_sem);
+//                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
                     uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                     memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
@@ -2743,16 +2746,16 @@ int lfd_linker(void)
 							time_lag_local.time_lag = time_lag_and_miss_packets & 0xFFFFF;
 							memcpy(&(time_lag_local.pid), buf + sizeof(uint32_t) + sizeof(uint16_t), sizeof(time_lag_local.pid));
 						    time_lag_local.pid = ntohs(time_lag_local.pid);
-						    uint32_t tmp_n, tmt_h;
+						    uint32_t tmp_n, tmp_h;
 						    uint32_t miss_packets_max_recv_counter;
                             memcpy(&tmp_n, buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
-                            tmt_h = ntohl(tmp_n);
-                            miss_packets_max_recv_counter = tmt_h & 0xFFFFFFFF;
+                            tmp_h = ntohl(tmp_n);
+                            miss_packets_max_recv_counter = tmp_h & 0xFFFF;
 							sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->tflush_counter_recv = tmt_h >> 16;
+                            shm_conn_info->tflush_counter_recv = tmp_h >> 16;
 #ifdef DEBUGG
-                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
-							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
+                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %"PRIu32" tmp_h %"PRIu32"",time_lag_local.pid, miss_packets_max_tmp, tmp_h);
+							vtun_syslog(LOG_INFO, "Miss packet counter was - %"PRIu32" recv - %"PRIu32"",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
 #endif
                             if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
                                 miss_packets_max = miss_packets_max_tmp;
