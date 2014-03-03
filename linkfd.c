@@ -2742,13 +2742,13 @@ int lfd_linker(void)
 							time_lag_local.time_lag = time_lag_and_miss_packets & 0xFFFFF;
 							memcpy(&(time_lag_local.pid), buf + sizeof(uint32_t) + sizeof(uint16_t), sizeof(time_lag_local.pid));
 						    time_lag_local.pid = ntohs(time_lag_local.pid);
-						    uint32_t tmp_n, tmt_h;
+						    uint32_t tmp_n, tmp_h;
 						    uint32_t miss_packets_max_recv_counter;
                             memcpy(&tmp_n, buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
-                            tmt_h = ntohl(tmp_n);
-                            miss_packets_max_recv_counter = tmt_h & 0xFFFFFFFF;
+                            tmp_h = ntohl(tmp_n);
+                            miss_packets_max_recv_counter = tmp_h & 0xFFFFFFFF;
 							sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->tflush_counter_recv = tmt_h >> 16;
+                            shm_conn_info->tflush_counter_recv = tmp_h >> 16;
 //#ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %"PRIu32" tmp_h %"PRIu32"",time_lag_local.pid, miss_packets_max_tmp, tmp_h);
 							vtun_syslog(LOG_INFO, "Miss packet counter was - %"PRIu32" recv - %"PRIu32"",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
