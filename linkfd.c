@@ -2270,9 +2270,9 @@ int lfd_linker(void)
                         sem_post(&(shm_conn_info->stats_sem));
                         continue;
                     }
-#ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
-#endif
+//#ifdef DEBUGG
+                    vtun_syslog(LOG_INFO, "DEBUGG Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
+//#endif
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
                     /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
                     time_lag_remote &= 0xFFFFF; // shrink to 20bit
@@ -2280,13 +2280,13 @@ int lfd_linker(void)
                     pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
                     tmp_host &= 0xFFFFFFFF;
-                    vtun_syslog(LOG_ERR, "tmp_host %"PRIu32"", tmp_host); //?????
+                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                     sem_post(&(shm_conn_info->stats_sem));
                     sem_wait(write_buf_sem);
                     tmp_host |= shm_conn_info->tflush_counter << 16;
                     shm_conn_info->tflush_counter = 0;
                     sem_post(write_buf_sem);
-                    vtun_syslog(LOG_ERR, "tmp_host packed %"PRIu32"", tmp_host); //?????
+                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
                     uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                     memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                     uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
