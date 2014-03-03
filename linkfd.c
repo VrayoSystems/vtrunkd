@@ -2279,7 +2279,7 @@ int lfd_linker(void)
                     time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
                     pid_remote = shm_conn_info->stats[i].pid_remote;
                     uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
-                    tmp_host &= 0xFFFFFFFF;
+                    tmp_host &= 0xFFFF;
                     vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                     sem_post(&(shm_conn_info->stats_sem));
                     sem_wait(write_buf_sem);
@@ -2746,7 +2746,7 @@ int lfd_linker(void)
 						    uint32_t miss_packets_max_recv_counter;
                             memcpy(&tmp_n, buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), sizeof(uint32_t));
                             tmp_h = ntohl(tmp_n);
-                            miss_packets_max_recv_counter = tmp_h & 0xFFFFFFFF;
+                            miss_packets_max_recv_counter = tmp_h & 0xFFFF;
 							sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->tflush_counter_recv = tmp_h >> 16;
 //#ifdef DEBUGG
