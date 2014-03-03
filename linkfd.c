@@ -2749,17 +2749,17 @@ int lfd_linker(void)
                             miss_packets_max_recv_counter = tmt_h & 0xFFFFFFFF;
 							sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->tflush_counter_recv = tmt_h >> 16;
-#ifdef DEBUGG
-                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %u",time_lag_local.pid, miss_packets_max_tmp);
-							vtun_syslog(LOG_INFO, "Miss packet counter was - %u recv - %u",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
-#endif
+//#ifdef DEBUGG
+                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %"PRIu32" tmp_h %"PRIu32"",time_lag_local.pid, miss_packets_max_tmp, tmp_h);
+							vtun_syslog(LOG_INFO, "Miss packet counter was - %"PRIu32" recv - %"PRIu32"",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
+//#endif
                             if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
                                 miss_packets_max = miss_packets_max_tmp;
                                 shm_conn_info->miss_packets_max = miss_packets_max;
                                 shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
-#ifdef DEBUGG
+//#ifdef DEBUGG
                                 vtun_syslog(LOG_INFO, "Miss packets(buf_len) for counter %u is %u apply", miss_packets_max_recv_counter, miss_packets_max_tmp);
-#endif
+//#endif
                             }
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                 if (time_lag_local.pid == shm_conn_info->stats[i].pid) {
