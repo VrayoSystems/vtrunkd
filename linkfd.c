@@ -103,7 +103,7 @@ struct my_ip {
 
 #define SEND_Q_LIMIT_MINIMAL 10000
 
-#define TIMEWARP
+// #define TIMEWARP
 
 #ifdef TIMEWARP
     #define TW_MAX 10000000
@@ -1880,18 +1880,22 @@ int lfd_linker(void)
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
-                    
+#ifdef TIMEWARP      
         if(my_max_send_q < send_q_min) {
             send_q_min = my_max_send_q;
+            
             print_tw(timewarp, &tw_cur, "send_q_min %d", send_q_min);
             flush_tw(timewarp, &tw_cur);
+
         }
         if(send_q_eff < send_q_eff_min) {
             send_q_eff_min = send_q_eff;
+
             print_tw(timewarp, &tw_cur, "send_q_eff_min %d", send_q_eff_min);
             flush_tw(timewarp, &tw_cur);
+            
         }
-        
+#endif
         int max_chan=info.process_num;
         uint32_t max_speed=0;
         uint32_t min_speed=(UINT32_MAX - 1);
@@ -1946,7 +1950,7 @@ int lfd_linker(void)
             //        / shm_conn_info->stats[0].ACK_speed;
             info.send_q_limit = (90000 * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
-            vtun_syslog(LOG_INFO, "sql %d, acs_our %d, acs_max %d", info.send_q_limit, shm_conn_info->stats[info.process_num].ACK_speed, shm_conn_info->stats[0].ACK_speed);
+            //vtun_syslog(LOG_INFO, "sql %d, acs_our %d, acs_max %d", info.send_q_limit, shm_conn_info->stats[info.process_num].ACK_speed, shm_conn_info->stats[0].ACK_speed);
             uint32_t rsr = info.send_q_limit;
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
                     * shm_conn_info->stats[0].ACK_speed;
@@ -1959,7 +1963,7 @@ int lfd_linker(void)
             if (info.send_q_limit > 90000) {
                 info.send_q_limit = 90000;
             }
-            vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
+            //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
         uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
         sem_post(&(shm_conn_info->stats_sem));
@@ -1971,8 +1975,8 @@ int lfd_linker(void)
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-        vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
-        vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
+        //vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
+        //vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
         /*if (info.send_q_limit_cubic > 90000) {
             vtun_syslog(LOG_ERR, "overflow_test W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K,
                     t, limit_last, info.send_q_limit_cubic);
@@ -2026,7 +2030,7 @@ int lfd_linker(void)
                 for (i = 1; i < info.channel_amount; i++) {
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 100000) / tv)*10;
                     if (info.channel[i].down_packets > 0)
-                        vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
+                        //vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
                     if (max_packets<info.channel[i].down_packets) max_packets=info.channel[i].down_packets;
                     info.channel[i].down_packets = 0;
                 }
@@ -2052,19 +2056,19 @@ int lfd_linker(void)
         }
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
-            vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-                    lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
+            //vtun_syslog(LOG_INFO,
+            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
+            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
-            vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-                    lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
-            vtun_syslog(LOG_INFO,
-                    "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-                    lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-                    info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
+            //vtun_syslog(LOG_INFO,
+            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
+            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
+            //vtun_syslog(LOG_INFO,
+            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
+            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
+            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
 
         }
 //        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
