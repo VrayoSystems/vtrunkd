@@ -1942,8 +1942,11 @@ int lfd_linker(void)
             if (shm_conn_info->stats[0].ACK_speed == 0) {
                 shm_conn_info->stats[0].ACK_speed = 1;
             }
-            info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
+            //info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
+            //        / shm_conn_info->stats[0].ACK_speed;
+            info.send_q_limit = (90000 * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
+            vtun_syslog(LOG_INFO, "sql %d, acs_our %d, acs_max %d", info.send_q_limit, shm_conn_info->stats[info.process_num].ACK_speed, shm_conn_info->stats[0].ACK_speed);
             uint32_t rsr = info.send_q_limit;
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
                     * shm_conn_info->stats[0].ACK_speed;
@@ -1968,6 +1971,8 @@ int lfd_linker(void)
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+        vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
+        vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
         /*if (info.send_q_limit_cubic > 90000) {
             vtun_syslog(LOG_ERR, "overflow_test W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K,
                     t, limit_last, info.send_q_limit_cubic);
