@@ -824,7 +824,7 @@ int select_devread_send(char *buf, char *out2) {
             #endif
             if (drop_counter>1000) drop_counter=0;
             //#ifdef DEBUGG
-            //vtun_syslog(LOG_INFO, "drop_packet_flag");
+            vtun_syslog(LOG_INFO, "drop_packet_flag");
             //#endif
 
             return CONTINUE_ERROR;
@@ -3056,9 +3056,9 @@ int lfd_linker(void)
                         info.channel[chan_num].local_seq_num_recv = ntohl(local_seq_tmp);
                     }
                     info.channel[chan_num].packet_recv_counter++;
-//#ifdef DEBUGG
+#ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
-//#endif
+#endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
