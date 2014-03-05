@@ -83,7 +83,7 @@
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
 #include "timer.h"
-
+#include <stdarg.h>
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
 #define IP_V(ip)	(((ip)->ip_vhl & 0xf0) >> 4)
@@ -107,12 +107,14 @@ struct my_ip {
 
 #ifdef TIMEWARP
     #define TW_MAX 10000000
-    #include <stdarg.h>
+
     char *timewarp;
     int tw_cur;
 #endif
 
-
+#define JS_MAX 10000 // 10kb string len
+char *js_buf;
+int js_cur;
 
 // flags:
 uint8_t time_lag_ready;
@@ -179,6 +181,12 @@ struct {
     int bytes_sent_chan[MAX_TCP_LOGICAL_CHANNELS];
     int bytes_rcvd_chan[MAX_TCP_LOGICAL_CHANNELS];
 } statb;
+
+struct {
+    int v_min;
+    int v_avg;
+    int v_max;
+} v_mma;
 
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
@@ -272,7 +280,7 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
 int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
     va_list args;
     int bs = 0;
-
+    if (*pos > (JS_MAX/2)) return -1;
     bs = sprintf(buf + *pos, "\"%s\":\"", name);
     *pos = *pos + bs;
     
@@ -289,7 +297,7 @@ int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
 
 int start_json(char *buf, int *pos) {
     int bs=0;
-    memset(buf, 0, TW_MAX);
+    memset(buf, 0, JS_MAX);
     struct timeval dt;
     gettimeofday(&dt, NULL);
     *pos = 0;
@@ -304,6 +312,17 @@ int print_json(char *buf, int *pos) {
     vtun_syslog(LOG_INFO, "%s}", buf);
     return 0;
 }
+
+/*
+int mma_init(struct * v_mma mma) {
+    
+}
+
+int mma_add(struct v_mma mma, int val) {
+    if()
+    return 0;
+}
+*/
 
 #ifdef TIMEWARP
 int print_tw(char *buf, int *pos, const char *format, ...) {
@@ -1481,6 +1500,12 @@ int lfd_linker(void)
         int send_q_eff_min = 999999999;
     #endif
     
+    // JSON block
+    js_buf = malloc(JS_MAX);
+    memset(js_buf, 0, JS_MAX);
+    js_cur = 0;
+    // end JSON block
+    
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
     int err=0;
@@ -1809,7 +1834,7 @@ int lfd_linker(void)
         linker_term = TERM_NONFATAL;
     }
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"\"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":3,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1, \"s_q_c\":0}", lfd_host->host);
+    vtun_syslog(LOG_INFO,"\"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
 #endif
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
@@ -2127,12 +2152,29 @@ int lfd_linker(void)
                 sem_wait(&(shm_conn_info->AG_flags_sem));
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
-                vtun_syslog(LOG_INFO,
-                        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"info.rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
-                        lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
-                        info.rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
-                        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                        hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
+                
+                start_json(js_buf, &js_cur);
+                add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
+                add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
+                add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
+                add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
+                add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
+                add_json(js_buf, &js_cur, "rsr", "%d", info.send_q_limit);
+                add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
+                add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
+                add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+                add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
+                add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
+                add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+                
+                print_json(js_buf, &js_cur);
+                
+                //vtun_syslog(LOG_INFO,
+                //        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"info.rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
+                //        lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
+                //        info.rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
+                //        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
+                //        hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
                 json_timer.tv_sec = info.current_time.tv_sec;
                 json_timer.tv_usec = info.current_time.tv_usec;
                 info.max_send_q_max = 0;
@@ -3439,7 +3481,7 @@ int lfd_linker(void)
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"s_q_lim\":0,\"s_q\":0,\"s_q_min\":0,\"s_q_max\":0,\"rtt\":0,\"my_rtt\":0,\"cwnd\":0,\"isl\":0,\"r_buf_len\":0,\"upload\":0,\"hold_mode\":0,\"ACS\":0,\"R_MODE\":2,\"buf_len\":0, \"s_e\":0, \"s_r_m\":0, \"s_r\":0, \"a_r_f\":1, \"s_q_c\":0}", lfd_host->host);
+    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
 #endif
 
     vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop", lfd_host->host, info.process_num);
