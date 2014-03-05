@@ -269,9 +269,41 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
 }
 
 
+int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
+    va_list args;
+    int bs = 0;
 
+    bs = sprintf(buf + *pos, "\"%s\":\"", name);
+    *pos = *pos + bs;
+    
+    va_start(args, format);
+    bs = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    *pos = *pos + bs;
 
+    bs = sprintf(buf + *pos, "\",");
+    *pos = *pos + bs;
+    return bs;
+}
 
+int start_json(char *buf, int *pos) {
+    int bs=0;
+    memset(buf, 0, TW_MAX);
+    struct timeval dt;
+    gettimeofday(&dt, NULL);
+    *pos = 0;
+
+    bs = sprintf(buf, "%ld.%06ld: {", dt.tv_sec, dt.tv_usec);
+    *pos = *pos + bs;
+    return 0;
+}
+
+int print_json(char *buf, int *pos) {
+    buf[*pos-1] = 0;
+    vtun_syslog(LOG_INFO, "%s}", buf);
+    return 0;
+}
 
 #ifdef TIMEWARP
 int print_tw(char *buf, int *pos, const char *format, ...) {
