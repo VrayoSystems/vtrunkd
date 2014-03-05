@@ -2166,6 +2166,21 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+                int lmax = 0;
+                for(int i=0; i<info.channel_amount; i++) {
+                    if(info.channel[i].packet_loss_counter < lmax) {
+                        lmax = info.channel[i].packet_loss_counter;
+                    }
+                }
+                add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
+                
+                lmax = 0;
+                for(int i=0; i<info.channel_amount; i++) {
+                    if(info.channel[i].packet_loss < lmax) {
+                        lmax = info.channel[i].packet_loss;
+                    }
+                }                
+                add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
                 
                 print_json(js_buf, &js_cur);
                 
