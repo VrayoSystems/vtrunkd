@@ -102,7 +102,8 @@ struct my_ip {
 };
 
 #define SEND_Q_LIMIT_MINIMAL 10000
-
+#define MAX_LATENCY_DROP { 0, 200 }
+#define NOCONTROL
 // #define TIMEWARP
 
 #ifdef TIMEWARP
@@ -483,7 +484,7 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 }
 
 int get_write_buf_wait_data() {
-    struct timeval max_latency_drop = { 0, 800000 }, tv_tmp;
+    struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
 
     for (int i = 0; i < info.channel_amount; i++) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
@@ -992,7 +993,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int fprev = -1;
     int fold = -1;
     int len;
-    struct timeval max_latency_drop = { 0, 200000 }, tv_tmp;
+    struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -2067,6 +2068,11 @@ int lfd_linker(void)
             }
             #endif
         }
+        
+        #ifdef NOCONTROL
+        hold_mode = 0;
+        #endif
+        
         if ( (hold_mode == 1) && (info.process_num == 0)) {
           //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
             drop_packet_flag = 1;
@@ -2166,6 +2172,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+                
                 int lmax = 0;
                 for(int i=0; i<info.channel_amount; i++) {
                     if(info.channel[i].packet_loss_counter < lmax) {
