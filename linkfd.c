@@ -105,6 +105,8 @@ struct my_ip {
 #define MAX_LATENCY_DROP { 0, 200 }
 #define SELECT_SLEEP_USEC 50000
 #define NOCONTROL
+//#define NO_ACK
+
 // #define TIMEWARP
 
 #ifdef TIMEWARP
@@ -2238,7 +2240,11 @@ int lfd_linker(void)
             }
         }
         int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
-        if(0){//for (i = 1; i < info.channel_amount; i++) {
+#ifdef NO_ACK
+        if(0){
+#else
+        for (i = 1; i < info.channel_amount; i++) {
+#endif
             /*sending recv and loss data*/
             if ((info.channel[i].packet_recv_counter > 0) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
