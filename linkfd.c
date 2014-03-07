@@ -103,6 +103,7 @@ struct my_ip {
 
 #define SEND_Q_LIMIT_MINIMAL 10000
 #define MAX_LATENCY_DROP { 0, 200 }
+#define SELECT_SLEEP_USEC 50000
 #define NOCONTROL
 // #define TIMEWARP
 
@@ -2518,7 +2519,7 @@ int lfd_linker(void)
         if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
-            tv.tv_usec = 200000;
+            tv.tv_usec = SELECT_SLEEP_USEC;
         } else {
             tv.tv_sec = get_info_time.tv_sec;
             tv.tv_usec = get_info_time.tv_usec;
