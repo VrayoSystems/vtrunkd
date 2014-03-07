@@ -2272,7 +2272,7 @@ int lfd_linker(void)
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
-                int len_ret = proto_write(info.channel[0].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
