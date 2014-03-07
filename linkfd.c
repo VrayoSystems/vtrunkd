@@ -2238,7 +2238,7 @@ int lfd_linker(void)
             }
         }
         int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
-        for (i = 1; i < info.channel_amount; i++) {
+        if(0){//for (i = 1; i < info.channel_amount; i++) {
             /*sending recv and loss data*/
             if ((info.channel[i].packet_recv_counter > 0) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
