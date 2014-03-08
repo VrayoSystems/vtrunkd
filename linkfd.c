@@ -2246,7 +2246,7 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > 0) || timer_result) {
+            if ((info.channel[i].packet_recv_counter > 5) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp_n = htons(info.channel[i].packet_recv_counter); // amt of rcvd packets
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
@@ -2900,7 +2900,6 @@ int lfd_linker(void)
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
-                            continue;
                             uint32_t tmp_n;
                             int chan_num;
                             memcpy(&tmp_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
