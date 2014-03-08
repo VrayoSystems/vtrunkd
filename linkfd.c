@@ -214,6 +214,11 @@ int assert_cnt(int where) {
     return 0;
 }
 
+/* convert ms(milliseconds) to timeval struct */
+void ms2tv(struct timeval *result, unsigned long interval_ms) {
+    result->tv_sec = (interval_ms / 1000);
+    result->tv_usec = ((interval_ms % 1000) * 1000);
+}
 
 int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
     int len = 0;
@@ -1890,8 +1895,9 @@ int lfd_linker(void)
     set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
 
     struct timeval t_tv;
-    struct timeval loss_time;
+    struct timeval loss_time, loss_immune, loss_tv = { 0, 0 };
     gettimeofday(&loss_time, NULL);
+    gettimeofday(&loss_immune, NULL);
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -2931,10 +2937,12 @@ int lfd_linker(void)
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 0) {
-                                //                        vtun_syslog(LOG_ERR, "loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
-                                //                                info.channel[chan_num].send_q);
+                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
+                                                        vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
+                                                                info.channel[chan_num].send_q);
                                 loss_time = info.current_time;
+                                ms2tv(&loss_tv, info.rtt / 2);
+                                timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
                                 t = 0;
                             } else {
