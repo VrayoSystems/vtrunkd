@@ -104,6 +104,7 @@ struct my_ip {
 #define SEND_Q_LIMIT_MINIMAL 10000
 #define MAX_LATENCY_DROP { 0, 200 }
 #define SELECT_SLEEP_USEC 50000
+#define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define NOCONTROL
 //#define NO_ACK
 
@@ -2246,7 +2247,7 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > 7) || timer_result) {
+            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp_n = htons(info.channel[i].packet_recv_counter); // amt of rcvd packets
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
@@ -3091,7 +3092,7 @@ int lfd_linker(void)
                             info.rtt = (int) ((info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000) - ping_req_ts[chan_num]); // ms
 
                             sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 8;
+                            shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 2;
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
                             sem_post(&(shm_conn_info->stats_sem));
                         }
