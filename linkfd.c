@@ -974,7 +974,9 @@ int select_devread_send(char *buf, char *out2) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
         sem_post(&(shm_conn_info->resend_buf_sem));
-        info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
+        if(new_packet) {
+            info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
+        }
         if (idx == -1) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
