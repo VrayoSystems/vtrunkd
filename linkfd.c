@@ -2082,15 +2082,16 @@ int lfd_linker(void)
             info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
                                          / (shm_conn_info->stats[               0].ACK_speed / 1000);
             
-            vtun_syslog(LOG_INFO, "sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32"",
-                        info.send_q_limit,
-                        shm_conn_info->stats[info.process_num].ACK_speed,
-                        shm_conn_info->stats[0].ACK_speed);
+            //vtun_syslog(LOG_INFO, "sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32"",
+            //            info.send_q_limit,
+            //            shm_conn_info->stats[info.process_num].ACK_speed,
+            //            shm_conn_info->stats[0].ACK_speed);
             //rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
             //        * shm_conn_info->stats[0].ACK_speed;
+            
             rtt_shift=0;
             
-            if(rtt_shift > info.send_q_limit) {
+            if(rtt_shift < info.send_q_limit) {
                 info.send_q_limit -= rtt_shift;
             } else {
                 info.send_q_limit = 0;
