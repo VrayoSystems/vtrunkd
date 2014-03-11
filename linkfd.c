@@ -134,7 +134,6 @@ uint16_t dirty_seq_num;
 int sendbuff;
 
 #define START_SQL 5000
-#define SQL_MINIMAL 4000
 
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
@@ -2087,8 +2086,8 @@ int lfd_linker(void)
                 info.send_q_limit = 0;
             }
             
-            if (info.send_q_limit < SQL_MINIMAL) {
-                info.send_q_limit = SQL_MINIMAL-1;
+            if (info.send_q_limit < SEND_Q_LIMIT_MINIMAL) {
+                info.send_q_limit = SEND_Q_LIMIT_MINIMAL-1;
             }
             if (info.send_q_limit > RSR_TOP) {
                 info.send_q_limit = RSR_TOP;
@@ -2121,8 +2120,8 @@ int lfd_linker(void)
         uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply > info.send_q_limit)
             send_q_limit_cubic_apply = info.send_q_limit;
-        if (send_q_limit_cubic_apply < SQL_MINIMAL) {
-            send_q_limit_cubic_apply = SQL_MINIMAL-1;
+        if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
+            send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
 
         int hold_mode_previous = hold_mode;
