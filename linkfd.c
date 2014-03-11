@@ -103,9 +103,10 @@ struct my_ip {
 
 #define SEND_Q_LIMIT_MINIMAL 10000
 #define MAX_LATENCY_DROP { 0, 250000 }
+#define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
-#define NOCONTROL
+//#define NOCONTROL
 //#define NO_ACK
 
 // #define TIMEWARP
@@ -2047,14 +2048,14 @@ int lfd_linker(void)
         // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
-            info.send_q_limit = 90000;
+            info.send_q_limit = RSR_TOP;
         } else {
             if (shm_conn_info->stats[0].ACK_speed == 0) {
                 shm_conn_info->stats[0].ACK_speed = 1;
             }
             //info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
             //        / shm_conn_info->stats[0].ACK_speed;
-            info.send_q_limit = (90000 * shm_conn_info->stats[info.process_num].ACK_speed)
+            info.send_q_limit = (RSR_TOP * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
             //vtun_syslog(LOG_INFO, "sql %d, acs_our %d, acs_max %d", info.send_q_limit, shm_conn_info->stats[info.process_num].ACK_speed, shm_conn_info->stats[0].ACK_speed);
             uint32_t rsr = info.send_q_limit;
@@ -2066,8 +2067,8 @@ int lfd_linker(void)
             } else {
                 info.send_q_limit -= rtt_shift;
             }
-            if (info.send_q_limit > 90000) {
-                info.send_q_limit = 90000;
+            if (info.send_q_limit > RSR_TOP) {
+                info.send_q_limit = RSR_TOP;
             }
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
@@ -2092,7 +2093,7 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }*/
-        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > 90000 ? 90000 : info.send_q_limit_cubic;
+        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply > info.send_q_limit)
             send_q_limit_cubic_apply = info.send_q_limit;
         if (send_q_limit_cubic_apply < SQL_MINIMAL) {
@@ -2100,43 +2101,24 @@ int lfd_linker(void)
         }
 
         int hold_mode_previous = hold_mode;
-        if (send_q_eff < send_q_limit_cubic_apply) { // && (my_max_send_q < info.send_q_limit)) {
-            hold_mode = 0;
-            #ifdef TIMEWARP
-            if (hold_mode_previous != hold_mode) {
-                print_tw(timewarp, &tw_cur, "hold_mode end send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
-                flush_tw(timewarp, &tw_cur);
-                send_q_min = 999999999;
-                send_q_eff_min = 999999999;
-                //vtun_syslog(LOG_INFO, "Time warp FLUSH!");
+        
+        if(info.head_channel) {
+            hold_mode = 0; // no hold whatsoever;
+            if (send_q_eff > RSR_TOP) {
+                drop_packet_flag = 1;
             }
-            #endif
         } else {
-            hold_mode = 1;
-            #ifdef TIMEWARP
-            if (hold_mode_previous != hold_mode) {
-                start_tw(timewarp, &tw_cur);
-                print_tw(timewarp, &tw_cur, "hold_mode start send_q %d, send_q_eff %d", my_max_send_q, send_q_eff);
-                //vtun_syslog(LOG_INFO, "Time warp func!");
+            if ( send_q_eff > rsr || send_q_eff > send_q_limit_cubic_apply) {
+                hold_mode = 1;
             }
-            #endif
         }
         
         #ifdef NOCONTROL
         hold_mode = 0;
+        drop_packet_flag = 0;
         #endif
         
-        if ( (hold_mode == 1) && (info.process_num == 0)) {
-          //  vtun_syslog(LOG_INFO, "drop_packet_flag apply %d", drop_packet_flag);
-            drop_packet_flag = 1;
-
-        //    info.channel[my_max_send_q_chan_num].packet_loss++;
-        } else {
-        //    vtun_syslog(LOG_INFO, "drop_packet_flag disable %d", drop_packet_flag);
-            drop_packet_flag = 0;
-        }
-        //send_q_eff = bytes_pass;
-
+        
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
             uint32_t tv, max_packets=0;
