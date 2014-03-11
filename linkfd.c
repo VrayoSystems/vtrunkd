@@ -624,10 +624,12 @@ int pack_packet(char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, in
     uint32_t seq_num_n = htonl(seq_num);
     uint16_t flag_n = htons(flag);
     uint32_t local_seq_num_n = htonl(local_seq_num);
+    uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num));
     memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
     memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
     memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
-    return len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t);
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
+    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t);
 }
 
 /**
@@ -2272,7 +2274,7 @@ int lfd_linker(void)
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);  // flag
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htonl(info.channel[i].local_seq_num_recv); // 
+                tmp_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                 memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
                 tmp_n = htons((uint16_t) i);
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint16_t));
@@ -3159,16 +3161,30 @@ int lfd_linker(void)
                     /* Accumulate loss packet*/
                     uint32_t local_seq_tmp;
                     memcpy(&local_seq_tmp, buf + len + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint32_t));
+                    
+                    uint16_t mini_sum;
+                    memcpy(&mini_sum, buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
+                    uint16_t mini_sum_check = htons((uint16_t)(seq_num + ntohl(local_seq_tmp)));
+                    
+                    if(mini_sum != mini_sum_check) {
+                        vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %s, seq_num %lu", chan_num, seq_num);
+                    }
+                    
                     if (ntohl(local_seq_tmp) > (info.channel[chan_num].local_seq_num_recv + 1)) {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
 #endif
+                        
                         info.channel[chan_num].packet_loss_counter += (((int32_t) ntohl(local_seq_tmp))
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
                                 ntohl(local_seq_tmp), info.channel[chan_num].packet_loss_counter);
 //#endif
+                        if (ntohl(local_seq_tmp) > (info.channel[chan_num].local_seq_num_recv + 1000)) {
+                            vtun_syslog(LOG_ERR, "BROKEN PKT TYPE 2 RECEIVED: seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
+                                ntohl(local_seq_tmp), info.channel[chan_num].packet_loss_counter);
+                        }
                     } else if (ntohl(local_seq_tmp) < info.channel[chan_num].local_seq_num_recv) {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
