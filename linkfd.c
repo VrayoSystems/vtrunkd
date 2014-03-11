@@ -1993,6 +1993,9 @@ int lfd_linker(void)
         
         int32_t max_wspd = 0;
         int32_t min_wspd = 1e9;
+        if(info.rtt == 0) {
+            info.rtt = 1;
+        }
         int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
