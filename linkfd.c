@@ -2108,12 +2108,14 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
             }
         } else {
-            if ( send_q_eff > rsr || send_q_eff > send_q_limit_cubic_apply) {
+            if ( (send_q_eff > rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
                 vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                 hold_mode = 1;
+            } else {
+                hold_mode = 0;
             }
         }
-        vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
+        //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         #ifdef NOCONTROL
         hold_mode = 0;
         drop_packet_flag = 0;
@@ -2158,7 +2160,7 @@ int lfd_linker(void)
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
             // noop
         }
-        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
+        //vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
