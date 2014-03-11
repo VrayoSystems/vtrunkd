@@ -2224,12 +2224,18 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
                 add_json(js_buf, &js_cur, "bytes_sent", "%d", (statb.bytes_sent_norm + statb.bytes_sent_rx));
                 
+                
+                uint32_t m_lsn = 0;
                 int lmax = 0;
                 for(int i=0; i<info.channel_amount; i++) {
                     if(info.channel[i].packet_loss_counter < lmax) {
                         lmax = info.channel[i].packet_loss_counter;
                     }
+                    if(m_lsn < info.channel[i].local_seq_num) {
+                        m_lsn = info.channel[i].local_seq_num; 
+                    }
                 }
+                add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
                 add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
                 
                 lmax = 0;
