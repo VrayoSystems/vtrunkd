@@ -612,8 +612,8 @@ int get_oldest_packet_seq_num(int chan_num, uint32_t *seq_num) {
 }
 
 int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var) {
-    *seq_num = ntohl(*((uint32_t *)(&out[len-sizeof(uint32_t)-sizeof(uint16_t)])));
-    *flag_var = ntohs(*((uint16_t *)(&out[len-sizeof(uint16_t)])));
+    *seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint16_t)])));
+    *flag_var = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t) - sizeof(uint16_t)])));
     return len - (sizeof(uint32_t) + sizeof(uint16_t));
 }
 
