@@ -849,6 +849,7 @@ int select_devread_send(char *buf, char *out2) {
     struct my_ip *ip;
     struct tcphdr *tcp;
     struct timeval tv;
+    int new_packet = 0;
     fd_set fdset_tun;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
@@ -950,6 +951,7 @@ int select_devread_send(char *buf, char *out2) {
             info.channel[chan_num].local_seq_num = 0;
         }
         len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
+        new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
 #endif
@@ -972,6 +974,7 @@ int select_devread_send(char *buf, char *out2) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
         sem_post(&(shm_conn_info->resend_buf_sem));
+        info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
         if (idx == -1) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
@@ -995,9 +998,14 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
     // now add correct mini_sum and local_seq_num
-    //uint32_t local_seq_num_p = ntohs(*((uint16_t *)(&buf[len - sizeof(uint16_t) /* mini_sum */ - sizeof(uint16_t)])));
-    //uint32_t local_seq_num = info.channel[chan_num].local_seq_num;
-    //uint16_t mini_sum = htons((uint16_t)(tmp_seq_counter + local_seq_num));
+    if(!new_packet) {
+        uint32_t local_seq_num_p;
+        uint32_t local_seq_num = info.channel[chan_num].local_seq_num;
+        uint16_t tmp_flag;
+        uint16_t sum;
+        len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
+        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, tmp_flag);
+    }
 
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
