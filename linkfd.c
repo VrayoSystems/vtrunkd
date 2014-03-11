@@ -2105,11 +2105,11 @@ int lfd_linker(void)
             hold_mode = 0; // no hold whatsoever;
             if (send_q_eff > RSR_TOP) {
                 drop_packet_flag = 1;
-                vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                //vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
             }
         } else {
             if ( (send_q_eff > rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
-                vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                 hold_mode = 1;
             } else {
                 hold_mode = 0;
