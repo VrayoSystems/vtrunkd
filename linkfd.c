@@ -1660,7 +1660,9 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR, "setsockopt failed");
         linker_term = TERM_NONFATAL;
     }
-
+    sem_wait(&(shm_conn_info->stats_sem));
+    shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
+    sem_post(&(shm_conn_info->stats_sem));    
     if(info.srv) {
         /** Server accepted all logical channel here and get and send pid */
         // now read one single byte
@@ -3122,6 +3124,9 @@ int lfd_linker(void)
 
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 2;
+                            if(shm_conn_info->stats[info.process_num].rtt_phys_avg == 0) {
+                                shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
+                            }
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
                             sem_post(&(shm_conn_info->stats_sem));
                         }
