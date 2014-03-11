@@ -3170,7 +3170,7 @@ int lfd_linker(void)
                     uint16_t mini_sum_check = (uint16_t)(seq_num + ntohl(local_seq_tmp));
                     
                     if(ntohs(mini_sum) != mini_sum_check) {
-                        vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, mini_sum, mini_sum_check);
+                        vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, ntohs(mini_sum), mini_sum_check);
                         continue;
                     }
                     
