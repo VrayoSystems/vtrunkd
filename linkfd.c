@@ -1486,25 +1486,17 @@ int ag_switcher() {
     int hold_mode_previous = hold_mode;
     vtun_syslog(LOG_INFO, "send_q eff %"PRIu32" lim %"PRId32"", send_q_eff, send_q_limit);
     if (((int) send_q_eff) < send_q_limit) {
-        hold_mode = 0;
+        //hold_mode = 0;
     } else {
-        hold_mode = 1;
-        force_hold_mode = 0;
+        //hold_mode = 1;
+        //force_hold_mode = 0;
     }
     vtun_syslog(LOG_INFO, "hold_mode %d", hold_mode);
 
     max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num].mss;
     info.max_send_q_calc = (chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd) / 1000;
 #if defined(DEBUGG) && defined(JSON)
-/*
-    vtun_syslog(LOG_INFO,
-            "{\"p_chan_num\":%i,\"name\":\"%s\",\"l_chan_num\":%i,\"max_reorder_byte\":%u,\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":120000,\"rtt\":%f,\"rtt_var\":%f,\"my_rtt\":%i,\"magic_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"rxmits\":%i,\"r_buf_len\":%i,\"magic_upload\":%i,\"upload\":%i,\"download\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i, \"AG_ready_flag\":%i, \"my_max_send_q_avg\":%u,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u}",
-            info.process_num, lfd_host->host, my_max_send_q_chan_num, max_reorder_byte, send_q_limit_cubic, my_max_send_q, chan_info[my_max_send_q_chan_num].info.info.rtt,
-            chan_info[my_max_send_q_chan_num].rtt_var, info.info.rtt, magic_rtt_avg, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, statb.rxmits, buf_len,
-            chan_info[my_max_send_q_chan_num].send,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-            shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].down_current_speed, hold_mode, ACK_coming_speed_avg, info.mode, shm_conn_info->AG_ready_flag, info.max_send_q_avg, shm_conn_info->miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend);
-            */
+// JSON here
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return AG_MODE;
@@ -2121,7 +2113,7 @@ int lfd_linker(void)
                 hold_mode = 1;
             }
         }
-        
+        vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         #ifdef NOCONTROL
         hold_mode = 0;
         drop_packet_flag = 0;
@@ -2163,22 +2155,10 @@ int lfd_linker(void)
         }
         if (check_timer(cubic_log_timer)) {
             update_timer(cubic_log_timer);
-            //vtun_syslog(LOG_INFO,
-            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
-            //vtun_syslog(LOG_INFO,
-            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode_previous, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
-            //vtun_syslog(LOG_INFO,
-            //        "{\"cubic_info\":\"0\",\"name\":\"%s_%d\", \"s_q_l\":\"%"PRIu32"\", \"W_cubic\":\"%"PRIu32"\", \"W_max\":\"%"PRIu32"\", \"s_q_e\":\"%"PRIu32"\", \"s_q\":\"%"PRIu32"\", \"loss\":\"%"PRId16"\", \"hold_mode\":\"%d\", \"max_chan\":\"%d\", \"process\":\"%d\", \"buf_len\":\"%d\", \"drop\":\"%d\", \"time\":\"%d\", \"d_c\":\"%d\", \"h_t\":\"%"PRIu32"\", \"s_u\":\"%"PRIu32"\", \"f_c\":\"%"PRIu32"\"}",
-            //        lfd_host->host, info.process_num, info.send_q_limit, send_q_limit_cubic_apply, info.send_q_limit_cubic_max, send_q_eff, my_max_send_q,
-            //        info.channel[my_max_send_q_chan_num].packet_loss, hold_mode, max_chan, info.process_num, miss_packets_max, drop_packet_flag, t, drop_counter, hold_time, speed_log, tflush_counter_recv);
-
+            // noop
         }
-//        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
+        vtun_syslog(LOG_INFO, "hold %d", hold_mode);
         timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
         int timercmp_result;
         timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
@@ -2236,12 +2216,6 @@ int lfd_linker(void)
                 
                 print_json(js_buf, &js_cur);
                 
-                //vtun_syslog(LOG_INFO,
-                //        "{\"name\":\"%s\",\"s_q_lim\":%i,\"s_q\":%u,\"s_q_min\":%u,\"s_q_max\":%u,\"info.rtt\":%"PRIu32",\"my_rtt\":%i,\"cwnd\":%u,\"isl\":%i,\"r_buf_len\":%i,\"upload\":%i,\"hold_mode\":%i,\"ACS\":%u,\"R_MODE\":%i,\"buf_len\":%i, \"s_e\":%u, \"s_r_m\":%u, \"s_r\":%u, \"a_r_f\":%u, \"s_q_c\":%u}",
-                //        lfd_host->host, send_q_limit, info.max_send_q_avg, info.max_send_q_min, info.max_send_q_max, info.channel[my_max_send_q_chan_num].rtt,
-                //        info.rtt, chan_info[my_max_send_q_chan_num].cwnd, incomplete_seq_len, buf_len,
-                //        shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed,
-                //        hold_mode, ACK_coming_speed_avg, info.mode, miss_packets_max, info.speed_efficient, info.speed_r_mode, info.speed_resend, AG_ready_flags_tmp, info.max_send_q_calc);
                 json_timer.tv_sec = info.current_time.tv_sec;
                 json_timer.tv_usec = info.current_time.tv_usec;
                 info.max_send_q_max = 0;
@@ -3403,7 +3377,7 @@ int lfd_linker(void)
         if ((my_max_send_q < send_q_limit_cubic_apply)) {
             hold_mode = 0;
         } else {
-            hold_mode = 1;
+            ho//ld_mode = 1;
         }
         if ((hold_mode_previous != hold_mode) && (hold_mode == 1) && (info.process_num == 0)) {
             drop_packet_flag = 1;
