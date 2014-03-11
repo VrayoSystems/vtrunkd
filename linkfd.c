@@ -2984,7 +2984,11 @@ int lfd_linker(void)
                                 loss_time = info.current_time;
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
-                                info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
+                                    info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                } else {
+                                    info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
+                                }
                                 t = 0;
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
