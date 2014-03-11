@@ -2289,12 +2289,12 @@ int lfd_linker(void)
                 tmp_n = htonl(info.channel[i].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
 
-//#ifdef DEBUGG
+#ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-//#endif
+#endif
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -2944,7 +2944,7 @@ int lfd_linker(void)
                             #ifdef TIMEWARP
                             print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             #endif
-                            vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
+                            //vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
                                 if (my_max_send_q < info.channel[i].send_q) {
