@@ -2110,6 +2110,7 @@ int lfd_linker(void)
             }
         } else {
             if ( send_q_eff > rsr || send_q_eff > send_q_limit_cubic_apply) {
+                vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                 hold_mode = 1;
             }
         }
