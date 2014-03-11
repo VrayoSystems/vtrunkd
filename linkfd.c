@@ -2112,7 +2112,7 @@ int lfd_linker(void)
 
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-        t = t / 500;
+        t = t / 100;
         t = t > 4000 ? 4000 : t; // 400s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
