@@ -2215,6 +2215,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+                add_json(js_buf, &js_cur, "bytes_sent", "%d", (statb.bytes_sent_norm + statb.bytes_sent_rx));
                 
                 int lmax = 0;
                 for(int i=0; i<info.channel_amount; i++) {
