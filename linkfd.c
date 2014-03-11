@@ -2069,7 +2069,7 @@ int lfd_linker(void)
             info.send_q_limit = RSR_TOP;
         } else {
             if (shm_conn_info->stats[0].ACK_speed == 0) {
-                shm_conn_info->stats[0].ACK_speed = 1;
+                shm_conn_info->stats[0].ACK_speed = 1000;
             }
             //info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
             //        / shm_conn_info->stats[0].ACK_speed;
