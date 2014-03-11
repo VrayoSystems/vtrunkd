@@ -134,7 +134,7 @@ uint16_t dirty_seq_num;
 int sendbuff;
 
 #define START_SQL 5000
-#define SQL_MINIMAL 5000
+#define SQL_MINIMAL 4000
 
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
@@ -2059,18 +2059,24 @@ int lfd_linker(void)
             info.send_q_limit = (RSR_TOP * shm_conn_info->stats[info.process_num].ACK_speed)
                     / shm_conn_info->stats[0].ACK_speed;
             //vtun_syslog(LOG_INFO, "sql %d, acs_our %d, acs_max %d", info.send_q_limit, shm_conn_info->stats[info.process_num].ACK_speed, shm_conn_info->stats[0].ACK_speed);
-            rsr = info.send_q_limit;
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
                     * shm_conn_info->stats[0].ACK_speed;
             rtt_shift=0;
-            if ((int32_t)info.send_q_limit < (SQL_MINIMAL + rtt_shift)) {
-                info.send_q_limit = 3000;
-            } else {
+            
+            if(rtt_shift > info.send_q_limit) {
                 info.send_q_limit -= rtt_shift;
+            } else {
+                info.send_q_limit = 0;
+            }
+            
+            if (info.send_q_limit < SQL_MINIMAL) {
+                info.send_q_limit = SQL_MINIMAL-1;
             }
             if (info.send_q_limit > RSR_TOP) {
                 info.send_q_limit = RSR_TOP;
             }
+            
+            rsr = info.send_q_limit;
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
         uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
@@ -2098,7 +2104,7 @@ int lfd_linker(void)
         if (send_q_limit_cubic_apply > info.send_q_limit)
             send_q_limit_cubic_apply = info.send_q_limit;
         if (send_q_limit_cubic_apply < SQL_MINIMAL) {
-            send_q_limit_cubic_apply = SQL_MINIMAL;
+            send_q_limit_cubic_apply = SQL_MINIMAL-1;
         }
 
         int hold_mode_previous = hold_mode;
@@ -2110,7 +2116,7 @@ int lfd_linker(void)
             }
         } else {
             if ( send_q_eff > rsr || send_q_eff > send_q_limit_cubic_apply) {
-                vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                 hold_mode = 1;
             }
         }
