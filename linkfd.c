@@ -3206,8 +3206,8 @@ int lfd_linker(void)
                         info.channel[chan_num].packet_loss_counter += (((int32_t) local_seq_tmp)
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
 //#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
-                                local_seq_tmp, info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"",
+                                    info.channel[chan_num].local_seq_num_recv, local_seq_tmp, info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                         if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1000)) {
                             vtun_syslog(LOG_ERR, "BROKEN PKT TYPE 2 RECEIVED: seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
@@ -3220,8 +3220,8 @@ int lfd_linker(void)
                         info.channel[chan_num].packet_loss_counter--;
 //#ifdef DEBUGG
 
-                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
-                                local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                                local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                     }
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
