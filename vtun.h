@@ -131,6 +131,7 @@
 // 10 seconds to start accepting tcp channels; otherwise timeout
 #define CHAN_START_ACCEPT_TIMEOUT 10
 
+#define TCP_MAX_REORDER 3 // general knowledge
 /* End of configurable part */
 
 struct vtun_sopt {
@@ -291,6 +292,7 @@ struct _write_buf {
     //struct frame_llist free_frames; /* init all elements here */
     struct frame_llist now; // maybe unused
     unsigned long last_written_seq; // last pack number has written into device
+    unsigned long last_received_seq[MAX_TCP_PHYSICAL_CHANNELS]; // max of 30 physical channels
     struct timeval last_write_time; // into device
     int buf_len;
     int broken_cnt;
@@ -355,6 +357,7 @@ struct conn_stats {
     uint32_t send_q_limit;
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
+    int32_t W_cubic;
     int rtt_phys_avg;
     int my_max_send_q_chan_num;
 };
@@ -455,6 +458,7 @@ struct phisical_status {
     /** Events */
     int just_started_recv; /**< 0 - when @see FRAME_JUST_STARTED hasn't received yet and 1 - already */
     int check_shm; /**< 1 - need to check some shm values */
+    unsigned long least_rx_seq[MAX_TCP_LOGICAL_CHANNELS]; // local store of least received seq_num across all phy
 };
 
 struct conn_info {

@@ -102,7 +102,7 @@ struct my_ip {
 };
 
 #define SEND_Q_LIMIT_MINIMAL 10000
-#define MAX_LATENCY_DROP { 0, 200 }
+#define MAX_LATENCY_DROP { 0, 250000 }
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define NOCONTROL
@@ -493,9 +493,22 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 }
 
 int get_write_buf_wait_data() {
+    // TODO WARNING: is it synchronized?
     struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
-
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    int alive_physical_channels;
     for (int i = 0; i < info.channel_amount; i++) {
+        alive_physical_channels = 0;
+        info.least_rx_seq[i] = -1;
+        for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+            if (chan_mask & (1 << p)) {
+                alive_physical_channels++;
+                if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
+                    info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                }
+            }
+        }
+        
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
@@ -508,6 +521,9 @@ int get_write_buf_wait_data() {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
+                return 1;
+            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) {
+                // TODO: implement MAX_REORDER_LATENCY policy! (network packet reordering handling not supported yet)
                 return 1;
             }
         }
@@ -1017,11 +1033,19 @@ int write_buf_check_n_flush(int logical_channel) {
     if (fprev > -1) {
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) || ( timercmp(&tv_tmp, &max_latency_drop, >=))) {
+        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
+                      || ( timercmp(&tv_tmp, &max_latency_drop, >=))
+                      || ( shm_conn_info->write_buf[logical_channel].last_written_seq < info.least_rx_seq[logical_channel] )) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-                vtun_syslog(LOG_INFO, "tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                } else if (shm_conn_info->write_buf[logical_channel].last_written_seq < info.least_rx_seq[logical_channel]) {
+                    vtun_syslog(LOG_INFO, "LOSS tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                }
             }
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
@@ -1093,6 +1117,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int newf;
     uint32_t istart;
     int j=0;
+    shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num;
 /*
     if(conn_num <= 0) { // this is a workaround for some bug... TODO!!
             vtun_syslog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
@@ -1970,7 +1995,11 @@ int lfd_linker(void)
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
-
+        
+        int32_t max_wspd = 0;
+        int32_t min_wspd = 1e9;
+        int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
+        
         sem_wait(&(shm_conn_info->stats_sem));
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
 
@@ -1987,6 +2016,15 @@ int lfd_linker(void)
                 if (shm_conn_info->stats[i].ACK_speed < min_speed) {
                     min_speed = shm_conn_info->stats[i].ACK_speed;
                 }
+                
+                if ( (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd) {
+                    max_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
+                    //max_chan = i; //?
+                }
+                if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
+                    min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
+                }
+                
             }
 
         }
@@ -2034,7 +2072,7 @@ int lfd_linker(void)
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
         uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
-        sem_post(&(shm_conn_info->stats_sem));
+        
 
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
@@ -2043,6 +2081,9 @@ int lfd_linker(void)
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+        shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
+        sem_post(&(shm_conn_info->stats_sem));
+        
         //vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
         //vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
         /*if (info.send_q_limit_cubic > 90000) {
