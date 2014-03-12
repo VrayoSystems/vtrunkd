@@ -101,14 +101,14 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-#define SEND_Q_LIMIT_MINIMAL 3000 // 7000 seems to work 
+#define SEND_Q_LIMIT_MINIMAL 8000 // 7000 seems to work 
 #define MAX_LATENCY_DROP { 0, 250000 }
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
-#define RSR_SMOOTH_FULL 1000 // ms for full convergence
+#define RSR_SMOOTH_FULL 3000 // ms for full convergence
 //#define NOCONTROL
 //#define NO_ACK
 
