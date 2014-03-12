@@ -2121,7 +2121,7 @@ int lfd_linker(void)
             
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
-            uint32_t ms_passed = tv2ms(&t_tv);
+            int32_t ms_passed = tv2ms(&t_tv);
             if(ms_passed > RSR_SMOOTH_GRAN) {
                 if(ms_passed > RSR_SMOOTH_FULL) {
                     ms_passed = RSR_SMOOTH_FULL;
