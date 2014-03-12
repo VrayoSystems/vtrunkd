@@ -106,6 +106,9 @@ struct my_ip {
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
+
+#define RSR_SMOOTH_GRAN 10 // ms granularity
+#define RSR_SMOOTH_FULL 500 // ms for full convergence
 //#define NOCONTROL
 //#define NO_ACK
 
@@ -218,6 +221,10 @@ int assert_cnt(int where) {
 void ms2tv(struct timeval *result, unsigned long interval_ms) {
     result->tv_sec = (interval_ms / 1000);
     result->tv_usec = ((interval_ms % 1000) * 1000);
+}
+
+uint32_t tv2ms(struct timeval *a) {
+    return ((a->tv_sec * 1000) + (a->tv_usec / 1000));
 }
 
 int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
@@ -1949,6 +1956,9 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }
+    
+    info.rsr = SEND_Q_LIMIT_MINIMAL;
+    gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
 
 
     
@@ -2062,7 +2072,6 @@ int lfd_linker(void)
             }
         }
         int32_t rtt_shift;
-        int32_t rsr = RSR_TOP; 
         // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
@@ -2104,7 +2113,17 @@ int lfd_linker(void)
                 info.send_q_limit = RSR_TOP;
             }
             
-            rsr = info.send_q_limit;
+            
+            timersub(&(info.current_time), &info.cycle_last, &t_tv);
+            uint32_t ms_passed = tv2ms(&t_tv);
+            if(ms_passed > RSR_SMOOTH_GRAN) {
+                if(ms_passed > RSR_SMOOTH_FULL) {
+                    ms_passed = RSR_SMOOTH_FULL;
+                }
+                info.rsr += (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
+                gettimeofday(&info.cycle_last, NULL);
+            }
+            
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
         uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
@@ -2144,7 +2163,7 @@ int lfd_linker(void)
                 //vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
             }
         } else {
-            if ( (send_q_eff > rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
+            if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
                 //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                 hold_mode = 1;
             } else {

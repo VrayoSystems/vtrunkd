@@ -447,6 +447,7 @@ struct phisical_status {
     uint32_t send_q_limit_cubic;
     uint32_t send_q_limit;
     uint32_t send_q_limit_cubic_max;
+    int32_t rsr;
     double C;
     double B;
 
