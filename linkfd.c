@@ -2095,14 +2095,14 @@ int lfd_linker(void)
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg) // dt in ms..
                                         * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
-            if(info.head_channel != 1) {
-                vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
-                            info.process_num,
-                        info.send_q_limit,
-                        shm_conn_info->stats[info.process_num].ACK_speed,
-                        shm_conn_info->stats[0].ACK_speed,
-                        rtt_shift, info.rsr);
-            }
+            
+            //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
+            //            info.process_num,
+            //        info.send_q_limit,
+            //        shm_conn_info->stats[info.process_num].ACK_speed,
+            //        shm_conn_info->stats[0].ACK_speed,
+            //        rtt_shift, info.rsr);
+            
             
             //rtt_shift=0;
             
@@ -2128,8 +2128,8 @@ int lfd_linker(void)
                 }
                 int rsr_shift = (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
                 info.rsr += rsr_shift;
-                vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
-                           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
+                //vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
+                //           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
                 gettimeofday(&info.cycle_last, NULL);
             }
             
