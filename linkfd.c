@@ -1957,6 +1957,7 @@ int lfd_linker(void)
         info.C = C_LOW/2;
     }
     
+    info.max_send_q = 0;
     info.rsr = SEND_Q_LIMIT_MINIMAL;
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
 
@@ -3004,6 +3005,9 @@ int lfd_linker(void)
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
+                            if(info.max_send_q < info.channel[chan_num].send_q) {
+                                info.max_send_q = info.channel[chan_num].send_q;
+                            }
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
                             #ifdef TIMEWARP
@@ -3024,11 +3028,14 @@ int lfd_linker(void)
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
-                                    info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                    //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                    info.send_q_limit_cubic_max = info.max_send_q;
                                 } else {
-                                    info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
+                                    //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
+                                    info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
                                 }
                                 t = 0;
+                                info.max_send_q = 0;
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;

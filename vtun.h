@@ -451,6 +451,7 @@ struct phisical_status {
     struct timeval cycle_last;
     double C;
     double B;
+    int max_send_q;
 
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
