@@ -101,7 +101,7 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-#define SEND_Q_LIMIT_MINIMAL 7000
+#define SEND_Q_LIMIT_MINIMAL 3000 // 7000 seems to work 
 #define MAX_LATENCY_DROP { 0, 250000 }
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
@@ -2095,8 +2095,8 @@ int lfd_linker(void)
             //            info.send_q_limit,
             //            shm_conn_info->stats[info.process_num].ACK_speed,
             //            shm_conn_info->stats[0].ACK_speed);
-            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg)
-                                        * shm_conn_info->stats[0].ACK_speed;
+            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg) // dt in ms..
+                                        * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             //rtt_shift=0;
             
