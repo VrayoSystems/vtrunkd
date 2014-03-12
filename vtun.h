@@ -388,7 +388,7 @@ struct logical_status {
     uint32_t send_q;    /**< current send_q value */
     struct timeval send_q_time;
     uint32_t send_q_old;    /**< previous send_q value */
-    uint32_t send_q_limit;  /**< current send_q_limit value */
+    int32_t send_q_limit;  /**< current send_q_limit value */
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
@@ -445,7 +445,7 @@ struct phisical_status {
 
     /** Calculated values*/
     uint32_t send_q_limit_cubic;
-    uint32_t send_q_limit;
+    int32_t send_q_limit;
     uint32_t send_q_limit_cubic_max;
     int32_t rsr;
     struct timeval cycle_last;
