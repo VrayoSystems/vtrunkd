@@ -448,6 +448,7 @@ struct phisical_status {
     uint32_t send_q_limit;
     uint32_t send_q_limit_cubic_max;
     int32_t rsr;
+    struct timeval cycle_last;
     double C;
     double B;
 
