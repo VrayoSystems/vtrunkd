@@ -2076,7 +2076,7 @@ int lfd_linker(void)
         // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
-            info.send_q_limit = RSR_TOP;
+            info.rsr = RSR_TOP;
         } else {
             if (shm_conn_info->stats[0].ACK_speed < 1000) {
                 shm_conn_info->stats[0].ACK_speed = 1000;
