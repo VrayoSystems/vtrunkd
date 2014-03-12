@@ -2097,12 +2097,12 @@ int lfd_linker(void)
                                         * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
-            //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
-            //            info.process_num,
-            //        info.send_q_limit,
-            //        shm_conn_info->stats[info.process_num].ACK_speed,
-            //        shm_conn_info->stats[0].ACK_speed,
-            //        rtt_shift, info.rsr);
+            vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
+                        info.process_num,
+                    info.send_q_limit,
+                    shm_conn_info->stats[info.process_num].ACK_speed,
+                    shm_conn_info->stats[0].ACK_speed,
+                    rtt_shift, info.rsr);
             
             
             //rtt_shift=0;
