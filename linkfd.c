@@ -1949,14 +1949,15 @@ int lfd_linker(void)
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
     drop_packet_flag = 0;
+    /*
     if (info.process_num == 0) {
         info.head_channel = 1;
         info.C = C_HI;
     } else {
         info.head_channel = 0;
         info.C = C_LOW/2;
-    }
-    
+    }*/
+    info.C = C_LOW/2;
     info.max_send_q = 0;
     info.rsr = SEND_Q_LIMIT_MINIMAL;
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
@@ -2058,18 +2059,19 @@ int lfd_linker(void)
 
         }
 
-        int i_am_max=0;
         if (min_speed != (UINT32_MAX - 1)) {
             /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
              shm_conn_info->stats[info.process_num].rtt_phys_avg,
              (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
             if (max_speed == info.packet_recv_upload_avg) {
 //                info.C = C_HI;
-                i_am_max = 1;
+                info.head_channel = 1;
             } else if (min_speed == info.packet_recv_upload_avg) {
 //                info.C = C_LOW / 2;
+                  info.head_channel = 0;
             } else {
 //                info.C = C_MED / 2;
+                   info.head_channel = 0;
             }
         }
         int32_t rtt_shift;
@@ -2078,36 +2080,34 @@ int lfd_linker(void)
         if (info.head_channel) {
             info.rsr = RSR_TOP;
         } else {
-            if (shm_conn_info->stats[0].ACK_speed < 1000) {
-                shm_conn_info->stats[0].ACK_speed = 1000;
+            if (shm_conn_info->stats[max_chan].ACK_speed < 1000) {
+                shm_conn_info->stats[max_chan].ACK_speed = 1000;
             }
             
             if (shm_conn_info->stats[info.process_num].ACK_speed < 1000) {
                 shm_conn_info->stats[info.process_num].ACK_speed = 1000;
             }
             
-            //info.send_q_limit = (shm_conn_info->stats[0].max_send_q_avg * shm_conn_info->stats[info.process_num].ACK_speed)
-            //        / shm_conn_info->stats[0].ACK_speed;
             
             info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-                                         / (shm_conn_info->stats[               0].ACK_speed / 1000);
+                                         / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             
             
-            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[0].rtt_phys_avg) // dt in ms..
-                                        * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
+            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) // dt in ms..
+                                        * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
             //vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
             //            shm_conn_info->stats[info.process_num].rtt_phys_avg,
-            //            shm_conn_info->stats[0].rtt_phys_avg,
-            //            shm_conn_info->stats[0].ACK_speed,
+            //            shm_conn_info->stats[max_chan].rtt_phys_avg,
+            //            shm_conn_info->stats[max_chan].ACK_speed,
             //            rtt_shift);
             
             //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
             //            info.process_num,
             //        info.send_q_limit,
             //        shm_conn_info->stats[info.process_num].ACK_speed,
-            //        shm_conn_info->stats[0].ACK_speed,
+            //        shm_conn_info->stats[max_chan].ACK_speed,
             //        rtt_shift, info.rsr);
             
             
@@ -2247,6 +2247,7 @@ int lfd_linker(void)
             get_info_time_last.tv_sec = info.current_time.tv_sec;
             get_info_time_last.tv_usec = info.current_time.tv_usec;
 #if !defined(DEBUGG) && defined(JSON)
+            // JSON LOGS HERE
             timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
                 sem_wait(&(shm_conn_info->stats_sem));
@@ -2259,6 +2260,7 @@ int lfd_linker(void)
                 start_json(js_buf, &js_cur);
                 add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
+                add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
                 add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
                 add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
@@ -2282,7 +2284,7 @@ int lfd_linker(void)
                         m_lsn = info.channel[i].local_seq_num; 
                     }
                 }
-                add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
+                //add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
                 add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
                 
                 lmax = 0;
