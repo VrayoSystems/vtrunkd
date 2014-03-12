@@ -1068,11 +1068,11 @@ int write_buf_check_n_flush(int logical_channel) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (shm_conn_info->write_buf[logical_channel].last_written_seq < info.least_rx_seq[logical_channel]) {
-                    vtun_syslog(LOG_INFO, "LOSS tflush_counter %"PRIu32"",  shm_conn_info->tflush_counter);
+                    vtun_syslog(LOG_INFO, "LOSS tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 }
             }
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
