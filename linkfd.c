@@ -108,7 +108,7 @@ struct my_ip {
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
-#define RSR_SMOOTH_FULL 500 // ms for full convergence
+#define RSR_SMOOTH_FULL 1000 // ms for full convergence
 //#define NOCONTROL
 //#define NO_ACK
 
