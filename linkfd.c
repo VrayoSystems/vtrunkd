@@ -2097,12 +2097,18 @@ int lfd_linker(void)
                                         * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
-            vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
-                        info.process_num,
-                    info.send_q_limit,
-                    shm_conn_info->stats[info.process_num].ACK_speed,
-                    shm_conn_info->stats[0].ACK_speed,
-                    rtt_shift, info.rsr);
+            vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
+                        shm_conn_info->stats[info.process_num].rtt_phys_avg,
+                        shm_conn_info->stats[0].rtt_phys_avg,
+                        shm_conn_info->stats[0].ACK_speed,
+                        rtt_shift);
+            
+            //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
+            //            info.process_num,
+            //        info.send_q_limit,
+            //        shm_conn_info->stats[info.process_num].ACK_speed,
+            //        shm_conn_info->stats[0].ACK_speed,
+            //        rtt_shift, info.rsr);
             
             
             //rtt_shift=0;
@@ -2256,7 +2262,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
                 add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
                 add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
-                add_json(js_buf, &js_cur, "rsr", "%d", info.send_q_limit);
+                add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
                 add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
                 add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
