@@ -2126,7 +2126,10 @@ int lfd_linker(void)
                 if(ms_passed > RSR_SMOOTH_FULL) {
                     ms_passed = RSR_SMOOTH_FULL;
                 }
-                info.rsr += (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
+                int rsr_shift = (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
+                info.rsr += rsr_shift;
+                vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
+                           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
                 gettimeofday(&info.cycle_last, NULL);
             }
             
