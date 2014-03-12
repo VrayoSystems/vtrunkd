@@ -102,7 +102,7 @@ struct my_ip {
 };
 
 #define SEND_Q_LIMIT_MINIMAL 8000 // 7000 seems to work 
-#define MAX_LATENCY_DROP { 0, 250000 }
+#define MAX_LATENCY_DROP { 0, 550000 }
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -2097,11 +2097,11 @@ int lfd_linker(void)
                                         * (shm_conn_info->stats[0].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
-            vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
-                        shm_conn_info->stats[info.process_num].rtt_phys_avg,
-                        shm_conn_info->stats[0].rtt_phys_avg,
-                        shm_conn_info->stats[0].ACK_speed,
-                        rtt_shift);
+            //vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
+            //            shm_conn_info->stats[info.process_num].rtt_phys_avg,
+            //            shm_conn_info->stats[0].rtt_phys_avg,
+            //            shm_conn_info->stats[0].ACK_speed,
+            //            rtt_shift);
             
             //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
             //            info.process_num,
