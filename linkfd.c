@@ -1537,7 +1537,7 @@ int ag_switcher() {
     max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num].mss;
     info.max_send_q_calc = (chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd) / 1000;
 #if defined(DEBUGG) && defined(JSON)
-// JSON here
+// 
 #endif
     if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
         return AG_MODE;
@@ -1569,11 +1569,9 @@ int lfd_linker(void)
         int send_q_eff_min = 999999999;
     #endif
     
-    // JSON block
     js_buf = malloc(JS_MAX);
     memset(js_buf, 0, JS_MAX);
     js_cur = 0;
-    // end JSON block
     
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
@@ -2299,6 +2297,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
+                add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
                 add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
                 add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
