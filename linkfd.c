@@ -2178,7 +2178,8 @@ int lfd_linker(void)
         
         // now choose ag_flag_local
         // TODO HERE
-        ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? 0 : 1);
+        ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? R_MODE : AG_MODE);
+        if(max_speed < 30000) ag_flag_local = R_MODE; // NOTE: if we don't start in R_MODE - we will start losing packets right away! 
         //shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         sem_post(&(shm_conn_info->stats_sem));
