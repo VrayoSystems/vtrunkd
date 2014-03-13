@@ -577,7 +577,7 @@ int get_resend_frame(int conn_num, uint32_t seq_num, char **out, int *sender_pid
                 (shm_conn_info->resend_frames_buf[i].chan_num == conn_num)) {
 
             len = shm_conn_info->resend_frames_buf[i].len;
-            *((uint16_t *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len-sizeof(uint16_t)))) = htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+            *((uint16_t *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len+sizeof(uint32_t)))) = (uint16_t)htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
             *out = shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV;
             *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
             break;
@@ -810,7 +810,17 @@ int retransmit_send(char *out2) {
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        if (drop_packet_flag == 0) { // do not send if in R_MODE and limit reached!
+        if (drop_packet_flag == 0) { // do not send if in R_MODE and limit reached! TODO: this means it will skip sending data more than expected
+            
+            // TODO: add select() here!
+            // TODO: optimize here
+            uint32_t tmp_seq_counter;
+            uint32_t local_seq_num_p;
+            uint16_t tmp_flag;
+            uint16_t sum;
+            len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
+            len = pack_packet(out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num++, tmp_flag);
+            
             int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
             if ((len && len_ret) < 0) {
                 vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
@@ -1011,7 +1021,6 @@ int select_devread_send(char *buf, char *out2) {
     // now add correct mini_sum and local_seq_num
     if(!new_packet) {
         uint32_t local_seq_num_p;
-        uint32_t local_seq_num = info.channel[chan_num].local_seq_num;
         uint16_t tmp_flag;
         uint16_t sum;
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
@@ -1396,7 +1405,7 @@ int ag_switcher() {
     bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
             + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-    uint32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
+    int32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
@@ -1999,7 +2008,7 @@ int lfd_linker(void)
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         
-        uint32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
+        int32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
@@ -2020,8 +2029,8 @@ int lfd_linker(void)
         }
 #endif
         int max_chan=info.process_num;
-        uint32_t max_speed=0;
-        uint32_t min_speed=(UINT32_MAX - 1);
+        int32_t max_speed=0;
+        int32_t min_speed=(INT32_MAX - 1);
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
@@ -2062,7 +2071,7 @@ int lfd_linker(void)
 
         }
 
-        if (min_speed != (UINT32_MAX - 1)) {
+        if (min_speed != (INT32_MAX - 1)) {
             /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
              shm_conn_info->stats[info.process_num].rtt_phys_avg,
              (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
@@ -2166,12 +2175,16 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }*/
-        uint32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : info.send_q_limit_cubic;
+        int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply > info.send_q_limit)
             send_q_limit_cubic_apply = info.send_q_limit;
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
+        
+        // now choose ag_flag_local
+        // TODO HERE
+        //ag_flag_local = (info.rsr < SEND_Q_LIMIT_MINIMAL ? 0 : 1);
 
         int hold_mode_previous = hold_mode;
         
@@ -2193,7 +2206,7 @@ int lfd_linker(void)
                 }
             }
         } else {
-            if(send_q_eff > send_q_limit_cubic_apply) {
+            if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > RSR_TOP)) {
                 drop_packet_flag = 1;
             } else {
                 drop_packet_flag = 0;
@@ -3544,7 +3557,7 @@ int lfd_linker(void)
              * */
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
-        if (1) {
+        if (ag_flag_local == R_MODE) {
             len = retransmit_send(out2);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
