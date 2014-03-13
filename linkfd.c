@@ -810,17 +810,20 @@ int retransmit_send(char *out2) {
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
         statb.bytes_sent_rx += len;
-        int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
-        if ((len && len_ret) < 0) {
-            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
-            return BREAK_ERROR;
+        if (drop_packet_flag == 0) { // do not send if in R_MODE and limit reached!
+            int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
+            if ((len && len_ret) < 0) {
+                vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
+                return BREAK_ERROR;
+            }
+        
+            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+            info.channel[i].up_len += len_ret;
+            info.channel[i].up_packets++;
+            info.channel[i].bytes_put++;
+            info.byte_r_mode += len_ret;
         }
         send_counter++;
-        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-        info.channel[i].up_len += len_ret;
-        info.channel[i].up_packets++;
-        info.channel[i].bytes_put++;
-        info.byte_r_mode += len_ret;
     }
     
     if (send_counter == 0) 
@@ -3541,7 +3544,7 @@ int lfd_linker(void)
              * */
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
-        if (0) {
+        if (1) {
             len = retransmit_send(out2);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
