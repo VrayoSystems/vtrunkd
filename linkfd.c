@@ -101,7 +101,8 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-#define SEND_Q_LIMIT_MINIMAL 8000 // 7000 seems to work 
+#define SEND_Q_LIMIT_MINIMAL 5000 // 7000 seems to work
+#define SENQ_Q_LIMIT_THRESHOLD 7000
 #define MAX_LATENCY_DROP { 0, 550000 }
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
@@ -1957,6 +1958,7 @@ int lfd_linker(void)
     struct timeval loss_time, loss_immune, loss_tv = { 0, 0 };
     gettimeofday(&loss_time, NULL);
     gettimeofday(&loss_immune, NULL);
+    
     sem_wait(&(shm_conn_info->AG_flags_sem));
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
@@ -2160,11 +2162,25 @@ int lfd_linker(void)
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
         t = t / 100;
-        t = t > 4000 ? 4000 : t; // 400s limit
+        t = t > 3000 ? 3000 : t; // 400s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
         shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
+        
+        int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
+        if (send_q_limit_cubic_apply > info.send_q_limit) {
+            send_q_limit_cubic_apply = info.send_q_limit;
+        }
+        if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
+            send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
+        }
+        
+        // now choose ag_flag_local
+        // TODO HERE
+        ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? 0 : 1);
+        //shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
+        
         sem_post(&(shm_conn_info->stats_sem));
         
         //vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
@@ -2175,16 +2191,8 @@ int lfd_linker(void)
             vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
                     max_chan);
         }*/
-        int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
-        if (send_q_limit_cubic_apply > info.send_q_limit)
-            send_q_limit_cubic_apply = info.send_q_limit;
-        if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
-            send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
-        }
         
-        // now choose ag_flag_local
-        // TODO HERE
-        //ag_flag_local = (info.rsr < SEND_Q_LIMIT_MINIMAL ? 0 : 1);
+        
 
         int hold_mode_previous = hold_mode;
         
@@ -3056,8 +3064,8 @@ int lfd_linker(void)
                                 }
                             }
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
-                                                        vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
-                                                                info.channel[chan_num].send_q);
+                                vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
+                                        info.channel[chan_num].send_q);
                                 loss_time = info.current_time;
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);

@@ -360,6 +360,7 @@ struct conn_stats {
     int32_t W_cubic;
     int rtt_phys_avg;
     int my_max_send_q_chan_num;
+    int ag_flag_local;
 };
 
 /**
