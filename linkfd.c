@@ -510,6 +510,7 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = -1;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
+                if(shm_conn_info->stats[p].ag_flag_local == R_MODE) continue; // do not count retransmitting chans - they may be late!
                 alive_physical_channels++;
                 if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
@@ -1975,9 +1976,11 @@ int lfd_linker(void)
     info.max_send_q = 0;
     info.rsr = SEND_Q_LIMIT_MINIMAL;
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
-    int ag_flag_local = R_MODE; 
-
+    int ag_flag_local = R_MODE;
     
+    sem_wait(&(shm_conn_info->stats_sem));
+    shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
+    sem_post(&(shm_conn_info->stats_sem));
 /**
  *
  *
@@ -2180,7 +2183,7 @@ int lfd_linker(void)
         // TODO HERE
         ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? R_MODE : AG_MODE);
         if(max_speed < 30000) ag_flag_local = R_MODE; // NOTE: if we don't start in R_MODE - we will start losing packets right away! 
-        //shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
+        shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         sem_post(&(shm_conn_info->stats_sem));
         
