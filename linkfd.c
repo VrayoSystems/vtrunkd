@@ -2174,9 +2174,11 @@ int lfd_linker(void)
         
         if(info.head_channel) {
             hold_mode = 0; // no hold whatsoever;
-            if (send_q_eff > RSR_TOP) {
+            if (send_q_eff > info.rsr) {
                 drop_packet_flag = 1;
                 //vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+            } else {
+                drop_packet_flag = 0;
             }
         } else {
             if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
@@ -3057,7 +3059,7 @@ int lfd_linker(void)
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
                             sem_post(&(shm_conn_info->stats_sem));
-                            if (my_max_send_q < send_q_limit_cubic_apply) {
+                            if (my_max_send_q < info.rsr) {
                                 drop_packet_flag = 0;
                             }
                             sem_wait(&(shm_conn_info->stats_sem));
