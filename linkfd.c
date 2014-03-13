@@ -1961,7 +1961,7 @@ int lfd_linker(void)
     info.max_send_q = 0;
     info.rsr = SEND_Q_LIMIT_MINIMAL;
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
-
+    int ag_flag_local = R_MODE; 
 
     
 /**
@@ -2172,20 +2172,28 @@ int lfd_linker(void)
 
         int hold_mode_previous = hold_mode;
         
-        if(info.head_channel) {
-            hold_mode = 0; // no hold whatsoever;
-            if (send_q_eff > info.rsr) {
-                drop_packet_flag = 1;
-                //vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+        if(ag_flag_local == AG_MODE) {
+            if(info.head_channel) {
+                hold_mode = 0; // no hold whatsoever;
+                if (send_q_eff > info.rsr) {
+                    drop_packet_flag = 1;
+                    //vtun_syslog(LOG_INFO, "DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                } else {
+                    drop_packet_flag = 0;
+                }
             } else {
-                drop_packet_flag = 0;
+                if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
+                    //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                    hold_mode = 1;
+                } else {
+                    hold_mode = 0;
+                }
             }
         } else {
-            if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
-                //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
-                hold_mode = 1;
+            if(send_q_eff > send_q_limit_cubic_apply) {
+                drop_packet_flag = 1;
             } else {
-                hold_mode = 0;
+                drop_packet_flag = 0;
             }
         }
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
