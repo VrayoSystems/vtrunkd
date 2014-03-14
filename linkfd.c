@@ -1972,13 +1972,19 @@ int lfd_linker(void)
     }*/
     info.C = C_LOW/2;
     info.max_send_q = 0;
-    info.rsr = SEND_Q_LIMIT_MINIMAL;
+
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
     int ag_flag_local = R_MODE;
     
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
     sem_post(&(shm_conn_info->stats_sem));
+    
+    info.rsr = RSR_TOP;
+    info.send_q_limit = RSR_TOP;
+    info.send_q_limit_cubic_max = RSR_TOP;
+    
+    
 /**
  *
  *
