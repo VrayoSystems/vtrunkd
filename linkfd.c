@@ -2196,7 +2196,11 @@ int lfd_linker(void)
         }
         
         // now choose ag_flag_local
-        magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
+        if(shm_conn_info->stats[max_chan].max_send_q < SENQ_Q_LIMIT_THRESHOLD) {
+            magic_speed = 99999999;
+        } else {
+            magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
+        }
         
         ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? R_MODE : AG_MODE);
         if( max_speed * 10 < magic_speed * 7 ) ag_flag_local = R_MODE;
