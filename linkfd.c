@@ -1988,7 +1988,6 @@ int lfd_linker(void)
     info.send_q_limit_cubic_max = RSR_TOP;
     int magic_speed = 0;
     
-    
 /**
  *
  *
@@ -2103,6 +2102,11 @@ int lfd_linker(void)
                    info.head_channel = 0;
             }
         }
+        
+        if( tv2ms(&t_tv) > (info.rtt*4) ) { // DDS detect:
+            shm_conn_info->stats[info.process_num].ACK_speed = 0;
+        }
+        
         int32_t rtt_shift;
         // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
