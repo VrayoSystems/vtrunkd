@@ -2222,7 +2222,7 @@ int lfd_linker(void)
                 }
             }
         } else {
-            if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > RSR_TOP)) {
+            if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
                 drop_packet_flag = 1;
             } else {
                 drop_packet_flag = 0;
