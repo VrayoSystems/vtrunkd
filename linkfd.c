@@ -512,7 +512,7 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = -1;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if(shm_conn_info->stats[p].ag_flag_local == R_MODE) continue; // do not count retransmitting chans - they may be late!
+                //if(shm_conn_info->stats[p].ag_flag_local == R_MODE) continue; // do not count retransmitting chans - they may be late!
                 alive_physical_channels++;
                 if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
