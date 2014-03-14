@@ -1986,6 +1986,7 @@ int lfd_linker(void)
     info.rsr = RSR_TOP;
     info.send_q_limit = RSR_TOP;
     info.send_q_limit_cubic_max = RSR_TOP;
+    int magic_speed = 0;
     
     
 /**
@@ -2017,7 +2018,7 @@ int lfd_linker(void)
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
         
         int upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
-        if(upload_eff < 10) upload_eff = 1000000; // 1000kpkts default start speed
+        if(upload_eff < 10) upload_eff = 100000; // 1000kpkts default start speed
         
         bytes_pass = ((t_tv.tv_sec * upload_eff
                 + ((t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
@@ -2191,9 +2192,10 @@ int lfd_linker(void)
         }
         
         // now choose ag_flag_local
-        // TODO HERE
+        magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
+        
         ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? R_MODE : AG_MODE);
-        if(max_speed < 30000) ag_flag_local = R_MODE; // NOTE: if we don't start in R_MODE - we will start losing packets right away! 
+        if( max_speed * 10 < magic_speed * 7 ) ag_flag_local = R_MODE;
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         sem_post(&(shm_conn_info->stats_sem));
@@ -2319,6 +2321,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
                 add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+                add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
