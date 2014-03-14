@@ -3593,7 +3593,8 @@ int lfd_linker(void)
              * */
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
-        if (ag_flag_local == R_MODE) {
+        //if (ag_flag_local == R_MODE) {
+        if(1) {
             len = retransmit_send(out2);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
