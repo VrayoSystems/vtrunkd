@@ -2015,8 +2015,12 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        bytes_pass = ((t_tv.tv_sec * info.channel[my_max_send_q_chan_num].packet_recv_upload_avg
-                + ((t_tv.tv_usec/10) * info.channel[my_max_send_q_chan_num].packet_recv_upload_avg) / 100000)*3)/10;
+        
+        int upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
+        if(upload_eff < 10) upload_eff = 1000000; // 1000kpkts default start speed
+        
+        bytes_pass = ((t_tv.tv_sec * upload_eff
+                + ((t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         
