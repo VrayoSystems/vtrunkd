@@ -153,6 +153,8 @@ int proto_err_cnt = 0;
 int my_max_send_q_chan_num = 0;
 uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 uint32_t last_channels_mask = 0;
+int32_t send_q_eff = 0;
+
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
@@ -928,7 +930,8 @@ int select_devread_send(char *buf, char *out2) {
             #endif
             if (drop_counter>1000) drop_counter=0;
             //#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "drop_packet_flag");
+            
+            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, my_max_send_q, send_q_eff);
             //#endif
 
             return CONTINUE_ERROR;
@@ -1407,7 +1410,7 @@ int ag_switcher() {
     bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
             + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-    int32_t send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
+    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
