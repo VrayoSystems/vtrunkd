@@ -2179,8 +2179,8 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
         
         int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
-        if (send_q_limit_cubic_apply > info.send_q_limit) {
-            send_q_limit_cubic_apply = info.send_q_limit;
+        if (send_q_limit_cubic_apply > RSR_TOP) {
+            send_q_limit_cubic_apply = RSR_TOP;
         }
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
