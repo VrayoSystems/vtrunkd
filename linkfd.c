@@ -104,6 +104,10 @@ struct my_ip {
 #define SEND_Q_LIMIT_MINIMAL 5000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD 7000
 #define MAX_LATENCY_DROP { 0, 550000 }
+#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
+#define MAX_REORDER_LATENCY_MAX 999999 // usec
+#define MAX_REORDER_LATENCY_MIN 200 // usec
+#define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -1162,7 +1166,13 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int newf;
     uint32_t istart;
     int j=0;
-    shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num;
+
+    if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
+        shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num;
+    } else {
+        shm_conn_info->write_buf[conn_num].last_received_seq_shadow[info.process_num] = seq_num;
+    }
+
 /*
     if(conn_num <= 0) { // this is a workaround for some bug... TODO!!
             vtun_syslog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
@@ -1686,6 +1696,7 @@ int lfd_linker(void)
     dirty_seq_num = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
+        info.channel[i].local_seq_num_beforeloss = 0;
     }
     maxfd = (service_channel > info.tun_device ? service_channel : info.tun_device);
 
@@ -1987,6 +1998,8 @@ int lfd_linker(void)
     info.send_q_limit = RSR_TOP;
     info.send_q_limit_cubic_max = RSR_TOP;
     int magic_speed = 0;
+
+    struct timeval max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
     
 /**
  *
@@ -2409,7 +2422,28 @@ int lfd_linker(void)
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp_n = htons(info.channel[i].packet_recv_counter); // amt of rcvd packets
                 memcpy(buf, &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(info.channel[i].packet_loss_counter); // amt of pkts lost
+                if (info.channel[i].local_seq_num_beforeloss != 0) { // send only in this case
+                    // check timer
+                    timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
+                    if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
+                                    timercmp(&tv_tmp, &max_reorder_latency, >=) ) {
+                        if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
+                            vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd", info.channel[i].packet_loss_counter);
+                        } else {
+                            vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd", info.channel[i].packet_loss_counter);
+                        }
+                        info.channel[i].local_seq_num_beforeloss = 0;
+                        tmp_n = htons(info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
+                        info.channel[i].packet_loss_counter = 0;
+                        // sync here TODO
+                        // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
+                        // shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
+                        // shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
+                        // un-sync here
+                    }
+                } else {
+                    tmp_n = 0; // amt of pkt loss
+                }
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);  // flag
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
@@ -2438,7 +2472,7 @@ int lfd_linker(void)
                     break;
                 }
                 info.channel[i].packet_recv_counter = 0;
-                info.channel[i].packet_loss_counter = 0;
+                
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
                 info.channel[0].up_len += len_ret;
             }
@@ -3261,13 +3295,24 @@ int lfd_linker(void)
 
                         if (chan_num == my_max_send_q_chan_num) {
                             info.rtt = (int) ((info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000) - ping_req_ts[chan_num]); // ms
-
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 2;
                             if(shm_conn_info->stats[info.process_num].rtt_phys_avg == 0) {
                                 shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
                             }
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
+                            // now update max_reorder_latency
+                            if(info.rtt >= 1000) {
+                                max_reorder_latency.tv_sec = 0;
+                                max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MAX;
+                            } else if (info.rtt == 1) {
+                                max_reorder_latency.tv_sec = 0;
+                                max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MIN; // NOTE possible problem here? 
+                            } else {
+                                max_reorder_latency.tv_sec = 0;
+                                max_reorder_latency.tv_usec = info.rtt * 1000;
+                            }
+                            
                             sem_post(&(shm_conn_info->stats_sem));
                         }
 
@@ -3315,6 +3360,7 @@ int lfd_linker(void)
                         continue;
                     }
                     
+                    // this is loss detection -->
                     if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {
 #ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
@@ -3322,6 +3368,10 @@ int lfd_linker(void)
                         
                         info.channel[chan_num].packet_loss_counter += (((int32_t) local_seq_tmp)
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
+                        if(info.channel[chan_num].local_seq_num_beforeloss == 0) {
+                            info.channel[chan_num].local_seq_num_beforeloss = info.channel[chan_num].local_seq_num_recv;
+                        }
+
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"",
                                     info.channel[chan_num].local_seq_num_recv, local_seq_tmp, info.channel[chan_num].packet_loss_counter, seq_num);
@@ -3341,9 +3391,12 @@ int lfd_linker(void)
                                 local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                     }
+
+                    // this is normal operation -->
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                         info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
                     }
+
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);

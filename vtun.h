@@ -24,7 +24,6 @@
 
 #ifndef _VTUN_H
 #define _VTUN_H
-
 #include "llist.h"
 #include "frame_llist.h"
 #include <semaphore.h>
@@ -293,6 +292,7 @@ struct _write_buf {
     struct frame_llist now; // maybe unused
     unsigned long last_written_seq; // last pack number has written into device
     unsigned long last_received_seq[MAX_TCP_PHYSICAL_CHANNELS]; // max of 30 physical channels
+    unsigned long last_received_seq_shadow[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
     struct timeval last_write_time; // into device
     int buf_len;
     int broken_cnt;
@@ -395,6 +395,8 @@ struct logical_status {
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
     uint32_t local_seq_num;
     uint32_t local_seq_num_recv;
+    uint32_t local_seq_num_beforeloss; /** used for max_reorder support */
+    struct timeval loss_time; /** time from last detected loss on this chan_num */
     struct timeval last_recv_time;
     struct timeval last_info_send_time;
     int16_t packet_loss_counter;
