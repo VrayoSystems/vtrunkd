@@ -1696,7 +1696,6 @@ int lfd_linker(void)
     dirty_seq_num = 0;
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         last_sent_packet_num[i].seq_num = SEQ_START_VAL;
-        info.channel[i].local_seq_num_beforeloss = 0;
     }
     maxfd = (service_channel > info.tun_device ? service_channel : info.tun_device);
 
@@ -2000,6 +1999,10 @@ int lfd_linker(void)
     int magic_speed = 0;
 
     struct timeval max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
+
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        info.channel[i].local_seq_num_beforeloss = 0;
+    }
     
 /**
  *
