@@ -2446,6 +2446,7 @@ int lfd_linker(void)
                     }
                 } else {
                     tmp_n = 0; // amt of pkt loss
+                    info.channel[i].packet_loss_counter = 0;
                 }
                 memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
                 tmp_n = htons(FRAME_CHANNEL_INFO);  // flag
