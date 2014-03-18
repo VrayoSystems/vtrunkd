@@ -827,13 +827,14 @@ int retransmit_send(char *out2) {
             uint16_t tmp_flag;
             uint16_t sum;
             len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
-            len = pack_packet(out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num++, tmp_flag);
-            
+            len = pack_packet(out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
+            // send DATA
             int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
             if ((len && len_ret) < 0) {
                 vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
                 return BREAK_ERROR;
             }
+            info.channel[i].local_seq_num++;
         
             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
             info.channel[i].up_len += len_ret;
@@ -975,10 +976,10 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
-            info.channel[chan_num].local_seq_num = 0;
-        }
-        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
+        // TODO: is it correct to first get the packet and then check if we can write it to net? 
+        // LSN is incorrect here! will reqrite it later
+        //len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
+        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
@@ -1002,9 +1003,9 @@ int select_devread_send(char *buf, char *out2) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
         sem_post(&(shm_conn_info->resend_buf_sem));
-        if(new_packet) {
-            info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
-        }
+        //if(new_packet) {
+        //    info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
+        //}
         if (idx == -1) {
             vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
@@ -1028,23 +1029,28 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
     // now add correct mini_sum and local_seq_num
-    if(!new_packet) {
+    //if(!new_packet) {
         uint32_t local_seq_num_p;
         uint16_t tmp_flag;
         uint16_t sum;
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
-        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, tmp_flag);
-    }
+        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
+    //}
 
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
+    // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     if ((len && len_ret) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
     gettimeofday(&send2, NULL );
+    info.channel[chan_num].local_seq_num++;
+    if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
+       info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
+    }
 
     delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
     delay_cnt++; // need for mean_delay calculation (legacy)
@@ -2469,6 +2475,7 @@ int lfd_linker(void)
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
 #endif
+                // send FCI
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -2494,6 +2501,7 @@ int lfd_linker(void)
             shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
             sem_post(&(shm_conn_info->write_buf_sem));
             *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                // send LWS. TODO: Ever needed??
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
@@ -2644,6 +2652,7 @@ int lfd_linker(void)
                         shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
                         sem_post(&(shm_conn_info->write_buf_sem));
                         *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                        // send LWS
                         int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
@@ -2775,6 +2784,7 @@ int lfd_linker(void)
                         if (i == 0) {
                             len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                         } else {
+                            // send PING request
                             len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                         }
                         if (len_ret < 0) {
@@ -2984,6 +2994,7 @@ int lfd_linker(void)
 #endif
                                 rmaddr.sin_port = htons(info.channel[i].rport);
                                 connect(info.channel[i].descriptor, (struct sockaddr *)&rmaddr, sizeof(rmaddr));
+                                // send PING request
                                 udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                                 usleep(500000);
                             }
@@ -3276,6 +3287,7 @@ int lfd_linker(void)
                         if (chan_num == 0) {
                             len_ret = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
                         } else {
+                            // send pong reply
                             len_ret = udp_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
                         }
                         if ( len_ret < 0) {
@@ -3476,6 +3488,7 @@ int lfd_linker(void)
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = info.current_time.tv_sec;
                         sem_post(write_buf_sem);
                         *((uint16_t *)(buf+sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                        // send LWS - 2
                         int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
                             vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
@@ -3731,6 +3744,7 @@ int lfd_linker(void)
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                 } else {
+                    // send ping request - 2
                     len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                 }
                 if (len_ret < 0) {
