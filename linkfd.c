@@ -2439,8 +2439,10 @@ int lfd_linker(void)
             /*sending recv and loss data*/
             if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) {
                 update_timer(recv_n_loss_send_timer);
-                uint32_t tmp_n = htons(info.channel[i].packet_recv_counter); // amt of rcvd packets
-                memcpy(buf, &tmp_n, sizeof(uint16_t));
+                uint32_t tmp32_n;
+                uint16_t tmp16_n;
+                tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
+                memcpy(buf, &tmp16_n, sizeof(uint16_t));
                 if (info.channel[i].local_seq_num_beforeloss != 0) { // send only in this case
                     // check timer
                     timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
@@ -2452,32 +2454,34 @@ int lfd_linker(void)
                             vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd", info.channel[i].packet_loss_counter);
                         }
                         info.channel[i].local_seq_num_beforeloss = 0;
-                        tmp_n = htons(info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
+                        tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
                         info.channel[i].packet_loss_counter = 0;
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
                         shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
                         shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                         sem_post(&(shm_conn_info->write_buf_sem));
+                    } else {
+                        tmp16_n = 0; // amt of pkt loss
                     }
                 } else {
-                    tmp_n = 0; // amt of pkt loss
+                    tmp16_n = 0; // amt of pkt loss
                     info.channel[i].packet_loss_counter = 0;
                 }
-                memcpy(buf + sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htons(FRAME_CHANNEL_INFO);  // flag
-                memcpy(buf + 2 * sizeof(uint16_t), &tmp_n, sizeof(uint16_t));
-                tmp_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
-                memcpy(buf + 3 * sizeof(uint16_t), &tmp_n, sizeof(uint32_t));
-                tmp_n = htons((uint16_t) i);
-                memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint16_t));
+                memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
+                memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
+                memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                tmp16_n = htons((uint16_t) i);
+                memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 struct timeval tmp_tv;
                 timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
                 info.channel[i].last_info_send_time = info.current_time;
-                tmp_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
-                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // pkt recv period
-                tmp_n = htonl(info.channel[i].packet_download);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_n, sizeof(uint32_t)); // down speed per current chan
+                tmp32_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
+                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // pkt recv period
+                tmp32_n = htonl(info.channel[i].packet_download);
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR,
@@ -3118,18 +3122,19 @@ int lfd_linker(void)
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
-                            uint32_t tmp_n;
+                            uint32_t tmp32_n;
+                            uint16_t tmp16_n;
                             int chan_num;
-                            memcpy(&tmp_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
-                            chan_num = (int)ntohs(tmp_n);
+                            memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
+                            chan_num = (int)ntohs(tmp16_n);
                             gettimeofday(&info.current_time, NULL);
                             info.channel[chan_num].send_q_time = info.current_time;
-                            memcpy(&tmp_n, buf, sizeof(uint16_t));
-                            info.channel[chan_num].packet_recv = ntohs(tmp_n);
-                            memcpy(&tmp_n, buf + sizeof(uint16_t), sizeof(uint16_t));
-                            info.channel[chan_num].packet_loss = ntohs(tmp_n);
-                                  memcpy(&tmp_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_seq_num_acked = ntohl(tmp_n);
+                            memcpy(&tmp16_n, buf, sizeof(uint16_t));
+                            info.channel[chan_num].packet_recv = ntohs(tmp16_n);
+                            memcpy(&tmp16_n, buf + sizeof(uint16_t), sizeof(uint16_t));
+                            info.channel[chan_num].packet_loss = ntohs(tmp16_n);
+                            memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
+                            info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n);
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
@@ -3191,16 +3196,16 @@ int lfd_linker(void)
                             info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
                             info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
 #endif
-                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_recv_period = ntohl(tmp_n);
-                            memcpy(&tmp_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+                            info.channel[chan_num].packet_recv_period = ntohl(tmp32_n);
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
 #ifdef DEBUGG
                             int show_speed=0;
-                            if (ntohl(tmp_n) != info.channel[chan_num].packet_recv_upload) {
+                            if (ntohl(tmp32_n) != info.channel[chan_num].packet_recv_upload) {
                                 show_speed=1;
                             }
 #endif
-                            info.channel[chan_num].packet_recv_upload = ntohl(tmp_n);
+                            info.channel[chan_num].packet_recv_upload = ntohl(tmp32_n);
                             info.channel[chan_num].packet_recv_upload_avg =
                                     info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
                                             (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
