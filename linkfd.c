@@ -538,7 +538,8 @@ int get_write_buf_wait_data() {
 #endif
                 return 1;
             } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) {
-                // TODO: implement MAX_REORDER_LATENCY policy! (network packet reordering handling not supported yet)
+                // TODO: implement MAX_REORDER_LATENCY policy! 
+                // seems done. check it -> implemented in that least_rx_seq does not update until reorder fixed
                 return 1;
             }
         }
