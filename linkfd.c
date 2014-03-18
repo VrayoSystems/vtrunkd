@@ -513,7 +513,7 @@ int get_write_buf_wait_data() {
     int alive_physical_channels;
     for (int i = 0; i < info.channel_amount; i++) {
         alive_physical_channels = 0;
-        info.least_rx_seq[i] = -1;
+        info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
                 //if(shm_conn_info->stats[p].ag_flag_local == R_MODE) continue; // do not count retransmitting chans - they may be late!
