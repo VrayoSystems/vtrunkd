@@ -2444,8 +2444,8 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
-            //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
+            //if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
+            if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
                 uint16_t tmp16_n;
@@ -3161,7 +3161,7 @@ int lfd_linker(void)
                             if(info.max_send_q < info.channel[chan_num].send_q) {
                                 info.max_send_q = info.channel[chan_num].send_q;
                             }
-                            //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
+                            vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
                             #ifdef TIMEWARP
@@ -3416,7 +3416,7 @@ int lfd_linker(void)
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
                     }
-                    //vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
+                    vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
