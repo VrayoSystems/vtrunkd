@@ -2445,24 +2445,35 @@ int lfd_linker(void)
                 memcpy(buf, &tmp16_n, sizeof(uint16_t));
                 if (info.channel[i].local_seq_num_beforeloss != 0) { // send only in this case
                     // check timer
-                    timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
-                    if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
-                                    timercmp(&tv_tmp, &max_reorder_latency, >=) ) {
-                        if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                            vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd", info.channel[i].packet_loss_counter);
-                        } else {
-                            vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd", info.channel[i].packet_loss_counter);
-                        }
+                    if(info.channel[i].packet_loss_counter == 0) {
+                        // send immediately & stop waiting
                         info.channel[i].local_seq_num_beforeloss = 0;
-                        tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
-                        info.channel[i].packet_loss_counter = 0;
+                        tmp16_n = 0;
                         sem_wait(&(shm_conn_info->write_buf_sem));
-                        // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
+                        // dup of code below
                         shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
                         shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                         sem_post(&(shm_conn_info->write_buf_sem));
                     } else {
-                        tmp16_n = 0; // amt of pkt loss
+                        timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
+                        if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
+                                        timercmp(&tv_tmp, &max_reorder_latency, >=) ) {
+                            if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
+                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd", info.channel[i].packet_loss_counter);
+                            } else {
+                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd", info.channel[i].packet_loss_counter);
+                            }
+                            info.channel[i].local_seq_num_beforeloss = 0;
+                            tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
+                            info.channel[i].packet_loss_counter = 0;
+                            sem_wait(&(shm_conn_info->write_buf_sem));
+                            // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
+                            shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
+                            shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
+                            sem_post(&(shm_conn_info->write_buf_sem));
+                        } else {
+                            tmp16_n = 0; // amt of pkt loss
+                        }
                     }
                 } else {
                     tmp16_n = 0; // amt of pkt loss
