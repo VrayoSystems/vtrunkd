@@ -2444,6 +2444,7 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
+            //if (((info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
             if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
@@ -3406,6 +3407,7 @@ int lfd_linker(void)
                     
                     // calculate send_q and speed
                     // send_q
+                    info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
                     info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
