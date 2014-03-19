@@ -110,7 +110,7 @@ struct my_ip {
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
-#define FCI_P_INTERVAL 7 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
+#define FCI_P_INTERVAL 5 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -626,27 +626,34 @@ int get_oldest_packet_seq_num(int chan_num, uint32_t *seq_num) {
     return -1;
 }
 
-int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, uint32_t *local_seq_num, uint16_t *mini_sum) {
-    *seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)])));
-    *flag_var = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)])));
-    *local_seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t)])));
-    *mini_sum = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t)])));
-    return len - (sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t));
+int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, uint32_t *local_seq_num, uint16_t *mini_sum, uint32_t *last_recv_lsn, uint32_t *packet_recv_spd) {
+    *seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
+    *flag_var = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
+    *local_seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
+    *mini_sum = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
+    
+    *last_recv_lsn = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
+    *packet_recv_spd = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t)])));
+    return len - (sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t));
 }
 
 /**
  * Function for add flag and seq_num to packet
  */
-int pack_packet(char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, int flag) {
+int pack_packet(int chan_num, char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, int flag) {
     uint32_t seq_num_n = htonl(seq_num);
     uint16_t flag_n = htons(flag);
     uint32_t local_seq_num_n = htonl(local_seq_num);
-    uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num));
+    uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num + info.channel[chan_num].local_seq_num_recv));
+    uint32_t last_recv_lsn = htonl(info.channel[chan_num].local_seq_num_recv);
+    uint32_t packet_recv_spd = htonl(info.channel[chan_num].packet_download);
     memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
     memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
     memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
     memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
-    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t);
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t), &last_recv_lsn, sizeof(uint32_t));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t) + sizeof(uint32_t), &packet_recv_spd, sizeof(uint32_t));
+    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }
 
 /**
@@ -827,8 +834,8 @@ int retransmit_send(char *out2) {
             uint32_t local_seq_num_p;
             uint16_t tmp_flag;
             uint16_t sum;
-            len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
-            len = pack_packet(out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
+            len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+            len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
             // send DATA
             int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
             if ((len && len_ret) < 0) {
@@ -980,7 +987,7 @@ int select_devread_send(char *buf, char *out2) {
         // TODO: is it correct to first get the packet and then check if we can write it to net? 
         // LSN is incorrect here! will reqrite it later
         //len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
-        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
+        len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
@@ -1034,8 +1041,8 @@ int select_devread_send(char *buf, char *out2) {
         uint32_t local_seq_num_p;
         uint16_t tmp_flag;
         uint16_t sum;
-        len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum);
-        len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
+        len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+        len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
     //}
 
     struct timeval send1; // need for mean_delay calculation (legacy)
@@ -2437,7 +2444,7 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) {
+            if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
                 uint16_t tmp16_n;
@@ -3139,13 +3146,13 @@ int lfd_linker(void)
                             memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
                             chan_num = (int)ntohs(tmp16_n);
                             gettimeofday(&info.current_time, NULL);
-                            info.channel[chan_num].send_q_time = info.current_time;
+                            info.channel[chan_num].send_q_time = info.current_time; // TODO: possible segfault here
                             memcpy(&tmp16_n, buf, sizeof(uint16_t));
-                            info.channel[chan_num].packet_recv = ntohs(tmp16_n);
+                            info.channel[chan_num].packet_recv = ntohs(tmp16_n); // unused 
                             memcpy(&tmp16_n, buf + sizeof(uint16_t), sizeof(uint16_t));
-                            info.channel[chan_num].packet_loss = ntohs(tmp16_n);
+                            info.channel[chan_num].packet_loss = ntohs(tmp16_n); // FCI-only data only on loss
                             memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n);
+                            info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
@@ -3192,15 +3199,15 @@ int lfd_linker(void)
                             info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
                             //                        vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t 0 W was %"PRIu32" now %"PRIu32" loss now", info.send_q_limit_cubic_max, info.B, info.C, K, limit_last, info.send_q_limit_cubic);
                             sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q;
+                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q; // never ever used!! TODO remove
                             sem_post(&(shm_conn_info->stats_sem));
-                            if (my_max_send_q < info.rsr) {
-                                drop_packet_flag = 0;
-                            }
+                            //if (my_max_send_q < info.rsr) {
+                            //    drop_packet_flag = 0;
+                            //}
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].my_max_send_q_chan_num = my_max_send_q_chan_num;
                             sem_post(&(shm_conn_info->stats_sem));
-                            info.max_send_q_avg = (uint32_t) ((int32_t) info.max_send_q_avg
+                            info.max_send_q_avg = (uint32_t) ((int32_t) info.max_send_q_avg  // unused
                                     - ((int32_t) info.max_send_q_avg - (int32_t) my_max_send_q) / 4);
 
 #if !defined(DEBUGG)
@@ -3208,7 +3215,7 @@ int lfd_linker(void)
                             info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
 #endif
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_recv_period = ntohl(tmp32_n);
+                            info.channel[chan_num].packet_recv_period = ntohl(tmp32_n); // unused
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
 #ifdef DEBUGG
                             int show_speed=0;
@@ -3216,7 +3223,7 @@ int lfd_linker(void)
                                 show_speed=1;
                             }
 #endif
-                            info.channel[chan_num].packet_recv_upload = ntohl(tmp32_n);
+                            info.channel[chan_num].packet_recv_upload = ntohl(tmp32_n); // each packet data
                             info.channel[chan_num].packet_recv_upload_avg =
                                     info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
                                             (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
@@ -3230,14 +3237,14 @@ int lfd_linker(void)
 #endif
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
-                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed =
+                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = // TODO: remove! never used
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
                                 shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
                                 info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                             }
                             shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
-                            shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg;
+                            shm_conn_info->stats[info.process_num].max_send_q_avg = info.max_send_q_avg; // unused
                             sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 #ifdef DEBUGG
@@ -3393,9 +3400,47 @@ int lfd_linker(void)
                     out = buf; // wtf?
                     uint32_t local_seq_tmp;
                     uint16_t mini_sum;
-                    len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum);
+                    uint32_t last_recv_lsn;
+                    uint32_t packet_recv_spd;
+                    len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum, &last_recv_lsn, &packet_recv_spd);
+                    
+                    // calculate send_q and speed
+                    // send_q
+                    info.channel[chan_num].send_q =
+                                    info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
+                                            1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
+                    if(info.max_send_q < info.channel[chan_num].send_q) {
+                        info.max_send_q = info.channel[chan_num].send_q;
+                    }
+
+                    // the following is to calculate my_max_send_q_chan_num only
+                    uint32_t my_max_send_q = 0;
+                    for (int i = 1; i < info.channel_amount; i++) {
+                        if (my_max_send_q < info.channel[i].send_q) {
+                            my_max_send_q = info.channel[i].send_q;
+                            my_max_send_q_chan_num = i;
+                        }
+                    }
+
+                    // ACS
+                    info.channel[chan_num].packet_recv_upload = packet_recv_spd; // each packet data
+                    info.channel[chan_num].packet_recv_upload_avg =
+                            info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
+                                    (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
+                                            + info.channel[chan_num].packet_recv_upload_avg :
+                                    info.channel[chan_num].packet_recv_upload_avg
+                                            - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
+
+                    sem_wait(&(shm_conn_info->stats_sem));
+                    if (my_max_send_q_chan_num == chan_num) {
+                        shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
+                        info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
+                    }
+                    shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
+                    sem_post(&(shm_conn_info->stats_sem));
+
                     /* Accumulate loss packet*/
-                    uint16_t mini_sum_check = (uint16_t)(seq_num + local_seq_tmp);
+                    uint16_t mini_sum_check = (uint16_t)(seq_num + local_seq_tmp + last_recv_lsn);
                     
                     if(mini_sum != mini_sum_check) {
                         vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, ntohs(mini_sum), mini_sum_check);
