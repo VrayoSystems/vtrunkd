@@ -2157,7 +2157,7 @@ int lfd_linker(void)
             
             
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) // dt in ms..
-                                        * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
+                                        * (shm_conn_info->stats[info.process_num].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
             //vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
