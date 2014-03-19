@@ -2271,14 +2271,14 @@ int lfd_linker(void)
         } else { // R_MODE.. no intermediate modes.. yet ;-)
             if(info.head_channel) {
                 if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
-                    //vtun_syslog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    vtun_syslog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 1;
                 } else {
                     drop_packet_flag = 0;
                 }
             } else {
                 if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
-                    //vtun_syslog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    vtun_syslog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 1;
                 } else {
                     drop_packet_flag = 0;
