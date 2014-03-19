@@ -2444,8 +2444,8 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            //if (((info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
-            if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
+            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
+            //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
                 uint16_t tmp16_n;
