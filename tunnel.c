@@ -609,7 +609,7 @@ int tunnel(struct vtun_host *host, int srv)
                                    // TODO: how to stop server??
                                    //chdir("/var"); // chdir to protect gprof
                                    signal(SIGCHLD, SIG_IGN);
-                                   set_title("fd server running");
+                                   set_title("fd server %s", host->host);
                                    run_fd_server(fd[0], dev, &shm_conn_info[connid], srv);
                         }     
                     }
