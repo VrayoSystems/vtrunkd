@@ -110,7 +110,7 @@ struct my_ip {
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
-#define FCI_P_INTERVAL 5 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
+#define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
