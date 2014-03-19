@@ -944,7 +944,7 @@ int select_devread_send(char *buf, char *out2) {
             if (drop_counter>1000) drop_counter=0;
             //#ifdef DEBUGG
             
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, my_max_send_q, send_q_eff);
+            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
             //#endif
 
             return CONTINUE_ERROR;
@@ -2054,7 +2054,7 @@ int lfd_linker(void)
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         
-        int32_t send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
+        send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
@@ -2444,8 +2444,8 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            //if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
-            if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
+            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
+            //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
                 uint16_t tmp16_n;
@@ -3161,7 +3161,7 @@ int lfd_linker(void)
                             if(info.max_send_q < info.channel[chan_num].send_q) {
                                 info.max_send_q = info.channel[chan_num].send_q;
                             }
-                            vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
+                            //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
                             #ifdef TIMEWARP
@@ -3237,7 +3237,7 @@ int lfd_linker(void)
                                 vtun_syslog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             }
 #endif
-                            vtun_syslog(LOG_INFO, "FCI spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                            //vtun_syslog(LOG_INFO, "FCI spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = // TODO: remove! never used
@@ -3416,7 +3416,7 @@ int lfd_linker(void)
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
                     }
-                    vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
+                    //vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
@@ -3443,7 +3443,7 @@ int lfd_linker(void)
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                     sem_post(&(shm_conn_info->stats_sem));
 
-                    vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                    //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
 
                     /* Accumulate loss packet*/
                     uint16_t mini_sum_check = (uint16_t)(seq_num + local_seq_tmp + last_recv_lsn);
