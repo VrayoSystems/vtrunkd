@@ -634,7 +634,7 @@ int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, u
     
     *last_recv_lsn = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
     *packet_recv_spd = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t)])));
-    return len - (sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t));
+    return len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
 }
 
 /**
