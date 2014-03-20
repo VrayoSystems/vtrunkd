@@ -1112,14 +1112,14 @@ int write_buf_check_n_flush(int logical_channel) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( shm_conn_info->write_buf[logical_channel].last_written_seq < info.least_rx_seq[logical_channel] )) {
+                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d",  shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel]);
                 } else if (shm_conn_info->write_buf[logical_channel].last_written_seq < info.least_rx_seq[logical_channel]) {
                     vtun_syslog(LOG_INFO, "LOSS tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 }
@@ -2527,9 +2527,9 @@ int lfd_linker(void)
                         if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
                                         timercmp(&tv_tmp, &max_reorder_latency, >=) ) {
                             if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd", info.channel[i].packet_loss_counter);
+                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num]);
                             } else {
-                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd", info.channel[i].packet_loss_counter);
+                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num]);
                             }
                             info.channel[i].local_seq_num_beforeloss = 0;
                             tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
