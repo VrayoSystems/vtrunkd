@@ -465,6 +465,10 @@ struct phisical_status {
     int just_started_recv; /**< 0 - when @see FRAME_JUST_STARTED hasn't received yet and 1 - already */
     int check_shm; /**< 1 - need to check some shm values */
     uint32_t least_rx_seq[MAX_TCP_LOGICAL_CHANNELS]; // local store of least received seq_num across all phy
+
+    uint32_t rtt2_lsn[MAX_TCP_LOGICAL_CHANNELS];
+    struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
+    int rtt2; // max..?
 };
 
 struct conn_info {

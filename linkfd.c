@@ -843,6 +843,10 @@ int retransmit_send(char *out2) {
         uint16_t sum;
         len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
+        if(info.rtt2_lsn[i] == 0) {
+            info.rtt2_lsn[i] = info.channel[i].local_seq_num;
+            info.rtt2_tv[i] = info.current_time;
+        }
         // send DATA
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
         if ((len && len_ret) < 0) {
@@ -1050,6 +1054,10 @@ int select_devread_send(char *buf, char *out2) {
         uint16_t sum;
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
+        if(info.rtt2_lsn[chan_num] == 0) {
+            info.rtt2_lsn[chan_num] = info.channel[chan_num].local_seq_num;
+            info.rtt2_tv[chan_num] = info.current_time;
+        }
     //}
 
     struct timeval send1; // need for mean_delay calculation (legacy)
@@ -2031,6 +2039,14 @@ int lfd_linker(void)
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         info.channel[i].local_seq_num_beforeloss = 0;
     }
+
+    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+        info.rtt2_lsn[i] = 0;
+        gettimeofday(&info.rtt2_tv[i], NULL);
+    }
+    info.rtt2 = 0;
+
+    
     
 /**
  *
@@ -2407,6 +2423,7 @@ int lfd_linker(void)
                 //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
                 add_json(js_buf, &js_cur, "agag", "%d", agag);
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
+                add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
                 add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
                 add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
                 add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
@@ -3453,6 +3470,13 @@ int lfd_linker(void)
                     uint32_t packet_recv_spd;
                     len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum, &last_recv_lsn, &packet_recv_spd);
                     
+                    // rtt calculation
+                    if( (info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
+                        timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
+                        info.rtt2 = tv2ms(&tv_tmp);
+                        info.rtt2_lsn[chan_num] = 0;
+                    }
+
                     // calculate send_q and speed
                     // send_q
                     info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
