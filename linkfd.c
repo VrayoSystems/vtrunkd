@@ -947,19 +947,7 @@ int select_devread_send(char *buf, char *out2) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
-        if (drop_packet_flag == 1) {
-            drop_counter++;
-            #ifdef TIMEWARP
-                print_tw(timewarp, &tw_cur, "drop packet");
-            #endif
-            if (drop_counter>1000) drop_counter=0;
-            //#ifdef DEBUGG
-            
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
-            //#endif
-
-            return CONTINUE_ERROR;
-        }
+        
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
                 vtun_syslog(LOG_INFO, "sem_post! dev read err");
@@ -1039,6 +1027,15 @@ int select_devread_send(char *buf, char *out2) {
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
+
+    if (drop_packet_flag == 1) {
+        drop_counter++;
+        if (drop_counter>1000) drop_counter=0;
+        //#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
+        //#endif
+        return CONTINUE_ERROR;
+    }
 
     statb.bytes_sent_norm += len;
 
