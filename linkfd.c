@@ -814,43 +814,51 @@ int retransmit_send(char *out2) {
             last_sent_packet_num[i].seq_num = top_seq_num;
             continue;
         }
-        memcpy(out_buf, out2, len);
+        if(drop_packet_flag == 0) { // TODO: think through! how to do it without double-checking drop_packet_flag?
+            memcpy(out_buf, out2, len);
+        }
         sem_post(&(shm_conn_info->resend_buf_sem));
+
+        send_counter++;
+        if(drop_packet_flag == 1) {
+            last_sent_packet_num[i].seq_num--;
+            continue;  
+        } 
+
+#ifdef DEBUGG
         if (last_sent_packet_num[i].num_resend == 0) {
             last_sent_packet_num[i].num_resend++;
-#ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Resend frame ... chan %d start for seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
-#endif
         }
+#endif
+
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
-        statb.bytes_sent_rx += len;
-        if (drop_packet_flag == 0) { // do not send if in R_MODE and limit reached! TODO: this means it will skip sending data more than expected
-            
-            // TODO: add select() here!
-            // TODO: optimize here
-            uint32_t tmp_seq_counter;
-            uint32_t local_seq_num_p;
-            uint16_t tmp_flag;
-            uint16_t sum;
-            len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
-            len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
-            // send DATA
-            int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
-            if ((len && len_ret) < 0) {
-                vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
-                return BREAK_ERROR;
-            }
-            info.channel[i].local_seq_num++;
+        statb.bytes_sent_rx += len;        
         
-            shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-            info.channel[i].up_len += len_ret;
-            info.channel[i].up_packets++;
-            info.channel[i].bytes_put++;
-            info.byte_r_mode += len_ret;
+        // TODO: add select() here!
+        // TODO: optimize here
+        uint32_t tmp_seq_counter;
+        uint32_t local_seq_num_p;
+        uint16_t tmp_flag;
+        uint16_t sum;
+        len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+        len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
+        // send DATA
+        int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
+        if ((len && len_ret) < 0) {
+            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
+            return BREAK_ERROR;
         }
-        send_counter++;
+        info.channel[i].local_seq_num++;
+    
+        shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+        info.channel[i].up_len += len_ret;
+        info.channel[i].up_packets++;
+        info.channel[i].bytes_put++;
+        info.byte_r_mode += len_ret;
+        
     }
     
     if (send_counter == 0) 
@@ -1073,7 +1081,9 @@ int select_devread_send(char *buf, char *out2) {
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
-//    last_sent_packet_num[chan_num].num_resend = 0;
+#ifdef DEBUGG
+    last_sent_packet_num[chan_num].num_resend = 0;
+#endif
     return len;
 }
 
