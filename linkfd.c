@@ -790,9 +790,6 @@ int retransmit_send(char *out2) {
            continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
         }
         // now we have something to retransmit:
-        if(drop_packet_flag == 1) {
-            continue;
-        } 
 
         last_sent_packet_num[i].seq_num++;
  
@@ -833,6 +830,11 @@ int retransmit_send(char *out2) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
+
+        if(drop_packet_flag == 1) {
+            continue;
+        } 
+        
         statb.bytes_sent_rx += len;        
         
         // TODO: add select() here!
