@@ -510,14 +510,11 @@ int get_write_buf_wait_data() {
     // TODO WARNING: is it synchronized?
     struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
     uint32_t chan_mask = shm_conn_info->channels_mask;
-    int alive_physical_channels;
     for (int i = 0; i < info.channel_amount; i++) {
-        alive_physical_channels = 0;
         info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                //if(shm_conn_info->stats[p].ag_flag_local == R_MODE) continue; // do not count retransmitting chans - they may be late!
-                alive_physical_channels++;
+                if(shm_conn_info->stats[p].max_ACS2 == 0) continue;
                 if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 }
@@ -2041,11 +2038,15 @@ int lfd_linker(void)
 
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         info.rtt2_lsn[i] = 0;
+        info.channel[i].ACS2 = 0;
+        info.channel[i].old_packet_seq_num_acked = 0;
         gettimeofday(&info.rtt2_tv[i], NULL);
     }
     info.rtt2 = 0;
 
     
+    
+
     
 /**
  *
@@ -2408,7 +2409,17 @@ int lfd_linker(void)
             // JSON LOGS HERE
             timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
+                // calc ACS2 and DDS detect
+                int max_ACS2=0;
+                for(int i=0; i<info.channel_amount; i++) {
+                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * 1000;
+                    info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
+                    if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
+                }
+                // now put max_ACS2 to SHM:
+
                 sem_wait(&(shm_conn_info->stats_sem));
+                shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
                 miss_packets_max = shm_conn_info->miss_packets_max;
                 sem_post(&(shm_conn_info->stats_sem));
                 sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -2429,6 +2440,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
                 add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+                add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);

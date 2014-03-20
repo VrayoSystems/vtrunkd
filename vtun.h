@@ -357,6 +357,7 @@ struct conn_stats {
     int32_t send_q_limit;
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
+    int32_t max_ACS2;
     int32_t W_cubic;
     int rtt_phys_avg;
     int my_max_send_q_chan_num;
@@ -409,7 +410,8 @@ struct logical_status {
     uint32_t packet_recv_upload;
     uint32_t packet_recv_upload_avg;
     struct timeval get_tcp_info_time_old; /**< Previous value of @see get_tcp_info_time.*/
-
+    int32_t ACS2;
+    uint32_t old_packet_seq_num_acked;
     uint32_t bytes_put;
 
 };
@@ -469,6 +471,7 @@ struct phisical_status {
     uint32_t rtt2_lsn[MAX_TCP_LOGICAL_CHANNELS];
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
+
 };
 
 struct conn_info {
