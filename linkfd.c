@@ -2020,8 +2020,9 @@ int lfd_linker(void)
     info.send_q_limit = RSR_TOP;
     info.send_q_limit_cubic_max = RSR_TOP;
     int magic_speed = 0;
-    int agag = 0 // AG_MODE aggressiveness value 0 to 256
+    int agag = 0; // AG_MODE aggressiveness value 0 to 256
     int ag_flag = R_MODE;
+    int ag_flag_local_prev = R_MODE;
     struct timeval agon_time; // time at which ag_flag_local bacame 1
     gettimeofday(&agon_time, NULL);
     
@@ -2265,7 +2266,7 @@ int lfd_linker(void)
             for(int i=0; i<info.channel_amount; i++) {
                 dirty_seq += info.channel[i].local_seq_num;
             }
-            if((agag < 127) {
+            if(agag < 127) {
                 ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
             } else {
                 ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
