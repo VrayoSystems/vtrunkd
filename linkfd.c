@@ -781,14 +781,19 @@ int retransmit_send(char *out2) {
             last_sent_packet_num[i].seq_num = remote_lws;
         }
 
-        if (((top_seq_num - last_sent_packet_num[i].seq_num) <= 0) || (top_seq_num == SEQ_START_VAL)) {
+        if ((top_seq_num <= last_sent_packet_num[i].seq_num) || (top_seq_num == SEQ_START_VAL)) {
 #ifdef DEBUGG
            vtun_syslog(LOG_INFO, "debug: retransmit_send skipping logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
-           continue;
+           continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
         }
+        // now we have something to retransmit:
+        if(drop_packet_flag == 1) {
+            continue;
+        } 
+
         last_sent_packet_num[i].seq_num++;
  
 
@@ -799,6 +804,7 @@ int retransmit_send(char *out2) {
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
           if (len == -1) {
             int succ = get_oldest_packet_seq_num(i, &seq_num_tmp);
+            vtun_syslog(LOG_INFO, "R_MODE no +1 frame; getting oldest (chan %d seq %"PRIu32" oldest seq %"PRIu32" ... continue", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
             if (succ == -1) {
                 sem_post(&(shm_conn_info->resend_buf_sem));
                 last_sent_packet_num[i].seq_num = top_seq_num;
@@ -814,16 +820,13 @@ int retransmit_send(char *out2) {
             last_sent_packet_num[i].seq_num = top_seq_num;
             continue;
         }
-        if(drop_packet_flag == 0) { // TODO: think through! how to do it without double-checking drop_packet_flag?
+        //if(drop_packet_flag == 0) { // TODO: think through! how to do it without double-checking drop_packet_flag?
             memcpy(out_buf, out2, len);
-        }
+        //}
         sem_post(&(shm_conn_info->resend_buf_sem));
 
         send_counter++;
-        if(drop_packet_flag == 1) {
-            //last_sent_packet_num[i].seq_num--;
-            continue;  
-        } 
+        
 
 #ifdef DEBUGG
         if (last_sent_packet_num[i].num_resend == 0) {
