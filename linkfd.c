@@ -821,7 +821,7 @@ int retransmit_send(char *out2) {
 
         send_counter++;
         if(drop_packet_flag == 1) {
-            last_sent_packet_num[i].seq_num--;
+            //last_sent_packet_num[i].seq_num--;
             continue;  
         } 
 
