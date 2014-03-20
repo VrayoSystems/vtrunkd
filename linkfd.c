@@ -1031,9 +1031,9 @@ int select_devread_send(char *buf, char *out2) {
     if (drop_packet_flag == 1) {
         drop_counter++;
         if (drop_counter>1000) drop_counter=0;
-        //#ifdef DEBUGG
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
-        //#endif
+#endif
         return CONTINUE_ERROR;
     }
 
