@@ -820,13 +820,8 @@ int retransmit_send(char *out2) {
             last_sent_packet_num[i].seq_num = top_seq_num;
             continue;
         }
-        //if(drop_packet_flag == 0) { // TODO: think through! how to do it without double-checking drop_packet_flag?
-            memcpy(out_buf, out2, len);
-        //}
+        memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
-
-        send_counter++;
-        
 
 #ifdef DEBUGG
         if (last_sent_packet_num[i].num_resend == 0) {
@@ -861,7 +856,8 @@ int retransmit_send(char *out2) {
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
         info.byte_r_mode += len_ret;
-        
+
+        send_counter++;
     }
     
     if (send_counter == 0) 
