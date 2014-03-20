@@ -2232,7 +2232,7 @@ int lfd_linker(void)
             magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
         }
         
-        ag_flag_local = ( (info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) ? R_MODE : AG_MODE);
+        ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply < info.rsr)) ? R_MODE : AG_MODE);
         if( max_speed * 10 < magic_speed * 7 ) ag_flag_local = R_MODE;
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
