@@ -2558,10 +2558,9 @@ int lfd_linker(void)
                 tmp16_n = htons((uint16_t) i);
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 struct timeval tmp_tv;
-                timersub(&info.current_time, &info.channel[i].last_info_send_time, &tmp_tv);
-                info.channel[i].last_info_send_time = info.current_time;
-                tmp32_n = htonl(tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec);
-                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // pkt recv period
+                // local_seq_num
+                tmp32_n = htonl(info.channel[i].local_seq_num);
+                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
                 tmp32_n = htonl(info.channel[i].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
@@ -2573,6 +2572,7 @@ int lfd_linker(void)
 #endif
                 // send FCI
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
@@ -3280,8 +3280,12 @@ int lfd_linker(void)
                             info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
 #endif
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
-                            info.channel[chan_num].packet_recv_period = ntohl(tmp32_n); // unused
+                            // local seq_num
+                            uint32_t local_seq_tmp = ntohl(tmp32_n); 
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
+                                info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
+                            }
 #ifdef DEBUGG
                             int show_speed=0;
                             if (ntohl(tmp32_n) != info.channel[chan_num].packet_recv_upload) {
