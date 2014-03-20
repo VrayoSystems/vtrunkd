@@ -2020,7 +2020,11 @@ int lfd_linker(void)
     info.send_q_limit = RSR_TOP;
     info.send_q_limit_cubic_max = RSR_TOP;
     int magic_speed = 0;
-
+    int agag = 0 // AG_MODE aggressiveness value 0 to 256
+    int ag_flag = R_MODE;
+    struct timeval agon_time; // time at which ag_flag_local bacame 1
+    gettimeofday(&agon_time, NULL);
+    
     struct timeval max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
 
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -2247,6 +2251,32 @@ int lfd_linker(void)
         
         sem_post(&(shm_conn_info->stats_sem));
         
+        // now calculate AGAG
+        uint32_t dirty_seq = 0;
+        if(ag_flag_local == AG_MODE) {
+            if(ag_flag_local_prev != ag_flag_local) {
+                agon_time = info.current_time;
+                ag_flag_local_prev = ag_flag_local;
+            }
+            // first calculate agag
+            timersub(&info.current_time, &agon_time, &tv_tmp);
+            agag = tv2ms(&tv_tmp) / 10;
+            if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
+            for(int i=0; i<info.channel_amount; i++) {
+                dirty_seq += info.channel[i].local_seq_num;
+            }
+            if((agag < 127) {
+                ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
+            } else {
+                ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+            }
+            // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
+        } else {
+            agag = 0;
+            ag_flag = R_MODE;
+            ag_flag_local_prev = ag_flag_local;
+        }
+
         //vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
         //vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
         /*if (info.send_q_limit_cubic > 90000) {
@@ -2373,7 +2403,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
-                add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
+                //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
+                add_json(js_buf, &js_cur, "agag", "%d", agag);
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
                 add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
                 add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
@@ -2385,7 +2416,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
-                add_json(js_buf, &js_cur, "bytes_sent", "%d", (statb.bytes_sent_norm + statb.bytes_sent_rx));
+                add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
+                add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 
                 
                 uint32_t m_lsn = 0;
@@ -3753,8 +3785,8 @@ int lfd_linker(void)
              * */
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
-        //if (ag_flag_local == R_MODE) {
-        if(1) {
+        if (ag_flag == R_MODE) {
+        //if(1) {
             len = retransmit_send(out2);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
