@@ -3276,14 +3276,15 @@ int lfd_linker(void)
                             info.max_send_q_max = my_max_send_q > info.max_send_q_max ? my_max_send_q : info.max_send_q_max;
                             info.max_send_q_min = my_max_send_q < info.max_send_q_min ? my_max_send_q : info.max_send_q_min;
 #endif
-                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             // local seq_num
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             uint32_t local_seq_tmp = ntohl(tmp32_n); 
-                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                                 info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
                             }
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t)); // dn speed
 #ifdef DEBUGG
+
                             int show_speed=0;
                             if (ntohl(tmp32_n) != info.channel[chan_num].packet_recv_upload) {
                                 show_speed=1;
