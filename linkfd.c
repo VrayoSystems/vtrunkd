@@ -1118,7 +1118,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d",  shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel]);
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms",  shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
                 } else if (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) {
                     vtun_syslog(LOG_INFO, "LOSS tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms",  shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
                 }
