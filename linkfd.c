@@ -3495,6 +3495,7 @@ int lfd_linker(void)
 
                     // calculate send_q and speed
                     // send_q
+                    info.channel[chan_num].send_q_time = info.current_time;
                     info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
                     info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
