@@ -788,6 +788,7 @@ int retransmit_send(char *out2) {
         }
         // now we have something to retransmit:
 
+
         last_sent_packet_num[i].seq_num++;
  
 
@@ -828,9 +829,11 @@ int retransmit_send(char *out2) {
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
 
+        /*
         if(drop_packet_flag == 1) {
             continue;
-        } 
+        }
+        */
         
         statb.bytes_sent_rx += len;        
         
@@ -963,6 +966,18 @@ int select_devread_send(char *buf, char *out2) {
 #endif
             return CONTINUE_ERROR;
         }
+
+
+        if (drop_packet_flag == 1) {
+            drop_counter++;
+            if (drop_counter>1000) drop_counter=0;
+//#ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
+//#endif
+            return CONTINUE_ERROR;
+        }
+
+
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
@@ -1026,15 +1041,6 @@ int select_devread_send(char *buf, char *out2) {
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
-
-    if (drop_packet_flag == 1) {
-        drop_counter++;
-        if (drop_counter>1000) drop_counter=0;
-#ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff);
-#endif
-        return CONTINUE_ERROR;
-    }
 
     statb.bytes_sent_norm += len;
 
