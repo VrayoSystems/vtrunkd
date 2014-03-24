@@ -751,7 +751,7 @@ int check_fast_resend() {
 /**
  * Function for trying resend
  */ 
-int retransmit_send(char *out2) {
+int retransmit_send(char *out2, int n_to_send) {
     if (hold_mode) {
         return CONTINUE_ERROR;
     }
@@ -788,9 +788,15 @@ int retransmit_send(char *out2) {
         }
         // now we have something to retransmit:
 
-
-        last_sent_packet_num[i].seq_num++;
- 
+        uint32_t seq_num_tosend = top_seq_num - n_to_send + 1;
+        if(seq_num_tosend > top_seq_num) {
+            continue;
+        }
+        if(last_sent_packet_num[i].seq_num > seq_num_tosend) {
+            last_sent_packet_num[i].seq_num++;
+        } else {
+            last_sent_packet_num[i].seq_num = seq_num_tosend;
+        }
 
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
@@ -2344,7 +2350,8 @@ int lfd_linker(void)
             } else {
                 if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
                     //vtun_syslog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                    drop_packet_flag = 1;
+                    drop_packet_flag = 0;
+                    hold_mode = 1;
                 } else {
                     //vtun_syslog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
@@ -3835,7 +3842,12 @@ int lfd_linker(void)
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
         //if(1) {
-            len = retransmit_send(out2);
+            int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
+            int n_to_send = (lim - send_q_eff) / 1000;
+            if(n_to_send < 0) {
+                n_to_send = 0;
+            }
+            len = retransmit_send(out2, n_to_send);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
