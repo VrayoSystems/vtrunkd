@@ -3980,8 +3980,7 @@ int lfd_linker(void)
     lfd_free(buf);
     lfd_free(out_buf);
     free(js_buf);
-    free(info.channel);
-    free(chan_info);
+
 
     for (i = 0; i < info.channel_amount; i++) {
         close(info.channel[i].descriptor);
