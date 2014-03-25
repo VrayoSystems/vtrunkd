@@ -358,6 +358,7 @@ struct conn_stats {
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
     int32_t max_ACS2;
+    int32_t max_PCS2;
     int32_t W_cubic;
     int rtt_phys_avg;
     int my_max_send_q_chan_num;
