@@ -3979,6 +3979,7 @@ int lfd_linker(void)
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
     lfd_free(buf);
     lfd_free(out_buf);
+    free(js_buf);
 
     for (i = 0; i < info.channel_amount; i++) {
         close(info.channel[i].descriptor);
