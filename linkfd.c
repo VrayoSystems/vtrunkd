@@ -2457,6 +2457,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
+                add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
                 add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
