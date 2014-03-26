@@ -576,9 +576,10 @@ int fix_free_writebuf() {
 int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
     int i, len = -1;
     struct timeval expiration_date;
-    struct timeval mrl = {0, 30000};
+    struct timeval mrl;
+    mrl.tv_sec = 0;
+    mrl.tv_usec = info.max_reorder_latency.tv_usec / 2;
     gettimeofday(&info.current_time, NULL );
-    //timersub(&info.current_time, &info.max_reorder_latency, &expiration_date);
     timersub(&info.current_time, &mrl, &expiration_date);
     
     // TODO: we should be searching from most probable start place
