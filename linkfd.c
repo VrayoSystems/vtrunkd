@@ -1129,6 +1129,9 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
     acnt = 0;
     if (fprev > -1) {
+        if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
+            info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
+        }
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
