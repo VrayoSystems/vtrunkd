@@ -586,7 +586,12 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
             break;
         }
     }
-    int j = i;
+    int j;
+    if(i == RESEND_BUF_SIZE) {
+        j = shm_conn_info->resend_buf_idx;
+    } else {
+        j = i;
+    }
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             if (timercmp(&expiration_date,&shm_conn_info->resend_frames_buf[j].time_stamp,<=)) {
