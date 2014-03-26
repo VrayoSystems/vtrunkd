@@ -472,6 +472,7 @@ struct phisical_status {
     uint32_t rtt2_lsn[MAX_TCP_LOGICAL_CHANNELS];
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
+    struct timeval max_reorder_latency;
 
 };
 

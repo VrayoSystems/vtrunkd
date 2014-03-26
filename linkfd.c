@@ -104,7 +104,7 @@ struct my_ip {
 #define SEND_Q_LIMIT_MINIMAL 5000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD 7000
 #define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
+//#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 999999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
@@ -140,7 +140,6 @@ int acnt = 0; // assert variable
 char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
-
 #define START_SQL 5000
 
 int drop_packet_flag = 0, drop_counter=0;
@@ -574,22 +573,42 @@ int fix_free_writebuf() {
     return 0;
 }
 
-int get_resend_frame(int conn_num, uint32_t seq_num, char **out, int *sender_pid) {
+int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
     int i, len = -1;
+    struct timeval expiration_date;
+    gettimeofday(&info.current_time, NULL );
+    timersub(&info.current_time, &info.max_reorder_latency, &expiration_date);
     // TODO: we should be searching from most probable start place
     //   not to scan through the whole buffer to the end
     for(i=0; i<RESEND_BUF_SIZE; i++) { 
-        if( (shm_conn_info->resend_frames_buf[i].seq_num == seq_num) &&
-                (shm_conn_info->resend_frames_buf[i].chan_num == conn_num)) {
-
-            len = shm_conn_info->resend_frames_buf[i].len;
-            *((uint16_t *)(shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV + (len+sizeof(uint32_t)))) = (uint16_t)htons(conn_num + FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
-            *out = shm_conn_info->resend_frames_buf[i].out+LINKFD_FRAME_RESERV;
-            *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
+        if( (shm_conn_info->resend_frames_buf[i].seq_num == *seq_num) &&
+                (shm_conn_info->resend_frames_buf[i].chan_num == chan_num)) {
             break;
         }
     }
+    int j = i;
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            if (timercmp(&expiration_date,&shm_conn_info->resend_frames_buf[j].time_stamp,<=)) {
+                *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
+                len = shm_conn_info->resend_frames_buf[i].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[i].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[i].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
+                return len;
+            }
+        }
+        j++;
+        if (j == RESEND_BUF_SIZE) {
+            j = 0;
+        }
+    }
+
     return len;
+}
+
+uint32_t get_fresh_seq_num(uint32_t seq_num) {
+
 }
 
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
@@ -679,7 +698,8 @@ void seqn_add_tail(int conn_num, char *buf, int len, uint32_t seq_num, uint16_t 
     shm_conn_info->resend_frames_buf[newf].sender_pid = sender_pid;
     shm_conn_info->resend_frames_buf[newf].chan_num = conn_num;
     shm_conn_info->resend_frames_buf[newf].len = len;
-
+    gettimeofday(&info.current_time, NULL );
+    shm_conn_info->resend_frames_buf[newf].time_stamp = info.current_time;
     memcpy((shm_conn_info->resend_frames_buf[newf].out + LINKFD_FRAME_RESERV), buf, len);
 }
 
@@ -788,15 +808,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
         // now we have something to retransmit:
 
-        uint32_t seq_num_tosend = top_seq_num - n_to_send + 1;
-        if(seq_num_tosend > top_seq_num) {
-            continue;
-        }
-        if(last_sent_packet_num[i].seq_num > seq_num_tosend) {
-            last_sent_packet_num[i].seq_num++;
-        } else {
-            last_sent_packet_num[i].seq_num = seq_num_tosend;
-        }
+        last_sent_packet_num[i].seq_num++;
 
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
@@ -804,21 +816,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
           if (len == -1) {
-            int succ = get_oldest_packet_seq_num(i, &seq_num_tmp);
-            vtun_syslog(LOG_INFO, "R_MODE no +1 frame; getting oldest (chan %d seq %"PRIu32" oldest seq %"PRIu32" ... continue", i, last_sent_packet_num[i].seq_num, seq_num_tmp);
-            if (succ == -1) {
-                sem_post(&(shm_conn_info->resend_buf_sem));
-                last_sent_packet_num[i].seq_num = top_seq_num;
-                vtun_syslog(LOG_INFO, "R_MODE can't found frame for chan %d seq %"PRIu32" ... continue", i, last_sent_packet_num[i].seq_num);
-                continue;
-            }
-            last_sent_packet_num[i].seq_num = seq_num_tmp;
-            len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
-        }
-        if (len == -1) {
             sem_post(&(shm_conn_info->resend_buf_sem));
-            vtun_syslog(LOG_ERR, "ERROR R_MODE can't found frame for chan %d seq %"PRIu32" ... continue", i, last_sent_packet_num[i].seq_num);
-            last_sent_packet_num[i].seq_num = top_seq_num;
             continue;
         }
         memcpy(out_buf, out2, len);
@@ -1625,6 +1623,9 @@ int lfd_linker(void)
     memset(js_buf, 0, JS_MAX);
     js_cur = 0;
     
+    struct timeval MAX_REORDER_LATENCY = { 0, 50000 };
+
+
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
     int err=0;
@@ -2042,7 +2043,7 @@ int lfd_linker(void)
     struct timeval agon_time; // time at which ag_flag_local bacame 1
     gettimeofday(&agon_time, NULL);
     
-    struct timeval max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
+    info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
 
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         info.channel[i].local_seq_num_beforeloss = 0;
@@ -2556,7 +2557,7 @@ int lfd_linker(void)
                     } else {
                         timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
                         if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
-                                        timercmp(&tv_tmp, &max_reorder_latency, >=) ) {
+                                        timercmp(&tv_tmp, &info.max_reorder_latency, >=) ) {
                             if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
                                 vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num]);
                             } else {
@@ -3451,14 +3452,14 @@ int lfd_linker(void)
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
                             // now update max_reorder_latency
                             if(info.rtt >= 1000) {
-                                max_reorder_latency.tv_sec = 0;
-                                max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MAX;
+                                info.max_reorder_latency.tv_sec = 0;
+                                info.max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MAX;
                             } else if (info.rtt == 1) {
-                                max_reorder_latency.tv_sec = 0;
-                                max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MIN; // NOTE possible problem here? 
+                                info.max_reorder_latency.tv_sec = 0;
+                                info.max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MIN; // NOTE possible problem here? 
                             } else {
-                                max_reorder_latency.tv_sec = 0;
-                                max_reorder_latency.tv_usec = info.rtt * 1000;
+                                info.max_reorder_latency.tv_sec = 0;
+                                info.max_reorder_latency.tv_usec = info.rtt * 1000;
                             }
                             
                             sem_post(&(shm_conn_info->stats_sem));
