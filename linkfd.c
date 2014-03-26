@@ -607,10 +607,6 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     return len;
 }
 
-uint32_t get_fresh_seq_num(uint32_t seq_num) {
-
-}
-
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
     int j = shm_conn_info->resend_buf_idx;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
