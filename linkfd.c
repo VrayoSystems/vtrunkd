@@ -1210,7 +1210,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int j=0;
 
     if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
-        shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num;
+        shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
     } else {
         shm_conn_info->write_buf[conn_num].last_received_seq_shadow[info.process_num] = seq_num;
     }
@@ -2557,7 +2557,7 @@ int lfd_linker(void)
                         tmp16_n = 0;
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         // dup of code below
-                        shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
+                        shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
                         shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                         sem_post(&(shm_conn_info->write_buf_sem));
                     } else {
@@ -2574,7 +2574,7 @@ int lfd_linker(void)
                             info.channel[i].packet_loss_counter = 0;
                             sem_wait(&(shm_conn_info->write_buf_sem));
                             // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
-                            shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
+                            shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
                             shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                             sem_post(&(shm_conn_info->write_buf_sem));
                         } else {
