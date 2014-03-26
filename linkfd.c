@@ -591,18 +591,20 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     }
     int j;
     if(i == RESEND_BUF_SIZE) {
-        j = shm_conn_info->resend_buf_idx;
+        // means there no such packet with requested seq_num: we are WAY too late so that buf exhausted and looped
+        // now start to search for not-so-late packet right from the end
+        j = shm_conn_info->resend_buf_idx+1;
     } else {
         j = i;
     }
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            if (timercmp(&expiration_date,&shm_conn_info->resend_frames_buf[j].time_stamp,<=)) {
+            if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
                 *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
-                len = shm_conn_info->resend_frames_buf[i].len;
-                *((uint16_t *) (shm_conn_info->resend_frames_buf[i].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
-                *out = shm_conn_info->resend_frames_buf[i].out + LINKFD_FRAME_RESERV;
-                *sender_pid = shm_conn_info->resend_frames_buf[i].sender_pid;
+                len = shm_conn_info->resend_frames_buf[j].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[j].sender_pid;
                 return len;
             }
         }
@@ -611,6 +613,11 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
             j = 0;
         }
     }
+
+    //if(i == RESEND_BUF_SIZE) {
+        // means we have not found the most recent frame in resend_buf
+        // that means that we are too new, return -1!
+    //}
 
     return len;
 }
@@ -1210,7 +1217,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int j=0;
 
     if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
-        shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
+        // TODO: this fix actually not required if we don't mess packets too much -->
+        //if((seq_num - MAX_REORDER_PERPATH) > shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num]) {
+           shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
+        //}
     } else {
         shm_conn_info->write_buf[conn_num].last_received_seq_shadow[info.process_num] = seq_num;
     }
