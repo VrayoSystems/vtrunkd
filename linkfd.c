@@ -513,7 +513,7 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if(shm_conn_info->stats[p].max_PCS2 == 0) continue;
+                if( (shm_conn_info->stats[p].max_PCS2 == 0) || (shm_conn_info->stats[p].max_ACS2 == 0) ) continue;
                 if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 }
