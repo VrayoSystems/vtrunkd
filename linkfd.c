@@ -810,9 +810,10 @@ int retransmit_send(char *out2, int n_to_send) {
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        len = get_resend_frame(i, last_sent_packet_num[i].seq_num, &out2, &mypid);
+        len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
           if (len == -1) {
             sem_post(&(shm_conn_info->resend_buf_sem));
+            last_sent_packet_num[i].seq_num--;
             continue;
         }
         memcpy(out_buf, out2, len);
