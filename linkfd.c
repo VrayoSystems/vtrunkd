@@ -2144,7 +2144,7 @@ int lfd_linker(void)
                 }
                 if (shm_conn_info->stats[i].ACK_speed > max_speed) {
                     max_speed = shm_conn_info->stats[i].ACK_speed;
-                    max_chan = i;
+                    //max_chan = i;
                 }
                 if (shm_conn_info->stats[i].ACK_speed < min_speed) {
                     min_speed = shm_conn_info->stats[i].ACK_speed;
@@ -2152,7 +2152,7 @@ int lfd_linker(void)
                 
                 if ( (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd) {
                     max_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
-                    //max_chan = i; //?
+                    max_chan = i; //?
                 }
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
@@ -2166,10 +2166,11 @@ int lfd_linker(void)
             /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
              shm_conn_info->stats[info.process_num].rtt_phys_avg,
              (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
-            if (max_speed == info.packet_recv_upload_avg) {
+            //if (max_speed == info.packet_recv_upload_avg) {
+            if (max_chan == info.process_num) {
 //                info.C = C_HI;
                 info.head_channel = 1;
-            } else if (min_speed == info.packet_recv_upload_avg) {
+            } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
 //                info.C = C_LOW / 2;
                   info.head_channel = 0;
             } else {
