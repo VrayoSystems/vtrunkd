@@ -2564,7 +2564,7 @@ int lfd_linker(void)
         for (i = 1; i < info.channel_amount; i++) {
 #endif
             /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // TODO: think through!
+            if ((info.channel[i].packet_recv_counter > MAX_REORDER_PERPATH) || timer_result) { // TODO: think through!
             //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
                 update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
@@ -2607,38 +2607,41 @@ int lfd_linker(void)
                     tmp16_n = 0; // amt of pkt loss
                     info.channel[i].packet_loss_counter = 0;
                 }
-                memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
-                tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
-                memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
-                tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
-                memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
-                tmp16_n = htons((uint16_t) i);
-                memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
-                struct timeval tmp_tv;
-                // local_seq_num
-                tmp32_n = htonl(info.channel[i].local_seq_num);
-                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
-                tmp32_n = htonl(info.channel[i].packet_download);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                if( (tmp16_n > 0) || (info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // we send only if LOSS detected, OR timer hit OR FCI_P_INTERVAL
+                    memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                    tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
+                    memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                    tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
+                    memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                    tmp16_n = htons((uint16_t) i);
+                    memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
+                    struct timeval tmp_tv;
+                    // local_seq_num
+                    tmp32_n = htonl(info.channel[i].local_seq_num);
+                    memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
+                    tmp32_n = htonl(info.channel[i].packet_download);
+                    memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
-#ifdef DEBUGG
-                vtun_syslog(LOG_ERR,
-                        "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
-                        i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
-                        (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-#endif
-                // send FCI
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
-                info.channel[i].local_seq_num++;
-                if (len_ret < 0) {
-                    vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
-                    linker_term = TERM_NONFATAL;
-                    break;
+    #ifdef DEBUGG
+                    vtun_syslog(LOG_ERR,
+                            "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
+                            i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
+                            (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
+    #endif
+                    // send FCI
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    info.channel[i].local_seq_num++;
+                    if (len_ret < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
+                        linker_term = TERM_NONFATAL;
+                        break;
+                    }
+                    info.channel[i].packet_recv_counter = 0;
+                    shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                    info.channel[0].up_len += len_ret;
                 }
-                info.channel[i].packet_recv_counter = 0;
                 
-                shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                info.channel[0].up_len += len_ret;
+                
             }
 
              /* TODO write function for lws sending*/
