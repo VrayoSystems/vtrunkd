@@ -990,7 +990,15 @@ int select_devread_send(char *buf, char *out2) {
             drop_counter++;
             if (drop_counter>1000) drop_counter=0;
 //#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel);
+            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t chan_mask = shm_conn_info->channels_mask;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+                if (chan_mask & (1 << p)) {
+                    vtun_syslog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", info.process_num, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));   
+                }
+            }
 //#endif
             return CONTINUE_ERROR;
         }
@@ -2183,7 +2191,7 @@ int lfd_linker(void)
         }
 
         if(max_chan == -1) {
-            //vtun_syslog(LOG_ERR, "WARNING! Could not detect max_chan! Defaulting to my process_num");
+            vtun_syslog(LOG_ERR, "WARNING! Could not detect max_chan! Defaulting to my process_num");
             max_chan = info.process_num;
         }
 
