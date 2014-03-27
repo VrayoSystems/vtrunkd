@@ -2192,6 +2192,15 @@ int lfd_linker(void)
 
         if(max_chan == -1) {
             vtun_syslog(LOG_ERR, "WARNING! Could not detect max_chan! Defaulting to my process_num");
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if (chan_mask & (1 << i)) {
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        // ok
+                    } else {
+                        vtun_syslog(LOG_ERR, "process %d ACS2 %d PCS2 %d", i, shm_conn_info->stats[i].max_ACS2, shm_conn_info->stats[i].max_PCS2);
+                    }
+                }
+            }
             max_chan = info.process_num;
         }
 
