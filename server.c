@@ -100,7 +100,8 @@ void connection(int sock)
         host->sopt.lport = vtun.bind_addr.port;
         host->sopt.raddr = strdup(ip);
 	host->sopt.rport = ntohs(cl_addr.sin_port);
-
+        host->start_port = vtun.start_port;
+        host->end_port = vtun.end_port;
 	/* Start tunnel */
 	tunnel(host, 1);
 
@@ -167,9 +168,9 @@ void listener(void)
      struct conn_info* shm_conn_info;
      /*
      * We'll name our shared memory segment
-     * "5678".
+     * defaul is 567888
      */
-     key = SHM_TUN_KEY;
+     key = vtun.shm_key;
      
      /*
      * Create the segment.

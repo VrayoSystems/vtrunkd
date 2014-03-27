@@ -83,8 +83,11 @@ int main(int argc, char *argv[], char *env[])
      vtun.svr_name = NULL;
      vtun.svr_addr = NULL;
      vtun.bind_addr.port = -1;
+     vtun.start_port = 0;
+     vtun.end_port = 0;
      vtun.svr_type = -1;
      vtun.syslog   = LOG_DAEMON;
+     vtun.shm_key = SHM_TUN_KEY;
 
      /* Initialize default host options */
      memset(&default_host, 0, sizeof(default_host));
@@ -122,8 +125,20 @@ int main(int argc, char *argv[], char *env[])
      /* Start logging to syslog and stderr */
      openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
-    while ((opt = getopt(argc, argv, "misf:P:L:t:npvh?")) != EOF) {
+    while ((opt = getopt(argc, argv, "S:R:misf:P:L:t:M:npvh?")) != EOF) {
 	switch(opt){
+	    case 'S':
+	        vtun.shm_key = atoi(optarg);
+	        break;
+	    case 'R':
+	        vtun.start_port = 0;
+	        char *start_port = optarg;
+	        char *end_port = strchr(start_port,'-');
+	        *end_port = '\0';
+	        end_port++;
+	        vtun.start_port = atoi(start_port);
+            vtun.end_port = atoi(end_port);
+	        break;
 	    case 'm':
 	        if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) {
 		    perror("Unable to mlockall()");

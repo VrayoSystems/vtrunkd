@@ -1839,7 +1839,7 @@ int lfd_linker(void)
 
 //            prio_opt = 1;
 //            setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
-            for (uint16_t port_tmp = start_port; port_tmp++; port_tmp <= end_port) {
+            for (uint16_t port_tmp = lfd_host->start_port; port_tmp++; port_tmp <= lfd_host->end_port) {
                 // try to bind to portnum my_num+smth:
                 memset(&my_addr, 0, sizeof(my_addr));
                 my_addr.sin_addr.s_addr = INADDR_ANY;
@@ -1848,9 +1848,9 @@ int lfd_linker(void)
                 my_addr.sin_family = AF_INET;
 
                 if (bind(info.channel[i].descriptor, (struct sockaddr *) &my_addr, sizeof(my_addr)) == -1) {
-                    if ((errno == EADDRINUSE) & (port_tmp <= end_port)) {
+                    if ((errno == EADDRINUSE) & (port_tmp < end_port)) {
                         vtun_syslog(LOG_ERR, "Can't bind port %"PRIu16", try next", port_tmp);
-                    } else if ((errno == EADDRINUSE) & (port_tmp > end_port)) {
+                    } else if ((errno == EADDRINUSE) & (port_tmp == end_port)) {
                         vtun_syslog(LOG_ERR, "Can't found free port in range %"PRIu16"-%"PRIu16"", start_port, end_port);
                         return -1;
                     } else {

@@ -187,6 +187,9 @@ struct vtun_host {
    int  rmt_fd;
    int  loc_fd;
 
+   uint16_t start_port;
+   uint16_t end_port;
+
    /* Persist mode */
    int  persist;
 
@@ -641,8 +644,11 @@ struct vtun_opts {
    char *svr_name;       /* Server's host name */
    char *svr_addr;       /* Server's address (string) */
    struct vtun_addr bind_addr;	 /* Server should listen on this address */
+   uint16_t start_port;
+   uint16_t end_port;
    int  svr_type;	 /* Server mode */
    int  syslog; 	 /* Facility to log messages to syslog under */
+   key_t shm_key;
 };
 #define VTUN_STAND_ALONE	0 
 #define VTUN_INETD		1	
