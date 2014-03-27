@@ -866,6 +866,7 @@ int retransmit_send(char *out2, int n_to_send) {
         if(info.rtt2_lsn[i] == 0) {
             info.rtt2_lsn[i] = info.channel[i].local_seq_num;
             info.rtt2_tv[i] = info.current_time;
+            info.rtt2_send_q[i] = info.channel[i].send_q;
         }
         // send DATA
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
@@ -1087,6 +1088,7 @@ int select_devread_send(char *buf, char *out2) {
         if(info.rtt2_lsn[chan_num] == 0) {
             info.rtt2_lsn[chan_num] = info.channel[chan_num].local_seq_num;
             info.rtt2_tv[chan_num] = info.current_time;
+            info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
         }
     //}
 
@@ -1100,6 +1102,7 @@ int select_devread_send(char *buf, char *out2) {
         return BREAK_ERROR;
     }
     gettimeofday(&send2, NULL );
+
     info.channel[chan_num].local_seq_num++;
     if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
        info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
@@ -2081,11 +2084,13 @@ int lfd_linker(void)
 
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         info.rtt2_lsn[i] = 0;
+        info.rtt2_send_q[i] = 0;
         info.channel[i].ACS2 = 0;
         info.channel[i].old_packet_seq_num_acked = 0;
         gettimeofday(&info.rtt2_tv[i], NULL);
     }
     info.rtt2 = 0;
+    info.max_sqspd = 0;
 
     
     
@@ -2178,12 +2183,22 @@ int lfd_linker(void)
                     min_speed = shm_conn_info->stats[i].ACK_speed;
                 }
                 
+                /*
                 if ( (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd) {
                     max_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
                         max_chan = i; //?
                     }
                 }
+                */
+
+                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
+                    max_wspd = shm_conn_info->stats[i].max_sqspd;
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        max_chan = i; //?
+                    }
+                }
+
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
                 }
@@ -3561,6 +3576,10 @@ int lfd_linker(void)
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
+                        if(chan_num == my_max_send_q_chan_num) {
+                            // calculate speed.. ?
+                            info.max_sqspd = info.rtt2_send_q[chan_num] / info.rtt2;
+                        }
                     }
 
                     // calculate send_q and speed
@@ -3598,6 +3617,7 @@ int lfd_linker(void)
                         info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                     }
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
+                    shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
                     sem_post(&(shm_conn_info->stats_sem));
 
                     //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);

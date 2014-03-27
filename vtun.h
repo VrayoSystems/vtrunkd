@@ -359,6 +359,7 @@ struct conn_stats {
     int32_t ACK_speed;
     int32_t max_ACS2;
     int32_t max_PCS2;
+    int32_t max_sqspd;
     int32_t W_cubic;
     int rtt_phys_avg;
     int my_max_send_q_chan_num;
@@ -470,6 +471,8 @@ struct phisical_status {
     uint32_t least_rx_seq[MAX_TCP_LOGICAL_CHANNELS]; // local store of least received seq_num across all phy
 
     uint32_t rtt2_lsn[MAX_TCP_LOGICAL_CHANNELS];
+    int32_t max_sqspd;
+    int32_t rtt2_send_q[MAX_TCP_LOGICAL_CHANNELS];
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
     struct timeval max_reorder_latency;
