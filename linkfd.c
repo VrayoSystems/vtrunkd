@@ -578,7 +578,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     struct timeval expiration_date;
     struct timeval mrl;
     mrl.tv_sec = 0;
-    mrl.tv_usec = info.max_reorder_latency.tv_usec / 4;
+    //mrl.tv_usec = info.max_reorder_latency.tv_usec / 4;
+    mrl.tv_usec = info.max_reorder_latency.tv_usec;
     gettimeofday(&info.current_time, NULL );
     timersub(&info.current_time, &mrl, &expiration_date);
     
