@@ -2584,12 +2584,12 @@ int lfd_linker(void)
                         sem_post(&(shm_conn_info->write_buf_sem));
                     } else {
                         timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
-                        if( ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) || 
+                        if( ((info.channel[i].local_seq_num_recv > info.channel[i].local_seq_num_beforeloss) && ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH)) || 
                                         timercmp(&tv_tmp, &info.max_reorder_latency, >=) ) {
                             if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num]);
+                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
                             } else {
-                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num]);
+                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
                             }
                             info.channel[i].local_seq_num_beforeloss = 0;
                             tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
@@ -3589,7 +3589,7 @@ int lfd_linker(void)
                     // this is loss detection -->
                     if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {
 #ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss +N was %"PRId16"", info.channel[chan_num].packet_loss_counter);
 #endif
                         
                         info.channel[chan_num].packet_loss_counter += (((int32_t) local_seq_tmp)
@@ -3599,7 +3599,8 @@ int lfd_linker(void)
                         }
 
 //#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"",
+                        vtun_syslog(LOG_INFO, "loss +%d calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", 
+                            (((int32_t) local_seq_tmp) - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1))),
                                     info.channel[chan_num].local_seq_num_recv, local_seq_tmp, info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                         if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1000)) {
@@ -3608,12 +3609,12 @@ int lfd_linker(void)
                         }
                     } else if (local_seq_tmp < info.channel[chan_num].local_seq_num_recv) {
 #ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss was %"PRId16"", info.channel[chan_num].packet_loss_counter);
+                        vtun_syslog(LOG_INFO, "loss -1 was %"PRId16"", info.channel[chan_num].packet_loss_counter);
 #endif
                         info.channel[chan_num].packet_loss_counter--;
 //#ifdef DEBUGG
 
-                        vtun_syslog(LOG_INFO, "loss calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                        vtun_syslog(LOG_INFO, "loss -1 calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                 local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                     }
