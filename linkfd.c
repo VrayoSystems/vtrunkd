@@ -165,6 +165,9 @@ int32_t ACK_coming_speed_avg = 0;
 int32_t send_q_limit = 7000;
 int32_t magic_rtt_avg = 0;
 
+uint16_t start_port = 10000; //include
+uint16_t end_port = 30000; //include
+
 /* Host we are working with.
  * Used by signal handlers that's why it is global.
  */
@@ -1821,11 +1824,6 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO,"Will create %d channels", info.channel_amount);
 
         for (int i = 1; i < info.channel_amount; i++) {
-            // try to bind to portnum my_num+smth:
-            memset(&my_addr, 0, sizeof(my_addr));
-            my_addr.sin_addr.s_addr = INADDR_ANY;
-            memset(&rmaddr, 0, sizeof(rmaddr));
-            my_addr.sin_family = AF_INET;
             if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
                 vtun_syslog(LOG_ERR, "Can't create Channels socket");
                 return -1;
@@ -1841,12 +1839,28 @@ int lfd_linker(void)
 
 //            prio_opt = 1;
 //            setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
+            for (uint16_t port_tmp = start_port; port_tmp++; port_tmp <= end_port) {
+                // try to bind to portnum my_num+smth:
+                memset(&my_addr, 0, sizeof(my_addr));
+                my_addr.sin_addr.s_addr = INADDR_ANY;
+                my_addr.sin_port = htons(port_tmp);
+                memset(&rmaddr, 0, sizeof(rmaddr));
+                my_addr.sin_family = AF_INET;
 
-            if (bind(info.channel[i].descriptor, (struct sockaddr *) &my_addr, sizeof(my_addr))) {
-                vtun_syslog(LOG_ERR, "Can't bind to the Channels socket");
-                return -1;
+                if (bind(info.channel[i].descriptor, (struct sockaddr *) &my_addr, sizeof(my_addr)) == -1) {
+                    if ((errno == EADDRINUSE) & (port_tmp <= end_port)) {
+                        vtun_syslog(LOG_ERR, "Can't bind port %"PRIu16", try next", port_tmp);
+                    } else if ((errno == EADDRINUSE) & (port_tmp > end_port)) {
+                        vtun_syslog(LOG_ERR, "Can't found free port in range %"PRIu16"-%"PRIu16"", start_port, end_port);
+                        return -1;
+                    } else {
+                        vtun_syslog(LOG_ERR, "Can't bind to the Channels socket reason: %s (%d)", strerror(errno), errno);
+                        return -1;
+                    }
+                } else {
+                    break;
+                }
             }
-
             // now get my port number
             laddrlen = sizeof(localaddr);
             if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
