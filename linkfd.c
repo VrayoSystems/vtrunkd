@@ -2137,7 +2137,7 @@ int lfd_linker(void)
             
         }
 #endif
-        int max_chan=info.process_num;
+        int max_chan=-1;
         int32_t max_speed=0;
         int32_t min_speed=(INT32_MAX - 1);
         sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -2170,7 +2170,9 @@ int lfd_linker(void)
                 
                 if ( (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd) {
                     max_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
-                    max_chan = i; //?
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        max_chan = i; //?
+                    }
                 }
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
@@ -2178,6 +2180,11 @@ int lfd_linker(void)
                 
             }
 
+        }
+
+        if(max_chan == -1) {
+            //vtun_syslog(LOG_ERR, "WARNING! Could not detect max_chan! Defaulting to my process_num");
+            max_chan = info.process_num;
         }
 
         if (min_speed != (INT32_MAX - 1)) {
