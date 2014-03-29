@@ -304,7 +304,7 @@ int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
     va_list args;
     int bs = 0;
     if (*pos > (JS_MAX/2)) return -1;
-    bs = sprintf(buf + *pos, "\"%s\":\"", name);
+    bs = sprintf(buf + *pos, "\"%s\":", name);
     *pos = *pos + bs;
     
     va_start(args, format);
@@ -313,7 +313,7 @@ int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
     
     *pos = *pos + bs;
 
-    bs = sprintf(buf + *pos, "\",");
+    bs = sprintf(buf + *pos, ",");
     *pos = *pos + bs;
     return bs;
 }
