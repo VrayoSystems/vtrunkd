@@ -28,6 +28,11 @@ void update_timer(struct timer_obj *timer){
     gettimeofday(&(timer->start_time), NULL );
 }
 
+void fast_update_timer(struct timer_obj *timer, struct timeval *cur_time){
+    timer->start_time.tv_sec = cur_time->tv_sec;
+    timer->start_time.tv_usec = cur_time->tv_usec;
+}
+
 int check_timer(struct timer_obj *timer) {
     gettimeofday(&timer->cur_time, NULL );
     timersub(&(timer->cur_time), &(timer->start_time), &(timer->tmp));

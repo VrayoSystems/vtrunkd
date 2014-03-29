@@ -2023,7 +2023,7 @@ int lfd_linker(void)
     info.check_shm = 0; // zeroing check_shm
 
     struct timer_obj *recv_n_loss_send_timer = create_timer();
-    struct timeval recv_n_loss_time = { 0, 500000 };
+    struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
 
     struct timer_obj *send_q_limit_change_timer = create_timer();
@@ -2031,7 +2031,7 @@ int lfd_linker(void)
     set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
 
     struct timer_obj *s_q_lim_drop_timer = create_timer();
-    update_timer(s_q_lim_drop_timer);
+    fast_update_timer(s_q_lim_drop_timer, &info.current_time);
 
     struct timer_obj *cubic_log_timer = create_timer();
     struct timeval cubic_log_time = { 0, 1000 };
@@ -2458,7 +2458,7 @@ int lfd_linker(void)
                     if (packet_speed_timer_time.tv_usec > 400) packet_speed_timer_time.tv_usec -= 20;
                     set_timer(packet_speed_timer, &packet_speed_timer_time);
                 } else {
-                    update_timer(packet_speed_timer);
+                    fast_update_timer(packet_speed_timer, &info.current_time);
                 }
             }
             sem_wait(&(shm_conn_info->stats_sem));
@@ -2471,11 +2471,11 @@ int lfd_linker(void)
                 hold_time = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
                         + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
             } else {
-                update_timer(hold_timer);
+                fast_update_timer(hold_timer, &info.current_time);
             }
         }
         if (check_timer(cubic_log_timer)) {
-            update_timer(cubic_log_timer);
+            fast_update_timer(cubic_log_timer, &info.current_time);
         } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
             // noop
         }
@@ -2612,7 +2612,6 @@ int lfd_linker(void)
             /*sending recv and loss data*/
             if ((info.channel[i].packet_recv_counter > MAX_REORDER_PERPATH) || timer_result) { // TODO: think through!
             //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
-                update_timer(recv_n_loss_send_timer);
                 uint32_t tmp32_n;
                 uint16_t tmp16_n;
                 tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
@@ -2654,6 +2653,7 @@ int lfd_linker(void)
                     info.channel[i].packet_loss_counter = 0;
                 }
                 if( (tmp16_n > 0) || (info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // we send only if LOSS detected, OR timer hit OR FCI_P_INTERVAL
+                    fast_update_timer(recv_n_loss_send_timer, &info.current_time);
                     memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
                     tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
                     memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
