@@ -2101,9 +2101,7 @@ int lfd_linker(void)
     }
     info.rtt2 = 0;
     info.max_sqspd = 0;
-
-    
-    
+    int was_hold_mode = 0; // TODO: remove, testing only!
 
     
 /**
@@ -2438,7 +2436,7 @@ int lfd_linker(void)
         hold_mode = 0;
         drop_packet_flag = 0;
         #endif
-        
+        if(hold_mode == 1) was_hold_mode = 1; // TODO: remove! testing only!
         
         if (fast_check_timer(packet_speed_timer, &info.current_time)) {
             gettimeofday(&info.current_time, NULL );
@@ -2521,6 +2519,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
+                add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
+                was_hold_mode = 0; // TODO: remove
                 //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
                 add_json(js_buf, &js_cur, "agag", "%d", agag);
                 add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
