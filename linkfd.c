@@ -1576,7 +1576,7 @@ int lfd_linker(void)
         memset(jsSQ_buf, 0, JS_MAX);
         jsSQ_cur = 0;
         struct timer_obj *jsSQ_timer = create_timer();
-        struct timeval t1 = { 0, 1000 }; // this time is crucial to detect send_q dops in case of long hold
+        struct timeval t1 = { 0, 500 }; // this time is crucial to detect send_q dops in case of long hold
         set_timer(jsSQ_timer, &t1);
         start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
     #endif
@@ -2067,7 +2067,7 @@ int lfd_linker(void)
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
 
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
-           add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
+           add_json_arr(jsSQ_buf, &jsSQ_cur, "%06d", send_q_eff);
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
 
