@@ -402,3 +402,122 @@ void vtun_syslog (int priority, char *format, ...)
       in_syslog = 0;
    }
 }
+
+/* Methods for periodic JSON logs */
+
+int start_json(char *buf, int *pos) {
+    int bs=0;
+    memset(buf, 0, JS_MAX);
+    *pos = 0;
+
+    bs = sprintf(buf, "{");
+    *pos = *pos + bs;
+    return 0;
+}
+
+int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
+    va_list args;
+    int bs = 0;
+    if (*pos > (JS_MAX/2)) return -1;
+    bs = sprintf(buf + *pos, "\"%s\":", name);
+    *pos = *pos + bs;
+    
+    va_start(args, format);
+    bs = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    *pos = *pos + bs;
+
+    bs = sprintf(buf + *pos, ",");
+    *pos = *pos + bs;
+    return bs;
+}
+
+int print_json(char *buf, int *pos) {
+    buf[*pos-1] = 0;
+    vtun_syslog(LOG_INFO, "%s}", buf);
+    return 0;
+}
+
+
+/* Methods for fast changing variable logging */
+int start_json_arr(char *buf, int *pos, const char *name) {
+    int bs=0;
+    memset(buf, 0, JS_MAX);
+    //struct timeval dt;
+    //gettimeofday(&dt, NULL);
+    *pos = 0;
+
+    //bs = sprintf(buf, "%ld.%06ld: {", dt.tv_sec, dt.tv_usec);
+    bs = sprintf(buf, "{\"%s\": [", name); // no need for TS in slow-ticking jsons
+
+    *pos = *pos + bs;
+    return 0;
+}
+
+int add_json_arr(char *buf, int *pos, const char *format, ...) {
+    va_list args;
+    int bs = 0;
+    if (*pos > (JS_MAX/2)) return -1;
+
+    va_start(args, format);
+    bs = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    *pos = *pos + bs;
+
+    bs = sprintf(buf + *pos, ",");
+    *pos = *pos + bs;
+    return bs;
+}
+
+int print_json_arr(char *buf, int *pos) {
+    buf[*pos-1] = 0;
+    vtun_syslog(LOG_INFO, "%s]}", buf);
+    return 0;
+}
+
+
+
+#ifdef TIMEWARP
+int print_tw(char *buf, int *pos, const char *format, ...) {
+    va_list args;
+    int slen;
+    struct timeval dt;
+    gettimeofday(&dt, NULL);
+    
+    sprintf(buf + *pos, "\n%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
+    *pos = *pos + 20;
+    
+    va_start(args, format);
+    int out = vsprintf(buf+*pos, format, args);
+    va_end(args);
+    
+    slen = strlen(buf+*pos);
+    *pos = *pos + slen;
+    if(*pos > TW_MAX - 10000) { // WARNING: 10000 max per line!
+        sprintf(buf + *pos, "---- Overflow!\n");
+        *pos = 0;
+    }
+    return out;
+}
+
+int flush_tw(char *buf, int *tw_cur) {
+    // flush, memset
+    int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
+    int slen = strlen(buf);
+    //vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
+    int len = write(fd, buf, slen);
+    close(fd);
+    memset(buf, 0, TW_MAX);
+    *tw_cur = 0;
+    return len;
+}
+
+int start_tw(char *buf, int *c) {
+    memset(buf, 0, TW_MAX);
+    *c = 0;
+    return 0;
+}
+#endif
+

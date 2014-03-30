@@ -289,6 +289,8 @@ struct vtun_host {
 #define AG_MODE 1
 #define R_MODE 0
 
+#define JS_MAX 10000 // 10kb string len of JSON logs
+
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */

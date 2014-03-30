@@ -69,6 +69,16 @@ static inline void io_cancel(void)
 
 /* signal safe syslog function */
 void vtun_syslog (int priority, char *format, ...);
+int add_json(char *buf, int *pos, const char *name, const char *format, ...);
+int start_json(char *buf, int *pos);
+int print_json(char *buf, int *pos);
+
+#ifdef TIMEWARP
+int print_tw(char *buf, int *pos, const char *format, ...);
+int flush_tw(char *buf, int *tw_cur);
+int start_tw(char *buf, int *c);
+#endif
+
 
 /* Read exactly len bytes (Signal safe)*/
 static inline int read_n(int fd, char *buf, int len)

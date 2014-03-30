@@ -126,9 +126,15 @@ struct my_ip {
     int tw_cur;
 #endif
 
-#define JS_MAX 10000 // 10kb string len
-char *js_buf;
+char *js_buf; // for tick JSON
 int js_cur;
+
+#define SEND_Q_LOG
+
+#ifdef SEND_Q_LOG
+char *jsSQ_buf; // for send_q compressor
+int jsSQ_cur;
+#endif
 
 // flags:
 uint8_t time_lag_ready;
@@ -298,97 +304,6 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
     
     return 0;
 }
-
-
-int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
-    va_list args;
-    int bs = 0;
-    if (*pos > (JS_MAX/2)) return -1;
-    bs = sprintf(buf + *pos, "\"%s\":", name);
-    *pos = *pos + bs;
-    
-    va_start(args, format);
-    bs = vsprintf(buf+*pos, format, args);
-    va_end(args);
-    
-    *pos = *pos + bs;
-
-    bs = sprintf(buf + *pos, ",");
-    *pos = *pos + bs;
-    return bs;
-}
-
-int start_json(char *buf, int *pos) {
-    int bs=0;
-    memset(buf, 0, JS_MAX);
-    struct timeval dt;
-    gettimeofday(&dt, NULL);
-    *pos = 0;
-
-    bs = sprintf(buf, "%ld.%06ld: {", dt.tv_sec, dt.tv_usec);
-    *pos = *pos + bs;
-    return 0;
-}
-
-int print_json(char *buf, int *pos) {
-    buf[*pos-1] = 0;
-    vtun_syslog(LOG_INFO, "%s}", buf);
-    return 0;
-}
-
-/*
-int mma_init(struct * v_mma mma) {
-    
-}
-
-int mma_add(struct v_mma mma, int val) {
-    if()
-    return 0;
-}
-*/
-
-#ifdef TIMEWARP
-int print_tw(char *buf, int *pos, const char *format, ...) {
-    va_list args;
-    int slen;
-    struct timeval dt;
-    gettimeofday(&dt, NULL);
-    
-    sprintf(buf + *pos, "\n%ld.%06ld:    ", dt.tv_sec, dt.tv_usec);
-    *pos = *pos + 20;
-    
-    va_start(args, format);
-    int out = vsprintf(buf+*pos, format, args);
-    va_end(args);
-    
-    slen = strlen(buf+*pos);
-    *pos = *pos + slen;
-    if(*pos > TW_MAX - 10000) { // WARNING: 10000 max per line!
-        sprintf(buf + *pos, "---- Overflow!\n");
-        *pos = 0;
-    }
-    return out;
-}
-
-int flush_tw(char *buf, int *tw_cur) {
-    // flush, memset
-    int fd = open("/tmp/TIMEWARP.log", O_WRONLY | O_APPEND);
-    int slen = strlen(buf);
-    //vtun_syslog(LOG_INFO, "FLUSH! %d", slen);
-    int len = write(fd, buf, slen);
-    close(fd);
-    memset(buf, 0, TW_MAX);
-    *tw_cur = 0;
-    return len;
-}
-
-int start_tw(char *buf, int *c) {
-    memset(buf, 0, TW_MAX);
-    *c = 0;
-    return 0;
-}
-#endif
-
 
 
 /********** Linker *************/
@@ -1655,6 +1570,16 @@ int lfd_linker(void)
     js_buf = malloc(JS_MAX);
     memset(js_buf, 0, JS_MAX);
     js_cur = 0;
+
+    #ifdef SEND_Q_LOG
+        jsSQ_buf = malloc(JS_MAX);
+        memset(jsSQ_buf, 0, JS_MAX);
+        jsSQ_cur = 0;
+        struct timer_obj *jsSQ_timer = create_timer();
+        struct timeval t1 = { 0, 5000 }; // this time is crucial to detect send_q dops in case of long hold
+        set_timer(jsSQ_timer, &t1);
+        start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
+    #endif
     
     struct timeval MAX_REORDER_LATENCY = { 0, 50000 };
 
@@ -2118,9 +2043,6 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
-//        usleep(100); // todo need to tune; Is it necessary? I don't know
-
-
         errno = 0;
         gettimeofday(&info.current_time, NULL);
 
@@ -2143,6 +2065,11 @@ int lfd_linker(void)
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
+
+        if(fast_check_timer(jsSQ_timer, &info.current_time)) {
+           add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
+           fast_update_timer(jsSQ_timer, &info.current_time);
+        }
 
 #ifdef TIMEWARP      
         if(my_max_send_q < send_q_min) {
@@ -2563,6 +2490,12 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
                 
                 print_json(js_buf, &js_cur);
+
+                #ifdef SEND_Q_LOG
+                // now array
+                print_json_arr(jsSQ_buf, &jsSQ_cur);
+                start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
+                #endif
                 
                 json_timer.tv_sec = info.current_time.tv_sec;
                 json_timer.tv_usec = info.current_time.tv_usec;
@@ -4065,6 +3998,9 @@ int lfd_linker(void)
     lfd_free(buf);
     lfd_free(out_buf);
     free(js_buf);
+    #ifdef SEND_Q_LOG
+        free(jsSQ_buf);
+    #endif
 
 
     for (i = 0; i < info.channel_amount; i++) {
