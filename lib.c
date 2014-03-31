@@ -458,7 +458,7 @@ int start_json_arr(char *buf, int *pos, const char *name) {
 int add_json_arr(char *buf, int *pos, const char *format, ...) {
     va_list args;
     int bs = 0;
-    if (*pos > (JS_MAX/2)) return -1;
+    if (*pos > (JS_MAX-500)) return -1;
 
     va_start(args, format);
     bs = vsprintf(buf+*pos, format, args);
