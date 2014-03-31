@@ -504,7 +504,7 @@ int fix_free_writebuf() {
 }
 
 int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
-    int i, len = -1;
+    int i, j, j_previous, len = -1;
     struct timeval expiration_date;
     struct timeval mrl;
     mrl.tv_sec = 0;
@@ -513,36 +513,51 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     gettimeofday(&info.current_time, NULL );
     timersub(&info.current_time, &mrl, &expiration_date);
     
-    // TODO: we should be searching from most probable start place
-    //   not to scan through the whole buffer to the end
-    for(i=0; i<RESEND_BUF_SIZE; i++) { 
-        if( (shm_conn_info->resend_frames_buf[i].seq_num == *seq_num) &&
-                (shm_conn_info->resend_frames_buf[i].chan_num == chan_num)) {
+    //find start point
+    j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
+    j_previous = j;
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
+//        vtun_syslog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            j_previous = j;
             break;
         }
+        j--;
+        if (j == -1) {
+            j = RESEND_BUF_SIZE - 1;
+        }
     }
-    int j;
-    if(i == RESEND_BUF_SIZE) {
-        // means there no such packet with requested seq_num: we are WAY too late so that buf exhausted and looped
-        // now start to search for not-so-late packet right from the end
-        j = shm_conn_info->resend_buf_idx+1;
-    } else {
-        j = i;
-    }
-    for (int i = 0; i < RESEND_BUF_SIZE; i++) {
-        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
-                *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
-                len = shm_conn_info->resend_frames_buf[j].len;
-                *((uint16_t *) (shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
-                *out = shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV;
-                *sender_pid = shm_conn_info->resend_frames_buf[j].sender_pid;
+
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
+//                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) {
+            if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >)
+                    || (shm_conn_info->resend_frames_buf[j].seq_num < *seq_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) {
+                *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
+                len = shm_conn_info->resend_frames_buf[j_previous].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
+//                vtun_syslog(LOG_INFO, "previous j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
                 return len;
+            } else if (shm_conn_info->resend_frames_buf[j].seq_num == *seq_num) {
+                if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
+                    j_previous = j;
+                }
+                *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
+                len = shm_conn_info->resend_frames_buf[j_previous].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
+//                vtun_syslog(LOG_INFO, "bottom ret j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
+                return len;
+            } else {
+                j_previous = j;
             }
         }
-        j++;
-        if (j == RESEND_BUF_SIZE) {
-            j = 0;
+        j--;
+        if (j == -1) {
+            j = RESEND_BUF_SIZE;
         }
     }
 
