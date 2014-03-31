@@ -120,10 +120,10 @@
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #ifdef LOW_MEM
     #define RESEND_BUF_SIZE 600 // int
-    #define JS_MAX 10000 // 10kb string len of JSON logs
+    #define JS_MAX 1000 // data for logs, * 3 times is allocated
 #else
     #define RESEND_BUF_SIZE 1200 // int
-    #define JS_MAX 100000 // 100kb string len of JSON logs
+    #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
 #endif
 // maximum compiled-in buffers for tcp channels per link
 #define MAX_TCP_LOGICAL_CHANNELS 7//100 // int

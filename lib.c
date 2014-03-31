@@ -388,7 +388,7 @@ int std_dev(int nums[], int len)
 void vtun_syslog (int priority, char *format, ...)
 {
    static volatile sig_atomic_t in_syslog= 0;
-   char buf[512];
+   char buf[JS_MAX];
    va_list ap;
 
    if(! in_syslog) {
@@ -418,12 +418,12 @@ int start_json(char *buf, int *pos) {
 int add_json(char *buf, int *pos, const char *name, const char *format, ...) {
     va_list args;
     int bs = 0;
-    if (*pos > (JS_MAX/2)) return -1;
+    if (*pos > (JS_MAX-2)) return -1;
     bs = sprintf(buf + *pos, "\"%s\":", name);
     *pos = *pos + bs;
     
     va_start(args, format);
-    bs = vsprintf(buf+*pos, format, args);
+    bs = vsnprintf(buf+*pos, JS_MAX-1, format, args);
     va_end(args);
     
     *pos = *pos + bs;
@@ -458,10 +458,10 @@ int start_json_arr(char *buf, int *pos, const char *name) {
 int add_json_arr(char *buf, int *pos, const char *format, ...) {
     va_list args;
     int bs = 0;
-    if (*pos > (JS_MAX-500)) return -1;
+    if (*pos > (JS_MAX-2)) return -1;
 
     va_start(args, format);
-    bs = vsprintf(buf+*pos, format, args);
+    bs = vsnprintf(buf+*pos, JS_MAX-1, format, args);
     va_end(args);
     
     *pos = *pos + bs;
