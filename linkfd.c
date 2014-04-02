@@ -2128,8 +2128,8 @@ int lfd_linker(void)
                 */
 
                 if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
-                    max_wspd = shm_conn_info->stats[i].max_sqspd;
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        max_wspd = shm_conn_info->stats[i].max_sqspd;
                         max_chan = i; //?
                     }
                 }
