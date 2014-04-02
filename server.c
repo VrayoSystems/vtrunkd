@@ -92,8 +92,8 @@ void connection(int sock)
 	sa.sa_flags=SA_NOCLDWAIT;;
         sigaction(SIGHUP,&sa,NULL);
 
-	vtun_syslog(LOG_INFO,"Session %s[%s:%d] opened", host->host, ip, 
-					ntohs(cl_addr.sin_port) );
+	vtun_syslog(LOG_INFO,"Session %s[%s:%d] opened (build %s)", host->host, ip, 
+					ntohs(cl_addr.sin_port), BUILD_DATE);
         host->rmt_fd = sock; 
 	
         host->sopt.laddr = strdup(inet_ntoa(my_addr.sin_addr));

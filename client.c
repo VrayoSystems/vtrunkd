@@ -249,7 +249,7 @@ void client(struct vtun_host *host)
 					strerror(errno), errno);
         } else {
 	   if( auth_client(s, host, &reason) ){   
-	      vtun_syslog(LOG_INFO,"Session %s[%s] opened",host->host,vtun.svr_name);
+	      vtun_syslog(LOG_INFO,"Session %s[%s] opened (build %s)",host->host,vtun.svr_name, BUILD_DATE);
               
 
 
