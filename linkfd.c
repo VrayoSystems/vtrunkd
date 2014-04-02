@@ -756,22 +756,9 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-        if (last_sent_packet_num[i].num_resend == 0) {
-            last_sent_packet_num[i].num_resend++;
-            vtun_syslog(LOG_INFO, "Resend frame ... chan %d start for seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
-        }
-#endif
-
-#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
 
-        /*
-        if(drop_packet_flag == 1) {
-            continue;
-        }
-        */
-        
         statb.bytes_sent_rx += len;        
         
         // TODO: add select() here!
@@ -1040,9 +1027,7 @@ int select_devread_send(char *buf, char *out2) {
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
-#ifdef DEBUGG
-    last_sent_packet_num[chan_num].num_resend = 0;
-#endif
+
     return len;
 }
 
