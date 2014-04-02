@@ -737,6 +737,7 @@ int retransmit_send(char *out2, int n_to_send) {
         // now we have something to retransmit:
 
         last_sent_packet_num[i].seq_num++;
+        seq_num_tmp = last_sent_packet_num[i].seq_num; // save old seq_num for test
 
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
@@ -747,6 +748,9 @@ int retransmit_send(char *out2, int n_to_send) {
             sem_post(&(shm_conn_info->resend_buf_sem));
             last_sent_packet_num[i].seq_num--;
             continue;
+        }
+        if((last_sent_packet_num[i].seq_num != seq_num_tmp) && (info.head_channel == 1)) {
+            vtun_syslog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
         }
         memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
