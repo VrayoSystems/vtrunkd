@@ -111,6 +111,7 @@ struct my_ip {
 #define RSR_TOP 90000
 #define SELECT_SLEEP_USEC 50000
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
+#define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -2264,7 +2265,7 @@ int lfd_linker(void)
         }
         
         ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply < info.rsr)) ? R_MODE : AG_MODE);
-        if( max_speed * 10 < magic_speed * 7 ) ag_flag_local = R_MODE;
+        if( max_speed * 10 < magic_speed * (AG_GLOBAL_SPD_PRECENT / 10) ) ag_flag_local = R_MODE;
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         sem_post(&(shm_conn_info->stats_sem));
