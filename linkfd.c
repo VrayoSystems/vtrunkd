@@ -704,6 +704,8 @@ int retransmit_send(char *out2, int n_to_send) {
     if (hold_mode) {
         return CONTINUE_ERROR;
     }
+    struct timeval tv = {0,0};
+
     int len = 0, send_counter = 0, mypid;
     uint32_t top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
     sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -734,6 +736,14 @@ int retransmit_send(char *out2, int n_to_send) {
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
            continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
+        }
+        FD_ZERO(&fdset);
+        FD_SET(info.channel[i].descriptor, &fdset);
+        int sel_ret = select(info.channel[i].descriptor + 1, &fdset, NULL, NULL, &tv);
+        if (sel_ret == 0) {
+            continue;
+        } else if (sel_ret == -1) {
+            vtun_syslog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
         }
         // now we have something to retransmit:
 
