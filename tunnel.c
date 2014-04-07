@@ -331,6 +331,7 @@ int read_fd_full(int *fd, char *dev) {
      len = strlen(remote.sun_path) + sizeof(remote.sun_family);
      if (connect(s, (struct sockaddr *)&remote, len) == -1) {
           vtun_syslog(LOG_ERR, "can not connect to fd_server UNIX SOCKET %s ", remote.sun_path);
+          close(s); // dunno why this couls happen but anyways...
           return -1;
      }
      read_fd(s, &ptr, ptr_len, fd);
