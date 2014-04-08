@@ -101,8 +101,8 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
-#define SEND_Q_LIMIT_MINIMAL 5000 // 7000 seems to work
-#define SENQ_Q_LIMIT_THRESHOLD 7000
+#define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
+#define SENQ_Q_LIMIT_THRESHOLD 13000
 #define MAX_LATENCY_DROP { 0, 550000 }
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 999999 // usec
