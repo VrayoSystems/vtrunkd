@@ -737,10 +737,13 @@ int retransmit_send(char *out2, int n_to_send) {
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
            continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
         }
+
+        // perform check that we can write w/o blocking I/O; take into account that we need to notify that we still need to retransmit
         FD_ZERO(&fdset);
         FD_SET(info.channel[i].descriptor, &fdset);
         int sel_ret = select(info.channel[i].descriptor + 1, &fdset, NULL, NULL, &tv);
         if (sel_ret == 0) {
+            send_counter++; // deny meaning that we've sent everything from retransmit and must no go on sending new packets
             continue;
         } else if (sel_ret == -1) {
             vtun_syslog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
