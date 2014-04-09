@@ -741,7 +741,7 @@ int retransmit_send(char *out2, int n_to_send) {
         // perform check that we can write w/o blocking I/O; take into account that we need to notify that we still need to retransmit
         FD_ZERO(&fdset);
         FD_SET(info.channel[i].descriptor, &fdset);
-        int sel_ret = select(info.channel[i].descriptor + 1, &fdset, NULL, NULL, &tv);
+        int sel_ret = select(info.channel[i].descriptor + 1, NULL, &fdset, NULL, &tv);
         if (sel_ret == 0) {
             send_counter++; // deny meaning that we've sent everything from retransmit and must no go on sending new packets
             continue;
