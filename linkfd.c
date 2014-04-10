@@ -2838,6 +2838,21 @@ int lfd_linker(void)
           }
         }
 
+        /* Detect that we need to enter retransmit_send as soon as possible 
+            (some packets left unsent AND we're not holding) */
+        int need_retransmit = 0;
+        if( (ag_flag_local == R_MODE) && (hold_mode == 0) ) { // WARNING: if AG_MODE? or of DROP mode?
+            sem_wait(&(shm_conn_info->common_sem));
+            for (int i = 1; i < info.channel_amount; i++) {
+                if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
+                    need_retransmit = 1;
+                    break;
+                }
+            }
+            sem_post(&(shm_conn_info->common_sem));
+        }
+
+
                     /*
                      *
                         _____         .__                   
@@ -2856,7 +2871,7 @@ int lfd_linker(void)
                      */
         sem_wait(write_buf_sem);
         FD_ZERO(&fdset_w);
-        if (get_write_buf_wait_data()) {
+        if (get_write_buf_wait_data() || need_retransmit) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
             FD_SET(info.tun_device, pfdset_w);
         } else {
