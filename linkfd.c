@@ -164,7 +164,7 @@ int my_max_send_q_chan_num = 0;
 uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 uint32_t last_channels_mask = 0;
 int32_t send_q_eff = 0;
-
+int max_chan=-1;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
@@ -419,6 +419,20 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
     //vtun_syslog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
     *buf_len = blen;
     return idx;
+}
+
+/* Check if the packet sent right now will be delivered in time */
+int check_delivery_time() {
+    // RTT-only for now..
+    struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    sem_wait(&(shm_conn_info->stats_sem));
+    if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > (tv2ms(&max_latency_drop) / 2) ) {
+        // no way to deliver in time
+        sem_post(&(shm_conn_info->stats_sem));
+        return 0;
+    }
+    sem_post(&(shm_conn_info->stats_sem));
+    return 1;
 }
 
 int get_write_buf_wait_data() {
@@ -806,8 +820,14 @@ int retransmit_send(char *out2, int n_to_send) {
         send_counter++;
     }
     
-    if (send_counter == 0) 
-        return LASTPACKETMY_NOTIFY;
+    if (send_counter == 0) {
+        if (check_delivery_time()) {
+           return LASTPACKETMY_NOTIFY;
+        } else {
+            vtun_syslog(LOG_ERR, "WARNING can not deliver new packet in time; skipping read from tun");
+            return CONTINUE_ERROR;
+        }
+    }
         
     return 1;
 }
@@ -2091,7 +2111,7 @@ int lfd_linker(void)
             
         }
 #endif
-        int max_chan=-1;
+        max_chan=-1;
         int32_t max_speed=0;
         int32_t min_speed=(INT32_MAX - 1);
         sem_wait(&(shm_conn_info->AG_flags_sem));
