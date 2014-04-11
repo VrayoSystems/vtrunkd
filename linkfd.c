@@ -426,8 +426,9 @@ int check_delivery_time() {
     // RTT-only for now..
     struct timeval max_latency_drop = MAX_LATENCY_DROP;
     sem_wait(&(shm_conn_info->stats_sem));
-    if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > (tv2ms(&max_latency_drop) / 2) ) {
+    if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
         // no way to deliver in time
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
         sem_post(&(shm_conn_info->stats_sem));
         return 0;
     }
@@ -839,7 +840,7 @@ int retransmit_send(char *out2, int n_to_send) {
         if (check_delivery_time()) {
            return LASTPACKETMY_NOTIFY;
         } else {
-            vtun_syslog(LOG_ERR, "WARNING can not deliver new packet in time; skipping read from tun");
+            //vtun_syslog(LOG_ERR, "WARNING can not deliver new packet in time; skipping read from tun");
             return CONTINUE_ERROR;
         }
     }
