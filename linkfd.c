@@ -723,7 +723,7 @@ int retransmit_send(char *out2, int n_to_send) {
     int len = 0, send_counter = 0, mypid;
     uint32_t top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
     sem_wait(&(shm_conn_info->resend_buf_sem));
-    if (check_fast_resend()){
+    if (check_fast_resend()){ // fast_resend technique is used for info.channel_amount > 1
         sem_post(&(shm_conn_info->resend_buf_sem));
         return HAVE_FAST_RESEND_FRAME;
     }
@@ -992,7 +992,7 @@ int select_devread_send(char *buf, char *out2) {
 #endif
     if (select_ret != 1) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter);
+        idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter); // fast_resend technique is used for info.channel_amount > 1
         sem_post(&(shm_conn_info->resend_buf_sem));
         //if(new_packet) {
         //    info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
