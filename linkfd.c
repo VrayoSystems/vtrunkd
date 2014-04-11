@@ -824,8 +824,8 @@ int retransmit_send(char *out2, int n_to_send) {
                 continue; // ok to send new packet
             } 
             // else there is no way we can deliver anything in time; now get latest packet
-            vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet...");
             len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
             if(len == -1) {
                 sem_post(&(shm_conn_info->resend_buf_sem));
                 vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
