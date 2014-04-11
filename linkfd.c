@@ -1685,7 +1685,10 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
-    int ping_req_ts[MAX_TCP_LOGICAL_CHANNELS] = {0}; // in us
+    struct timeval ping_req_tv[MAX_TCP_LOGICAL_CHANNELS];
+    for(int i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
+        gettimeofday(&ping_req_tv[i], NULL);
+    }
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
     long int last_net_read = 0; // for timeout;
 
@@ -2148,6 +2151,22 @@ int lfd_linker(void)
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
+
+        // calculate on-line RTT:
+        if(ping_rcvd == 0) {
+            timersub(&info.current_time, &ping_req_tv[0], &tv_tmp);
+            int cur_rtt = tv2ms(&tv_tmp);
+            sem_wait(&(shm_conn_info->stats_sem));
+            //for(int i=0; i<info.channel_amount; i++) { // only chan 0 !
+            if(cur_rtt > shm_conn_info->stats[info.process_num].rtt_phys_avg) {
+                shm_conn_info->stats[info.process_num].rtt_phys_avg = cur_rtt;
+                info.rtt = cur_rtt;
+            }
+            //}
+            // TODO: in case of DDS initiate second ping immediately!!??
+            sem_post(&(shm_conn_info->stats_sem));
+        }
+
 
 #ifdef TIMEWARP      
         if(my_max_send_q < send_q_min) {
@@ -3007,7 +3026,7 @@ int lfd_linker(void)
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                        ping_req_ts[i] = info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000; //save time
+                        ping_req_tv[i] = info.current_time;
                         int len_ret;
                         if (i == 0) {
                             len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
@@ -3546,7 +3565,8 @@ int lfd_linker(void)
                         gettimeofday(&info.current_time, NULL);
 
                         if (chan_num == my_max_send_q_chan_num) {
-                            info.rtt = (int) ((info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000) - ping_req_ts[chan_num]); // ms
+                            timersub(&info.current_time, &ping_req_tv[chan_num], &tv_tmp);
+                            info.rtt = tv2ms(&tv_tmp);
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 2;
                             if(shm_conn_info->stats[info.process_num].rtt_phys_avg == 0) {
@@ -4036,7 +4056,7 @@ int lfd_linker(void)
 #endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                ping_req_ts[i] = info.current_time.tv_sec * 1000 + info.current_time.tv_usec / 1000; //save time
+                ping_req_tv[i] = info.current_time;
                 int len_ret;
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
