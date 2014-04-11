@@ -428,7 +428,7 @@ int check_delivery_time() {
     sem_wait(&(shm_conn_info->stats_sem));
     if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
+        //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
         sem_post(&(shm_conn_info->stats_sem));
         return 0;
     }
@@ -507,12 +507,25 @@ int fix_free_writebuf() {
 int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
     int i, j, j_previous, len = -1;
     struct timeval expiration_date;
-    struct timeval mrl;
-    mrl.tv_sec = 0;
-    //mrl.tv_usec = info.max_reorder_latency.tv_usec / 4;
-    mrl.tv_usec = info.max_reorder_latency.tv_usec;
-    gettimeofday(&info.current_time, NULL );
-    timersub(&info.current_time, &mrl, &expiration_date);
+    struct timeval max_latency;
+
+    int mrl_ms, drtt_ms, expiration_ms_fromnow;
+
+    sem_wait(&(shm_conn_info->stats_sem));
+    drtt_ms = shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg;
+    sem_post(&(shm_conn_info->stats_sem));
+
+    // MRL is allowed time to lag
+    mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
+    expiration_ms_fromnow = mrl_ms - drtt_ms;
+    if(expiration_ms_fromnow < 0) { 
+        // we can get no frames; handle this above
+        return -1;
+    }
+    ms2tv(&max_latency, expiration_ms_fromnow);
+    
+    gettimeofday(&info.current_time, NULL ); // why?? to be exact!
+    timersub(&info.current_time, &max_latency, &expiration_date);
     
     //find start point
     j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
@@ -570,12 +583,13 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     return len;
 }
 
+// cycle resend buffer from top down to old to get any packet
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
     int j = shm_conn_info->resend_buf_idx;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
-            return 1;
+            return j;
         }
         j--;
         if (j < 0) {
@@ -594,11 +608,21 @@ int get_oldest_packet_seq_num(int chan_num, uint32_t *seq_num) {
         }
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
-            return 1;
+            return j;
         }
         j++;
     }
     return -1;
+}
+
+int get_last_packet(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
+    int j = get_last_packet_seq_num(chan_num, seq_num);
+    if(j == -1) return -1;
+    int len = shm_conn_info->resend_frames_buf[j].len;
+    *((uint16_t *) (shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+    *out = shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV;
+    *sender_pid = shm_conn_info->resend_frames_buf[j].sender_pid;
+    return len;
 }
 
 int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, uint32_t *local_seq_num, uint16_t *mini_sum, uint32_t *last_recv_lsn, uint32_t *packet_recv_spd) {
@@ -765,7 +789,11 @@ int retransmit_send(char *out2, int n_to_send) {
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
-           continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
+            if(check_delivery_time()) {
+                continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
+            }
+            // else means that we need to send something old
+            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time");            
         }
 
         // perform check that we can write w/o blocking I/O; take into account that we need to notify that we still need to retransmit
@@ -775,7 +803,7 @@ int retransmit_send(char *out2, int n_to_send) {
         int sel_ret = select(info.channel[i].descriptor + 1, NULL, &fdset2, NULL, &tv);
         if (sel_ret == 0) {
             send_counter++; // deny meaning that we've sent everything from retransmit and must no go on sending new packets
-            continue;
+            continue; // continuing w/o reading/sending pkts AND send_counter++ will cause to fast-loop; we effectively do a poll here
         } else if (sel_ret == -1) {
             vtun_syslog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
         }
@@ -789,10 +817,20 @@ int retransmit_send(char *out2, int n_to_send) {
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-          if (len == -1) {
-            sem_post(&(shm_conn_info->resend_buf_sem));
+        if (len == -1) {
             last_sent_packet_num[i].seq_num--;
-            continue;
+            if (check_delivery_time()) {
+                sem_post(&(shm_conn_info->resend_buf_sem));
+                continue; // ok to send new packet
+            } 
+            // else there is no way we can deliver anything in time; now get latest packet
+            vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet...");
+            len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            if(len == -1) {
+                sem_post(&(shm_conn_info->resend_buf_sem));
+                vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
+                continue;
+            }
         }
         if((last_sent_packet_num[i].seq_num != seq_num_tmp) && (info.head_channel == 1)) {
             vtun_syslog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
@@ -837,10 +875,10 @@ int retransmit_send(char *out2, int n_to_send) {
     }
     
     if (send_counter == 0) {
-        if (check_delivery_time()) {
-           return LASTPACKETMY_NOTIFY;
+        if (check_delivery_time()) { // TODO: REMOVE THIS EXTRA CHECK (debug only; should never happen due to previous checks)
+            return LASTPACKETMY_NOTIFY;
         } else {
-            //vtun_syslog(LOG_ERR, "WARNING can not deliver new packet in time; skipping read from tun");
+            vtun_syslog(LOG_ERR, "WARNING STILL can not deliver new packet in time; skipping read from tun");
             return CONTINUE_ERROR;
         }
     }
@@ -2939,7 +2977,6 @@ int lfd_linker(void)
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
-
 #ifdef DEBUGG
         gettimeofday(&work_loop2, NULL );
         vtun_syslog(LOG_INFO, "First select time: %"PRIu32" us descriptors num: %i", (long int)((work_loop2.tv_sec-work_loop1.tv_sec)*1000000+(work_loop2.tv_usec-work_loop1.tv_usec)), len);
@@ -2955,6 +2992,8 @@ int lfd_linker(void)
             }
         }
 
+        gettimeofday(&info.current_time, NULL); // current time may be ruined by select... TODO: this is expensive call -> optimize by timeradd?
+
         if( !len ) {
             /* We are idle, lets check connection */
 #ifdef DEBUGG
@@ -2964,7 +3003,6 @@ int lfd_linker(void)
                 if((info.current_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
                          ping_rcvd = 0;
-                         gettimeofday(&info.current_time, NULL);
                          last_ping = info.current_time.tv_sec;
                          vtun_syslog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
