@@ -2008,7 +2008,7 @@ int lfd_linker(void)
         linker_term = TERM_NONFATAL;
     }
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"start\":1, \"build\":%s}", lfd_host->host, BUILD_DATE);
+    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"start\":1, \"build\":\"%s\"}", lfd_host->host, BUILD_DATE);
 #endif
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
