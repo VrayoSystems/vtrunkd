@@ -793,7 +793,9 @@ int retransmit_send(char *out2, int n_to_send) {
                 continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
             }
             // else means that we need to send something old
-            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time");            
+            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending");
+            send_counter++;
+            continue; // do not send anything at all
         }
 
         // perform check that we can write w/o blocking I/O; take into account that we need to notify that we still need to retransmit
