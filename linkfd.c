@@ -2543,7 +2543,7 @@ int lfd_linker(void)
                 sem_post(&(shm_conn_info->AG_flags_sem));
                 
                 start_json(js_buf, &js_cur);
-                add_json(js_buf, &js_cur, "name", "%s", lfd_host->host);
+                add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
                 add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
