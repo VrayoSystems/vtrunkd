@@ -512,6 +512,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     int mrl_ms, drtt_ms, expiration_ms_fromnow;
 
     sem_wait(&(shm_conn_info->stats_sem));
+    // drtt should be equal in AG mode as we balance the buffers, only takes place in PING-like mode
     drtt_ms = shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg;
     sem_post(&(shm_conn_info->stats_sem));
 
