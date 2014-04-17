@@ -2654,6 +2654,7 @@ int lfd_linker(void)
                     if(info.channel[i].packet_loss_counter == 0) {
                         // send immediately & stop waiting
                         info.channel[i].local_seq_num_beforeloss = 0;
+                        info.channel[i].loss_time = info.current_time; // drop all countdowns
                         tmp16_n = 0;
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         // dup of code below
@@ -2662,9 +2663,10 @@ int lfd_linker(void)
                         sem_post(&(shm_conn_info->write_buf_sem));
                     } else {
                         timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
-                        if( ((info.channel[i].local_seq_num_recv > info.channel[i].local_seq_num_beforeloss) && ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH)) || 
+                        if( ( (info.channel[i].local_seq_num_recv > info.channel[i].local_seq_num_beforeloss) && 
+                              ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) ) || 
                                         timercmp(&tv_tmp, &info.max_reorder_latency, >=) ) {
-                            if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
+                            if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
                                 vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
                             } else {
                                 vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
@@ -3395,7 +3397,7 @@ int lfd_linker(void)
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
-                                loss_time = info.current_time;
+                                loss_time = info.current_time; // received loss event time
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
@@ -3700,6 +3702,7 @@ int lfd_linker(void)
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
                         if(info.channel[chan_num].local_seq_num_beforeloss == 0) {
                             info.channel[chan_num].local_seq_num_beforeloss = info.channel[chan_num].local_seq_num_recv;
+                            info.channel[i].loss_time = info.current_time;
                         }
 
 //#ifdef DEBUGG

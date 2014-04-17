@@ -404,7 +404,7 @@ struct logical_status {
     uint32_t local_seq_num;
     uint32_t local_seq_num_recv;
     uint32_t local_seq_num_beforeloss; /** used for max_reorder support */
-    struct timeval loss_time; /** time from last detected loss on this chan_num */
+    struct timeval loss_time; /** time from last detected packet loss on this chan_num (incoming stream) */
     struct timeval last_recv_time;
     struct timeval last_info_send_time;
     int16_t packet_loss_counter;
