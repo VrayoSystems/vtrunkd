@@ -409,6 +409,7 @@ struct logical_status {
     struct timeval last_info_send_time;
     int16_t packet_loss_counter;
     uint16_t packet_recv_counter;
+    uint16_t packet_recv_counter_afterloss;
     struct timeval packet_recv_time;
     int16_t packet_loss;
     uint16_t packet_recv;
