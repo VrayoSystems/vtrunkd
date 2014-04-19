@@ -109,7 +109,8 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
-#define SELECT_SLEEP_USEC 50000
+#define SELECT_SLEEP_USEC 100000 // was 50000
+#define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 
@@ -1688,6 +1689,7 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
+    struct timeval old_time = {0, 0};
     struct timeval ping_req_tv[MAX_TCP_LOGICAL_CHANNELS];
     for(int i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         gettimeofday(&ping_req_tv[i], NULL);
@@ -2128,7 +2130,14 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
+
+        old_time = info.current_time;
         gettimeofday(&info.current_time, NULL);
+
+        timersub(&info.current_time, &old_time, &tv_tmp_tmp_tmp);
+        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
+            vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+        }
 
         uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
 
