@@ -534,7 +534,7 @@ struct resent_chk {
 #define MAX_NUM_RESEND 1 //max number of resend in retransmit mode
 
 struct last_sent_packet {
-    unsigned long seq_num;
+    uint32_t seq_num;
     unsigned long num_resend; //how many time resend
 };
 

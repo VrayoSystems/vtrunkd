@@ -2284,7 +2284,7 @@ int lfd_linker(void)
             }
         }
         
-        if( tv2ms(&t_tv) > (info.rtt*4) ) { // DDS detect:
+        if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
             shm_conn_info->stats[info.process_num].ACK_speed = 0;
         }
         
@@ -4044,7 +4044,7 @@ int lfd_linker(void)
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
         //if(1) {
-            int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
+            int lim = (((uint32_t)info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
             int n_to_send = (lim - send_q_eff) / 1000;
             if(n_to_send < 0) {
                 n_to_send = 0;
