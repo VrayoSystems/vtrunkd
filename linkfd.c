@@ -2715,8 +2715,8 @@ int lfd_linker(void)
                     
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
-                    shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
-                    shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
+                    shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                    shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                     sem_post(&(shm_conn_info->write_buf_sem));
 
                     memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
