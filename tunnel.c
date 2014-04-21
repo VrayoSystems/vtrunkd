@@ -601,18 +601,19 @@ int tunnel(struct vtun_host *host, int srv)
                     sprintf(remote.sun_path, "/tmp/vtrunkd_%s.socket", dev);
                     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
                     if (connect(s, (struct sockaddr *)&remote, len) == -1) {
-                         switch(pid2 = fork()) {
-                              case -1:
-                                   vtun_syslog(LOG_ERR,"Couldn't fork() on fd server");
-                                   return 0;
-                              case 0:
-                                   // now run server
-                                   // TODO: how to stop server??
-                                   //chdir("/var"); // chdir to protect gprof
-                                   signal(SIGCHLD, SIG_IGN);
-                                   set_title("fd server %s", host->host);
-                                   run_fd_server(fd[0], dev, &shm_conn_info[connid], srv);
-                        }     
+                         pid2 = fork();
+                         if(pid2 < 0) {
+                            vtun_syslog(LOG_ERR,"Couldn't fork() on fd server");
+                            return 0;
+                         }
+                         if(pid2 != 0) {
+                                // now run server
+                               // TODO: how to stop server??
+                               //chdir("/var"); // chdir to protect gprof
+                               signal(SIGCHLD, SIG_IGN);
+                               set_title("fd server %s", host->host);
+                               run_fd_server(fd[0], dev, &shm_conn_info[connid], srv);
+                         }
                     }
                     close(s);
                
