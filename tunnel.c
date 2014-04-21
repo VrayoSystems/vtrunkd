@@ -653,47 +653,50 @@ int tunnel(struct vtun_host *host, int srv)
 	   break;
      }
 
-        switch( (pid=fork()) ){
-	   case -1:
-	      vtun_syslog(LOG_ERR,"Couldn't fork()");
-	      if( ! ( host->persist == VTUN_PERSIST_KEEPIF ) )
-		 close(fd[0]);
-	      close(fd[1]);
-	      return 0;
- 	   case 0:
+
+     pid=fork();
+     if( pid < 0 ) {
+        vtun_syslog(LOG_ERR,"Couldn't fork()");
+          if( ! ( host->persist == VTUN_PERSIST_KEEPIF ) )
+         close(fd[0]);
+          close(fd[1]);
+          return 0;
+     }
+     if(pid != 0) { // use parent to run commands, child to go further
            /* do this only the first time when in persist = keep mode */
            //chdir("/var"); // gprof
            if( ! interface_already_open ){
-	      switch( host->flags & VTUN_TYPE_MASK ){
-	         case VTUN_TTY:
-		    /* Open pty slave (becomes controlling terminal) */
-		    if( (fd[1] = open(dev, O_RDWR)) < 0){
-		       vtun_syslog(LOG_ERR,"Couldn't open slave pty");
-		       exit(0);
-		    }
-		    /* Fall through */
-	         case VTUN_PIPE:
-		    null_fd = open("/dev/null", O_RDWR);
-		    close(fd[0]);
-		    close(0); dup(fd[1]);
-		    close(1); dup(fd[1]);
-		    close(fd[1]);
+          switch( host->flags & VTUN_TYPE_MASK ){
+             case VTUN_TTY:
+            /* Open pty slave (becomes controlling terminal) */
+            if( (fd[1] = open(dev, O_RDWR)) < 0){
+               vtun_syslog(LOG_ERR,"Couldn't open slave pty");
+               exit(0);
+            }
+            /* Fall through */
+             case VTUN_PIPE:
+            null_fd = open("/dev/null", O_RDWR);
+            close(fd[0]);
+            close(0); dup(fd[1]);
+            close(1); dup(fd[1]);
+            close(fd[1]);
 
-		    /* Route stderr to /dev/null */
-		    close(2); dup(null_fd);
-		    close(null_fd);
-		    break;
-	         case VTUN_ETHER:
-	         case VTUN_TUN:
-		    break;
-	      }
+            /* Route stderr to /dev/null */
+            close(2); dup(null_fd);
+            close(null_fd);
+            break;
+             case VTUN_ETHER:
+             case VTUN_TUN:
+            break;
+          }
            }
-	   /* Run list of up commands */
-	   set_title("%s running up commands", host->host);
-	   llist_trav(&host->up, run_cmd, &host->sopt);
+       /* Run list of up commands */
+       set_title("%s running up commands", host->host);
+       llist_trav(&host->up, run_cmd, &host->sopt);
 
-	   exit(0);           
-	}
+       exit(0);        
+     }
+
 
      switch( host->flags & VTUN_TYPE_MASK ){
         case VTUN_TTY:
