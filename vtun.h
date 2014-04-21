@@ -404,11 +404,12 @@ struct logical_status {
     uint32_t local_seq_num;
     uint32_t local_seq_num_recv;
     uint32_t local_seq_num_beforeloss; /** used for max_reorder support */
-    struct timeval loss_time; /** time from last detected loss on this chan_num */
+    struct timeval loss_time; /** time from last detected packet loss on this chan_num (incoming stream) */
     struct timeval last_recv_time;
     struct timeval last_info_send_time;
     int16_t packet_loss_counter;
     uint16_t packet_recv_counter;
+    uint16_t packet_recv_counter_afterloss;
     struct timeval packet_recv_time;
     int16_t packet_loss;
     uint16_t packet_recv;
@@ -533,7 +534,7 @@ struct resent_chk {
 #define MAX_NUM_RESEND 1 //max number of resend in retransmit mode
 
 struct last_sent_packet {
-    unsigned long seq_num;
+    uint32_t seq_num;
     unsigned long num_resend; //how many time resend
 };
 

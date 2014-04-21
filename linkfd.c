@@ -109,7 +109,8 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
-#define SELECT_SLEEP_USEC 50000
+#define SELECT_SLEEP_USEC 100000 // was 50000
+#define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 
@@ -775,7 +776,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_post(&(shm_conn_info->common_sem));
         sem_wait(&(shm_conn_info->write_buf_sem));
         remote_lws = shm_conn_info->write_buf[i].remote_lws;
-        if (remote_lws > top_seq_num) {
+        if (remote_lws > top_seq_num) { // do we ever need this???
             shm_conn_info->write_buf[i].remote_lws = top_seq_num; // ????top_seq_num - 1
             remote_lws = top_seq_num;
         }
@@ -1688,6 +1689,7 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
+    struct timeval old_time = {0, 0};
     struct timeval ping_req_tv[MAX_TCP_LOGICAL_CHANNELS];
     for(int i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         gettimeofday(&ping_req_tv[i], NULL);
@@ -2128,7 +2130,14 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
+
+        old_time = info.current_time;
         gettimeofday(&info.current_time, NULL);
+
+        timersub(&info.current_time, &old_time, &tv_tmp_tmp_tmp);
+        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
+            vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+        }
 
         uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
 
@@ -2275,7 +2284,7 @@ int lfd_linker(void)
             }
         }
         
-        if( tv2ms(&t_tv) > (info.rtt*4) ) { // DDS detect:
+        if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
             shm_conn_info->stats[info.process_num].ACK_speed = 0;
         }
         
@@ -2636,69 +2645,90 @@ int lfd_linker(void)
                 linker_term = TERM_NONFATAL;
             }
         }
+
         int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
-#ifdef NO_ACK
-        if(0){
-#else
         for (i = 1; i < info.channel_amount; i++) {
-#endif
-            /*sending recv and loss data*/
-            if ((info.channel[i].packet_recv_counter > MAX_REORDER_PERPATH) || timer_result) { // TODO: think through!
-            //if (((info.channel[i].local_seq_num_beforeloss != 0) && (info.channel[i].packet_recv_counter > FCI_P_INTERVAL)) || timer_result) { // TODO: think through!
-                uint32_t tmp32_n;
-                uint16_t tmp16_n;
+            uint32_t tmp32_n;
+            uint16_t tmp16_n;
+            // split LOSS event generation and bytes-in-flight (LLRS)
+
+            // FCI - LLRS: TODO: remove dup code below (FCI packet formation)
+            if((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) {
+                fast_update_timer(recv_n_loss_send_timer, &info.current_time);
                 tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
-                memcpy(buf, &tmp16_n, sizeof(uint16_t));
-                if (info.channel[i].local_seq_num_beforeloss != 0) { // send only in this case
-                    // check timer
-                    if(info.channel[i].packet_loss_counter == 0) {
-                        // send immediately & stop waiting
-                        info.channel[i].local_seq_num_beforeloss = 0;
-                        tmp16_n = 0;
-                        sem_wait(&(shm_conn_info->write_buf_sem));
-                        // dup of code below
-                        shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
-                        shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
-                        sem_post(&(shm_conn_info->write_buf_sem));
-                    } else {
-                        timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
-                        if( ((info.channel[i].local_seq_num_recv > info.channel[i].local_seq_num_beforeloss) && ((info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH)) || 
-                                        timercmp(&tv_tmp, &info.max_reorder_latency, >=) ) {
-                            if( (info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                                vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
-                            } else {
-                                vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
-                            }
-                            info.channel[i].local_seq_num_beforeloss = 0;
-                            tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
-                            info.channel[i].packet_loss_counter = 0;
-                            sem_wait(&(shm_conn_info->write_buf_sem));
-                            // this is not required; just will make drop a bit faster in case of sudden stream stop/lag
-                            shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
-                            shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
-                            sem_post(&(shm_conn_info->write_buf_sem));
-                        } else {
-                            tmp16_n = 0; // amt of pkt loss
-                        }
-                    }
-                } else {
-                    tmp16_n = 0; // amt of pkt loss
-                    info.channel[i].packet_loss_counter = 0;
+                memcpy(buf, &tmp16_n, sizeof(uint16_t)); // amt of rcvd packets
+                tmp16_n = 0; // loss, we're not sending loss now, just general info
+                memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
+                tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
+                memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
+                memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                tmp16_n = htons((uint16_t) i); // chan_num ?? not needed in fact TODO remove
+                memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
+                struct timeval tmp_tv;
+                // local_seq_num
+                tmp32_n = htonl(info.channel[i].local_seq_num);
+                memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
+                tmp32_n = htonl(info.channel[i].packet_download);
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+
+#ifdef DEBUGG
+                vtun_syslog(LOG_ERR,
+                        "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
+                        i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
+                        (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
+#endif
+                // send FCI-LLRS
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                info.channel[i].local_seq_num++;
+                if (len_ret < 0) {
+                    vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
+                    linker_term = TERM_NONFATAL;
+                    break;
                 }
-                if( (tmp16_n > 0) || (info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) { // we send only if LOSS detected, OR timer hit OR FCI_P_INTERVAL
-                    fast_update_timer(recv_n_loss_send_timer, &info.current_time);
-                    memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                info.channel[i].packet_recv_counter = 0;
+                shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                info.channel[0].up_len += len_ret;
+            }
+
+            // now check if we need to fire LOSS event - send and commit locally
+            if(info.channel[i].local_seq_num_beforeloss != 0) { // we are in loss monitoring state..
+                timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
+                int timer_result2 = timercmp(&tv_tmp, &info.max_reorder_latency, >=);
+                if ((info.channel[i].packet_recv_counter_afterloss > MAX_REORDER_PERPATH) || timer_result2) {
+                    // now send and zero
+                    tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
+                    memcpy(buf, &tmp16_n, sizeof(uint16_t)); // amt of rcvd packets
+
+                    // TODO: do we use local_seq_num difference or total packets receive count??
+                    //if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
+                    if( info.channel[i].packet_recv_counter_afterloss > MAX_REORDER_PERPATH) {
+                        vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
+                    } else {
+                        vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
+                    }
+
+                    info.channel[i].local_seq_num_beforeloss = 0;
+                    tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
+                    
+                    info.channel[i].packet_loss_counter = 0;
+                    
+                    // inform here that we detected loss -->
+                    sem_wait(&(shm_conn_info->write_buf_sem));
+                    shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                    shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
+                    sem_post(&(shm_conn_info->write_buf_sem));
+
+                    memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
                     tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
-                    memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
+                    memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // flag
                     tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                     memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
-                    tmp16_n = htons((uint16_t) i);
-                    memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
-                    struct timeval tmp_tv;
-                    // local_seq_num
-                    tmp32_n = htonl(info.channel[i].local_seq_num);
+                    tmp16_n = htons((uint16_t) i); //chan_num - no need TODO remove
+                    memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //chan_num - no need TODO remove
+                    tmp32_n = htonl(info.channel[i].local_seq_num); // local_seq_num
                     memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
-                    tmp32_n = htonl(info.channel[i].packet_download);
+                    tmp32_n = htonl(info.channel[i].packet_download); // down speed per current chan (ACS?)
                     memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
     #ifdef DEBUGG
@@ -2708,6 +2738,7 @@ int lfd_linker(void)
                             (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
     #endif
                     // send FCI
+                    // TODO: select here ???
                     int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
                     if (len_ret < 0) {
@@ -2717,35 +2748,34 @@ int lfd_linker(void)
                     }
                     info.channel[i].packet_recv_counter = 0;
                     shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
-                    info.channel[0].up_len += len_ret;
+                    info.channel[0].up_len += len_ret;                    
                 }
-                
-                
             }
 
-             /* TODO write function for lws sending*/
-        sem_wait(&(shm_conn_info->write_buf_sem));
-        uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
-        uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
-        sem_post(&(shm_conn_info->write_buf_sem));
-            if ((last_written_seq_tmp > (last_last_written_seq[i] + LWS_NOTIFY_MAX_SUB_SEQ))) {
-            // TODO: DUP code!
+            /* TODO write function for lws sending*/
             sem_wait(&(shm_conn_info->write_buf_sem));
-            *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
-            last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
-            shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
+            uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
+            uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
             sem_post(&(shm_conn_info->write_buf_sem));
-            *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
-                // send LWS. TODO: Ever needed??
+            if ((last_written_seq_tmp > (last_last_written_seq[i] + LWS_NOTIFY_MAX_SUB_SEQ))) {
+                // TODO: DUP code!
+                sem_wait(&(shm_conn_info->write_buf_sem));
+                *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
+                last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
+                shm_conn_info->write_buf[i].last_lws_notified = info.current_time.tv_sec;
+                sem_post(&(shm_conn_info->write_buf_sem));
+                *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_LAST_WRITTEN_SEQ);
+                // send LWS. TODO: is it Ever needed?? -> retransmit_send and top_seq_num shifting (why neede too dunno)
+                // TODO: select here!
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
-                vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
-                linker_term = TERM_NONFATAL;
-            }
+                    vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                    linker_term = TERM_NONFATAL;
+                }
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
                 info.channel[i].up_len += len_ret;
-        }
-    }
+            }
+        } // for each chan_num loop end ([i])
           // do an expensive thing
           timersub(&info.current_time, &last_timing, &tv_tmp);
           /**
@@ -3304,6 +3334,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
 #endif
+                            // TODO: no sync here!!?!?!
                             if( ntohl(*((uint32_t *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((uint32_t *)buf));
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
@@ -3395,7 +3426,7 @@ int lfd_linker(void)
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
-                                loss_time = info.current_time;
+                                loss_time = info.current_time; // received loss event time
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
@@ -3685,23 +3716,23 @@ int lfd_linker(void)
                     /* Accumulate loss packet*/
                     uint16_t mini_sum_check = (uint16_t)(seq_num + local_seq_tmp + last_recv_lsn);
                     
-                    if(mini_sum != mini_sum_check) {
+                    if(mini_sum != mini_sum_check) { // TODO: remove!
                         vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, ntohs(mini_sum), mini_sum_check);
                         continue;
                     }
                     
                     // this is loss detection -->
-                    if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {
-#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss +N was %"PRId16"", info.channel[chan_num].packet_loss_counter);
-#endif
-                        
+                    // TODO: DUPs detect! +loss/DUP mess?? need a small buffer of received pkts?
+                    if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {                        
+                        // increment packet_loss_counter unconditionally
                         info.channel[chan_num].packet_loss_counter += (((int32_t) local_seq_tmp)
                                 - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1)));
+                        // if this is first(?) loss, restart counters
                         if(info.channel[chan_num].local_seq_num_beforeloss == 0) {
                             info.channel[chan_num].local_seq_num_beforeloss = info.channel[chan_num].local_seq_num_recv;
+                            info.channel[chan_num].loss_time = info.current_time;
+                            info.channel[chan_num].packet_recv_counter_afterloss = 0;
                         }
-
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss +%d calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", 
                             (((int32_t) local_seq_tmp) - ((int32_t) (info.channel[chan_num].local_seq_num_recv + 1))),
@@ -3711,16 +3742,49 @@ int lfd_linker(void)
                             vtun_syslog(LOG_ERR, "BROKEN PKT TYPE 2 RECEIVED: seq was %"PRIu32" now %"PRIu32" loss is %"PRId16"", info.channel[chan_num].local_seq_num_recv,
                                 local_seq_tmp, info.channel[chan_num].packet_loss_counter);
                         }
-                    } else if (local_seq_tmp < info.channel[chan_num].local_seq_num_recv) {
-#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss -1 was %"PRId16"", info.channel[chan_num].packet_loss_counter);
-#endif
-                        info.channel[chan_num].packet_loss_counter--;
+                    } else if ( (local_seq_tmp < info.channel[chan_num].local_seq_num_recv) && (local_seq_tmp > info.channel[chan_num].local_seq_num_beforeloss)) {
+                        // SOME dup protection exists here... but not full
+                        if(info.channel[chan_num].local_seq_num_beforeloss > 0) {
+                            info.channel[chan_num].packet_loss_counter--;
+                            if(info.channel[chan_num].packet_loss_counter < 0) {
+                                info.channel[chan_num].packet_loss_counter = 0;
+                                info.channel[chan_num].loss_time = info.current_time;
+                            }
+                        } else {
+                            vtun_syslog(LOG_INFO, "DUP +1 calced NO REORDER seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                                local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
+                        }
 //#ifdef DEBUGG
-
                         vtun_syslog(LOG_INFO, "loss -1 calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                 local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
+                    } else if ((local_seq_tmp == info.channel[chan_num].local_seq_num_recv) || (local_seq_tmp <= info.channel[chan_num].local_seq_num_beforeloss)) {
+                        if(info.channel[chan_num].local_seq_num_beforeloss > 0) {
+                            vtun_syslog(LOG_INFO, "DUP +1 +REORDER calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                                    local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
+                        } else {
+                            vtun_syslog(LOG_INFO, "DUP +1 calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                                    local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
+                        }
+                    } //else { } // OK, we're in order
+
+                    if(info.channel[chan_num].local_seq_num_beforeloss != 0) {
+                        if(info.channel[chan_num].packet_loss_counter == 0) { // situation normalized, all packets received
+                            info.channel[chan_num].local_seq_num_beforeloss = 0;
+                            sem_wait(&(shm_conn_info->write_buf_sem));
+                            shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                            shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
+                            sem_post(&(shm_conn_info->write_buf_sem));
+                        } else {
+                            // TODO: why this? -->
+                            if(local_seq_tmp == (info.channel[chan_num].local_seq_num_beforeloss + 1)) { // we received last lost pkt
+                                info.channel[chan_num].packet_recv_counter_afterloss--; // one packet less
+                                info.channel[chan_num].local_seq_num_beforeloss = local_seq_tmp;
+                                // TODO: info.channel[chan_num].loss_time = info.current_time; // <- here??
+                            } else {
+                                info.channel[chan_num].packet_recv_counter_afterloss++; 
+                            }
+                        }
                     }
 
                     // this is normal operation -->
@@ -3980,7 +4044,7 @@ int lfd_linker(void)
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
         //if(1) {
-            int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
+            int lim = (((uint32_t)info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
             int n_to_send = (lim - send_q_eff) / 1000;
             if(n_to_send < 0) {
                 n_to_send = 0;
