@@ -113,6 +113,8 @@ struct my_ip {
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
+#define CUBIC_T_DIV 50
+#define CUBIC_T_MAX 2000
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -2362,8 +2364,8 @@ int lfd_linker(void)
 
         timersub(&(info.current_time), &loss_time, &t_tv);
         int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-        t = t / 100;
-        t = t > 3000 ? 3000 : t; // 400s limit
+        t = t / CUBIC_T_DIV;
+        t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
         double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
         uint32_t limit_last = info.send_q_limit_cubic;
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
@@ -3442,8 +3444,8 @@ int lfd_linker(void)
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
-                                t = t / 500;
-                                t = t > 2000 ? 2000 : t; // 200s limit
+                                t = t / CUBIC_T_DIV;
+                                t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 200s limit
                             }
                             double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
                             uint32_t limit_last = info.send_q_limit_cubic;
