@@ -795,7 +795,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
             }
             // else means that we need to send something old
-            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending");
+            //vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
             send_counter++;
             continue; // do not send anything at all
         }
@@ -829,7 +829,8 @@ int retransmit_send(char *out2, int n_to_send) {
             } 
             // else there is no way we can deliver anything in time; now get latest packet
             len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-            vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
+            // TODO: counter here -->
+            //vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
             if(len == -1) {
                 sem_post(&(shm_conn_info->resend_buf_sem));
                 vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
@@ -4155,7 +4156,7 @@ int lfd_linker(void)
     vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
 #endif
 
-    vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop", lfd_host->host, info.process_num);
+    vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop TERM=%i", lfd_host->host, info.process_num, linker_term);
     if( !linker_term && errno )
         vtun_syslog(LOG_INFO,"Reason: %s (%d)", strerror(errno), errno);
 
