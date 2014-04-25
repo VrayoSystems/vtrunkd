@@ -2106,7 +2106,7 @@ int lfd_linker(void)
         info.channel[i].local_seq_num_beforeloss = 0;
     }
 
-    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+    for (int i = 0; (i < info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
         info.channel[i].ACS2 = 0;
