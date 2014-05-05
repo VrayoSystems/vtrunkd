@@ -3669,7 +3669,7 @@ int lfd_linker(void)
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
-                        if(chan_num == my_max_send_q_chan_num) {
+                        if ((chan_num == my_max_send_q_chan_num) && (info.rtt2 != 0)) {
                             // calculate speed.. ?
                             info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 8;
                             //vtun_syslog(LOG_INFO, "max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
