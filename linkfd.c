@@ -2245,7 +2245,6 @@ int lfd_linker(void)
                         max_chan = i; //?
                     }
                 }
-
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
                 }
@@ -2798,6 +2797,8 @@ int lfd_linker(void)
             }
             if (info.just_started_recv == 1) {
                 uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
+                if (time_passed == 0)
+                    time_passed = 1;
                 info.speed_efficient = info.byte_efficient / time_passed;
                 info.speed_r_mode = info.byte_r_mode / time_passed;
                 info.speed_resend = info.byte_resend / time_passed;
@@ -3606,7 +3607,7 @@ int lfd_linker(void)
                             info.rtt = tv2ms(&tv_tmp);
                             sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->stats[info.process_num].rtt_phys_avg += (info.rtt - shm_conn_info->stats[info.process_num].rtt_phys_avg) / 2;
-                            if(shm_conn_info->stats[info.process_num].rtt_phys_avg == 0) {
+                            if(shm_conn_info->stats[info.process_num].rtt_phys_avg <= 0) {
                                 shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
                             }
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
@@ -3669,7 +3670,9 @@ int lfd_linker(void)
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
-                        if ((chan_num == my_max_send_q_chan_num) && (info.rtt2 != 0)) {
+                        if (info.rtt2 <= 0)
+                            info.rtt2 = 1;
+                        if ((chan_num == my_max_send_q_chan_num)) {
                             // calculate speed.. ?
                             info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 8;
                             //vtun_syslog(LOG_INFO, "max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
