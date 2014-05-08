@@ -2102,15 +2102,13 @@ int lfd_linker(void)
     
     info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
 
-    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-        info.channel[i].local_seq_num_beforeloss = 0;
-    }
-
     for (int i = 0; (i < info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
+//todo really need?? see man calloc
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
         info.channel[i].ACS2 = 0;
         info.channel[i].old_packet_seq_num_acked = 0;
+        info.channel[i].local_seq_num_beforeloss = 0;
         gettimeofday(&info.rtt2_tv[i], NULL);
     }
     info.rtt2 = 0;
@@ -3820,6 +3818,7 @@ int lfd_linker(void)
                     uint16_t my_miss_packets = 0;
                     info.channel[chan_num].last_recv_time = info.current_time;
                     sem_wait(write_buf_sem);
+                    succ_flag = 0;
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
                     my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
