@@ -2102,13 +2102,12 @@ int lfd_linker(void)
     
     info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
 
-    for (int i = 0; (i < info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
-//todo really need?? see man calloc
+    for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
-        info.channel[i].ACS2 = 0;
-        info.channel[i].old_packet_seq_num_acked = 0;
-        info.channel[i].local_seq_num_beforeloss = 0;
+//        info.channel[i].ACS2 = 0;
+//        info.channel[i].old_packet_seq_num_acked = 0;
+//        info.channel[i].local_seq_num_beforeloss = 0;
         gettimeofday(&info.rtt2_tv[i], NULL);
     }
     info.rtt2 = 0;
