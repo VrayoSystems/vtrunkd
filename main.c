@@ -152,6 +152,10 @@ int main(int argc, char *argv[], char *env[])
 		break;
 	    case 'L':
 		vtun.svr_addr = strdup(optarg);
+        if(svr) { // WARNING! -s option is required BEFORE -L for server to bind correctly
+            vtun.bind_addr.type = VTUN_ADDR_NAME;
+            vtun.bind_addr.name = strdup(optarg);
+        }
 		break;
 	    case 'P':
 		vtun.bind_addr.port = atoi(optarg);
