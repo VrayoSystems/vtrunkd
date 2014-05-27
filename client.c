@@ -125,7 +125,7 @@ void client(struct vtun_host *host)
      * We'll name our shared memory segment
      * "5678".
      */
-     key = SHM_TUN_KEY;
+     key = vtun.shm_key;
      
 
       /*
