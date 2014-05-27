@@ -409,7 +409,7 @@ int tunnel(struct vtun_host *host, int srv)
                 for (int i = 0; while_end; i++) {
                     if (srv) {
                         vtun_syslog(LOG_INFO, "vtrunkd SERVER: trying to attach to running server");
-                        if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
+                        if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
                             vtun_syslog(LOG_ERR, "shmget 3");
                             return -1;
                         }
@@ -442,7 +442,7 @@ int tunnel(struct vtun_host *host, int srv)
                         vtun_syslog(LOG_INFO, "vtrunkd CLIENT: trying to attach to running buddy");
                         // match only first conn...
                         // here comes the play. !. detect whether we are server or client??
-                        if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info), 0666)) < 0) {
+                        if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info), 0666)) < 0) {
                             vtun_syslog(LOG_ERR, "shmget 4");
                             return -1;
                         }
@@ -498,7 +498,7 @@ int tunnel(struct vtun_host *host, int srv)
                     // We were able to open device => we are new connection. connect shm, set devname in conn_info
                     if(srv) {
                          vtun_syslog(LOG_INFO,"vtrunkd SERVER: setting up fresh connection");
-                         if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
+                         if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
                               vtun_syslog(LOG_ERR,"shmget 5");
                               return -1;
                          }
@@ -521,7 +521,7 @@ int tunnel(struct vtun_host *host, int srv)
                     } else {
                          vtun_syslog(LOG_INFO,"vtrunkd CLIENT: setting up fresh connection");
 
-                         if ((shmid = shmget(SHM_TUN_KEY, sizeof(struct conn_info), 0666)) < 0) {
+                         if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info), 0666)) < 0) {
                               vtun_syslog(LOG_ERR,"shmget 6");
                               return -1;
                          }
