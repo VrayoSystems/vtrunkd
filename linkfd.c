@@ -507,6 +507,9 @@ int fix_free_writebuf() {
     return 0;
 }
 
+// get next frame that need to be sent
+// it is either the seq_num referenced as input argument (usually last_sent+1)
+// or oldest non-expired seq_num frame
 int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
     int i, j, j_previous, len = -1;
     struct timeval expiration_date;
@@ -561,6 +564,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
             } else if (shm_conn_info->resend_frames_buf[j].seq_num == *seq_num) {
                 if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
                     j_previous = j;
+                } else {
+                    vtun_syslog(LOG_ERR, "WARNING get_resend_frame returning previous frame");
                 }
                 *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
                 len = shm_conn_info->resend_frames_buf[j_previous].len;
@@ -586,6 +591,52 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
 
     return len;
 }
+
+
+// the same GRF but no expiration
+int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
+    int i, j, j_previous, len = -1;
+    
+    //find start point
+    j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
+    j_previous = j;
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
+        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+            j_previous = j;
+            break;
+        }
+        j--;
+        if (j == -1) {
+            j = RESEND_BUF_SIZE - 1;
+        }
+    }
+
+    for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
+//                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) {
+            if (shm_conn_info->resend_frames_buf[j].seq_num == *seq_num) {
+                j_previous = j;
+                *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
+                len = shm_conn_info->resend_frames_buf[j_previous].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
+//                vtun_syslog(LOG_INFO, "bottom ret j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
+                return len;
+            } else {
+                j_previous = j;
+            }
+        }
+        j--;
+        if (j == -1) {
+            j = RESEND_BUF_SIZE;
+        }
+    }
+    
+    return len;
+}
+
+
 
 // cycle resend buffer from top down to old to get any packet
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
@@ -822,21 +873,41 @@ int retransmit_send(char *out2, int n_to_send) {
             vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
-        len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-        if (len == -1) {
-            last_sent_packet_num[i].seq_num--;
-            if (check_delivery_time()) {
-                sem_post(&(shm_conn_info->resend_buf_sem));
-                continue; // ok to send new packet
-            } 
-            // else there is no way we can deliver anything in time; now get latest packet
-            len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-            // TODO: counter here -->
-            //vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
-            if(len == -1) {
-                sem_post(&(shm_conn_info->resend_buf_sem));
-                vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
-                continue;
+        if(info.head_channel == 1) {
+            // on head channel, do not allow to skip even if we see outdated packets?
+            len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            if (len == -1) {
+                if (check_delivery_time()) {
+                    sem_post(&(shm_conn_info->resend_buf_sem));
+                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
+                    continue; // ok to send new packet
+                } 
+                vtun_syslog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
+                len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+                if(len == -1) {
+                    sem_post(&(shm_conn_info->resend_buf_sem));
+                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
+                    continue;
+                }
+            }
+        } else {
+            len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            if (len == -1) {
+                last_sent_packet_num[i].seq_num--;
+                if (check_delivery_time()) {
+                    sem_post(&(shm_conn_info->resend_buf_sem));
+                    vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
+                    continue; // ok to send new packet
+                } 
+                // else there is no way we can deliver anything in time; now get latest packet
+                len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+                // TODO: counter here -->
+                vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
+                if(len == -1) {
+                    sem_post(&(shm_conn_info->resend_buf_sem));
+                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
+                    continue;
+                }
             }
         }
         if((last_sent_packet_num[i].seq_num != seq_num_tmp) && (info.head_channel == 1)) {
