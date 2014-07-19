@@ -2359,8 +2359,11 @@ if(info.head_channel != 0) skip++;
                    info.head_channel = 0;
             }
         }
-        if(info.process_num == 0) info.head_channel=1;
-	else info.head_channel=0;
+        
+#ifdef FIX_HEAD_CHAN
+        if(info.process_num == FIX_HEAD_CHAN) info.head_channel=1;
+	   else info.head_channel=0;
+#endif
         if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
             shm_conn_info->stats[info.process_num].ACK_speed = 0;
         }
