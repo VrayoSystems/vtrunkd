@@ -2650,7 +2650,7 @@ if(info.head_channel != 0) skip++;
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
                 add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
-                add_json(js_buf, &js_cur, "max_sqspd", "%s", info.max_sqspd);
+                add_json(js_buf, &js_cur, "max_sqspd", "%d", info.max_sqspd);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
