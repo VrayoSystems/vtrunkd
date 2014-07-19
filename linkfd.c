@@ -143,6 +143,8 @@ int jsSQ_cur;
 // flags:
 uint8_t time_lag_ready;
 
+int skip=0;
+
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
@@ -565,8 +567,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
                 if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
                     j_previous = j;
                 } else {
-                    vtun_syslog(LOG_ERR, "WARNING get_resend_frame returning previous frame");
-                }
+			vtun_syslog(LOG_ERR, "WARNING get_resend_frame returning previous frame");
+		}
                 *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
                 len = shm_conn_info->resend_frames_buf[j_previous].len;
                 *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
@@ -2344,16 +2346,20 @@ int lfd_linker(void)
             //if (max_speed == info.packet_recv_upload_avg) {
             if (max_chan == info.process_num) {
 //                info.C = C_HI;
+if(info.head_channel != 1) skip++;
                 info.head_channel = 1;
             } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
 //                info.C = C_LOW / 2;
+if(info.head_channel != 0) skip++;
                   info.head_channel = 0;
             } else {
 //                info.C = C_MED / 2;
+if(info.head_channel != 0) skip++;
                    info.head_channel = 0;
             }
         }
-        
+        if(info.process_num == 0) info.head_channel=1;
+	else info.head_channel=0;
         if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
             shm_conn_info->stats[info.process_num].ACK_speed = 0;
         }
@@ -2645,6 +2651,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
+                add_json(js_buf, &js_cur, "skip", "%d", skip);
+skip=0;
                 
                 
                 uint32_t m_lsn = 0;
