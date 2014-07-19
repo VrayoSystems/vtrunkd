@@ -28,6 +28,7 @@
 
 /*
  * TODO:
+ * - overcome rtt,rtt2 < 1ms limitation(s)
  * - dynamic buffer: fixed size in MB (e.g. 5MB), dynamic packet list (Start-Byte-Rel; End-Byte-Rel)
  *   this would require defragmenting ?? :-O better have buffer for smaller packets and bigger...?
  * - stable channels with stabilizing weights
@@ -632,7 +633,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
             j = RESEND_BUF_SIZE;
         }
     }
-    
+
     return len;
 }
 
@@ -2640,6 +2641,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
                 add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
+                add_json(js_buf, &js_cur, "max_sqspd", "%s", info.max_sqspd);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
