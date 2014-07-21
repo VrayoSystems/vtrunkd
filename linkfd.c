@@ -110,6 +110,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 90000
+#define MAX_BYTE_DELIVERY_DIFF 25000 // what size of write buffer pumping is allowed?
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -2475,8 +2476,18 @@ if(info.head_channel != 0) skip++;
             magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
         }
         
+        // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply < info.rsr)) ? R_MODE : AG_MODE);
-        if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE;
+        // now see if we are actually good enough to kick in AG?
+        // see our RTT diff from head_channel
+        if(shm_conn_info->stats[max_chan].rtt2 > shm_conn_info->stats[info.process_num].rtt2) {
+            rtt_shift = shm_conn_info->stats[max_chan].rtt2 - shm_conn_info->stats[info.process_num].rtt2;
+        } else {
+            rtt_shift = shm_conn_info->stats[info.process_num].rtt2 - shm_conn_info->stats[max_chan].rtt2;
+        }
+        if ( (rtt_shift*shm_conn_info->stats[max_chan].ACK_speed) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
+
+        //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         sem_post(&(shm_conn_info->stats_sem));
@@ -3763,8 +3774,8 @@ skip=0;
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
-                        if (info.rtt2 <= 0)
-                            info.rtt2 = 1;
+                        if (info.rtt2 <= 0) info.rtt2 = 1;
+
                         if ((chan_num == my_max_send_q_chan_num)) {
                             // calculate speed.. ?
                             info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 8;
@@ -3808,6 +3819,7 @@ skip=0;
                     }
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                     shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
+                    shm_conn_info->stats[info.process_num].rtt2 = info.rtt2; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     sem_post(&(shm_conn_info->stats_sem));
 
                     //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
