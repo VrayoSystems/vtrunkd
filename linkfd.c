@@ -2485,7 +2485,7 @@ if(info.head_channel != 0) skip++;
         } else {
             rtt_shift = shm_conn_info->stats[info.process_num].rtt2 - shm_conn_info->stats[max_chan].rtt2;
         }
-        if ( (rtt_shift*shm_conn_info->stats[max_chan].ACK_speed) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
+        if ( (rtt_shift*shm_conn_info->stats[max_chan].ACK_speed/1000) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
 
         //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
