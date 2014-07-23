@@ -2320,14 +2320,6 @@ int lfd_linker(void)
                 }
                 */
 
-                
-                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        max_wspd = shm_conn_info->stats[i].max_sqspd;
-                        max_chan = i; //?
-                    }
-                }
-
                 /*
                 if ( shm_conn_info->stats[i].W_cubic > max_wcubic ) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
@@ -2336,6 +2328,21 @@ int lfd_linker(void)
                     }
                 }
                 */
+
+                /*                
+                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        max_wspd = shm_conn_info->stats[i].max_sqspd;
+                        max_chan = i; //?
+                    }
+                }*/
+
+                if ( shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed > max_wspd ) {
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                        max_wspd = shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed;
+                        max_chan = i; //?
+                    }
+                }
 
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
