@@ -112,7 +112,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 120000
-#define MAX_BYTE_DELIVERY_DIFF 80000 // what size of write buffer pumping is allowed?
+#define MAX_BYTE_DELIVERY_DIFF 120000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -2190,6 +2190,7 @@ int lfd_linker(void)
     info.rtt2 = 0;
     info.max_sqspd = 0;
     int was_hold_mode = 0; // TODO: remove, testing only!
+    int send_q_eff_mean = 0;
 
     
 /**
@@ -2235,11 +2236,15 @@ int lfd_linker(void)
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
+        
+        send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50;
 
+        #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
+        #endif
 
         // calculate on-line RTT:
         if(ping_rcvd == 0) {
@@ -2482,7 +2487,7 @@ if(info.head_channel != 0) skip++;
         ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || 
                            (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || 
                            (send_q_limit_cubic_apply < info.rsr) || 
-                           (my_max_send_q < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
+                           (send_q_eff_mean < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
                             R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
@@ -2675,6 +2680,7 @@ if(info.head_channel != 0) skip++;
                 add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
                 add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
                 add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
+                add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
