@@ -371,6 +371,7 @@ struct conn_stats {
     int sqe_mean;
     int my_max_send_q_chan_num;
     int ag_flag_local;
+    int hold;
 };
 
 /**

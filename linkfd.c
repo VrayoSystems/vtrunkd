@@ -1070,7 +1070,11 @@ int select_devread_send(char *buf, char *out2) {
             drop_counter++;
             if (drop_counter>1000) drop_counter=0;
 //#ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+            int other_chan = 0;
+            if(info.process_num == 0) other_chan=1;
+            else other_chan = 0;
+            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
+            
             /*
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -2623,6 +2627,9 @@ if(info.head_channel != 0) skip++;
             shm_conn_info->stats[info.process_num].max_PCS2 = max_packets;
             sem_post(&(shm_conn_info->stats_sem));
         }
+        sem_wait(&(shm_conn_info->stats_sem));
+        shm_conn_info->stats[info.process_num].hold = hold_mode;
+        sem_post(&(shm_conn_info->stats_sem));
         uint32_t hold_time = 0;
         if (hold_mode_previous != hold_mode) {
             if (hold_mode == 0) {
