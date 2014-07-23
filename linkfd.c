@@ -104,6 +104,8 @@ struct my_ip {
 
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD 13000
+// TODO: use mean send_q value for the following def
+#define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 #define MAX_LATENCY_DROP { 0, 550000 }
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 999999 // usec
@@ -2343,7 +2345,7 @@ int lfd_linker(void)
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if (chan_mask & (1 << i)) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        // ok
+                        // ok2
                     } else {
                         vtun_syslog(LOG_ERR, "process %d ACS2 %d PCS2 %d", i, shm_conn_info->stats[i].max_ACS2, shm_conn_info->stats[i].max_PCS2);
                     }
@@ -2477,7 +2479,11 @@ if(info.head_channel != 0) skip++;
         }
         
         // compute `global` flag - can we ever send new packets due to global limitations?
-        ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || (send_q_limit_cubic_apply < info.rsr)) ? R_MODE : AG_MODE);
+        ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || 
+                           (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || 
+                           (send_q_limit_cubic_apply < info.rsr) || 
+                           (my_max_send_q < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
+                            R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
         if(shm_conn_info->stats[max_chan].rtt2 > shm_conn_info->stats[info.process_num].rtt2) {
