@@ -2237,7 +2237,7 @@ int lfd_linker(void)
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
         
-        send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50;
+        send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
 
         #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
@@ -2294,6 +2294,7 @@ int lfd_linker(void)
         int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
+        shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
 
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -2487,7 +2488,7 @@ if(info.head_channel != 0) skip++;
         ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || 
                            (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || 
                            (send_q_limit_cubic_apply < info.rsr) || 
-                           (send_q_eff_mean < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
+                           (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
                             R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
