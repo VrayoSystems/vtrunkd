@@ -2195,6 +2195,9 @@ int lfd_linker(void)
     info.max_sqspd = 0;
     int was_hold_mode = 0; // TODO: remove, testing only!
     int send_q_eff_mean = 0;
+    int head_in = 0;
+    int head_out = 0;
+    int head_rel = 0;
 
     
 /**
@@ -2372,24 +2375,40 @@ int lfd_linker(void)
             max_chan = info.process_num;
         }
 
+        // head switch block
         if (min_speed != (INT32_MAX - 1)) {
-            /* vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d speed %d", shm_conn_info->stats[info.process_num].max_send_q,
-             shm_conn_info->stats[info.process_num].rtt_phys_avg,
-             (shm_conn_info->stats[info.process_num].max_send_q * 1000000) / (shm_conn_info->stats[info.process_num].rtt_phys_avg));*/
-            //if (max_speed == info.packet_recv_upload_avg) {
             if (max_chan == info.process_num) {
-//                info.C = C_HI;
-if(info.head_channel != 1) skip++;
-                info.head_channel = 1;
+                head_in++;
+                //if(info.head_channel != 1) skip++;
+                //info.head_channel = 1;
             } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
-//                info.C = C_LOW / 2;
-if(info.head_channel != 0) skip++;
-                  info.head_channel = 0;
+                head_out++;
+                //if(info.head_channel != 0) skip++;
+                //info.head_channel = 0;
             } else {
-//                info.C = C_MED / 2;
-if(info.head_channel != 0) skip++;
-                   info.head_channel = 0;
+                head_out++;
+                //if(info.head_channel != 0) skip++;
+                //info.head_channel = 0;
             }
+        }
+
+        // head switch hystersis (averaging) block
+        if( (head_in + head_out) > 100 ) {
+            if(head_in > head_out) { 
+                head_rel = head_in*100 / head_out;
+                if(head_rel > 150) { // [h1/h2 == 1.09] => [rel == 109]
+                    if(info.head_channel != 1) skip++;
+                    info.head_channel = 1;
+                }
+            } else {
+                head_rel = head_out*100 / head_in;
+                if(head_rel > 150) { // [h1/h2 == 1.09] => [rel == 109]
+                    if(info.head_channel != 0) skip++;
+                    info.head_channel = 0;
+                }
+            }
+            head_in = 0;
+            head_out = 0;
         }
         
 #ifdef FIX_HEAD_CHAN
@@ -2707,6 +2726,8 @@ if(info.head_channel != 0) skip++;
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
+                add_json(js_buf, &js_cur, "head_in", "%d", head_in);
+                add_json(js_buf, &js_cur, "head_out", "%d", head_out);
 skip=0;
                 
                 
