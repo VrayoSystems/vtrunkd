@@ -112,7 +112,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 180000
-#define MAX_BYTE_DELIVERY_DIFF 120000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
+#define MAX_BYTE_DELIVERY_DIFF 200000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -2336,20 +2336,22 @@ int lfd_linker(void)
                 }
                 */
 
-                /*                
+                             
                 if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
                         max_wspd = shm_conn_info->stats[i].max_sqspd;
                         max_chan = i; //?
                     }
-                }*/
-
+                }
+                
+                /*
                 if ( shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed > max_wspd ) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
                         max_wspd = shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed;
                         max_chan = i; //?
                     }
                 }
+                */
 
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
