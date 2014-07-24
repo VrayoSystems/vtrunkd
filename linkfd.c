@@ -2394,7 +2394,7 @@ int lfd_linker(void)
 
         // head switch hystersis (averaging) block
         // WARNING!!: double head possible here!
-        if( (head_in + head_out) > 100) {
+        if( (head_in + head_out) > 300) {
             if(head_in > head_out) { 
                 if( (head_out == 0) || ((head_in*100 / head_out) > 150) ) { // [h1/h2 == 1.09] => [rel == 109]
                     if(info.head_channel != 1) skip++;
@@ -2514,11 +2514,11 @@ int lfd_linker(void)
         }
         
         // compute `global` flag - can we ever send new packets due to global limitations?
-        ag_flag_local = ( ((info.rsr <= SENQ_Q_LIMIT_THRESHOLD) || 
-                           (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) || 
-                           (send_q_limit_cubic_apply < info.rsr) || 
-                           (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)) ?  // TODO: use mean_send_q
-                            R_MODE : AG_MODE);
+        ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
+                           || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
+                           || (send_q_limit_cubic_apply < info.rsr) 
+                           /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
+                           ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
         if(shm_conn_info->stats[max_chan].rtt2 > shm_conn_info->stats[info.process_num].rtt2) {
