@@ -2197,7 +2197,7 @@ int lfd_linker(void)
     int send_q_eff_mean = 0;
     int head_in = 0;
     int head_out = 0;
-    int head_rel = 0;
+    //int head_rel = 0;
 
     
 /**
@@ -2393,16 +2393,15 @@ int lfd_linker(void)
         }
 
         // head switch hystersis (averaging) block
-        if( (head_in + head_out) > 100 ) {
+        // WARNING!!: double head possible here!
+        if( (head_in + head_out) > 100) {
             if(head_in > head_out) { 
-                head_rel = head_in*100 / head_out;
-                if(head_rel > 150) { // [h1/h2 == 1.09] => [rel == 109]
+                if( (head_out == 0) || ((head_in*100 / head_out) > 150) ) { // [h1/h2 == 1.09] => [rel == 109]
                     if(info.head_channel != 1) skip++;
                     info.head_channel = 1;
                 }
             } else {
-                head_rel = head_out*100 / head_in;
-                if(head_rel > 150) { // [h1/h2 == 1.09] => [rel == 109]
+                if( (head_in == 0) || (head_out*100 / head_in) > 150) { // [h1/h2 == 1.09] => [rel == 109]
                     if(info.head_channel != 0) skip++;
                     info.head_channel = 0;
                 }
