@@ -2726,11 +2726,17 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
+                skip=0;
                 add_json(js_buf, &js_cur, "head_in", "%d", head_in);
                 add_json(js_buf, &js_cur, "head_out", "%d", head_out);
-skip=0;
                 
-                
+                // bandwidth utilization extimation experiment
+                int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+                int rbu = exact_rtt * (max_ACS2/10) / send_q_eff_mean;
+                int rbu_s = max_ACS2 / rbu * 100;
+                add_json(js_buf, &js_cur, "rbu", "%d", rbu);
+                add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
+
                 uint32_t m_lsn = 0;
                 int lmax = 0;
                 for(int i=0; i<info.channel_amount; i++) {
