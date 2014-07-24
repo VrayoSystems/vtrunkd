@@ -111,7 +111,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MAX 999999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
-#define RSR_TOP 120000
+#define RSR_TOP 180000
 #define MAX_BYTE_DELIVERY_DIFF 120000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
