@@ -2732,8 +2732,16 @@ int lfd_linker(void)
                 
                 // bandwidth utilization extimation experiment
                 int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
-                int rbu = exact_rtt * (max_ACS2/10) / send_q_eff_mean;
-                int rbu_s = max_ACS2 / rbu * 100;
+                int rbu = -1;
+                int rbu_s = -1;
+
+                if(send_q_eff_mean != 0) {
+                    rbu = exact_rtt * (max_ACS2/10) / send_q_eff_mean;
+                    if(rbu != 0) {
+                        rbu_s = max_ACS2 / rbu * 100;
+                    } 
+                }
+                
                 add_json(js_buf, &js_cur, "rbu", "%d", rbu);
                 add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
 
