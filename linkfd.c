@@ -2217,6 +2217,7 @@ int lfd_linker(void)
     while( !linker_term ) {
         errno = 0;
         channel_dead = (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1);
+        shm_conn_info->stats[i].channel_dead = channel_dead;
 
         old_time = info.current_time;
         gettimeofday(&info.current_time, NULL);
@@ -2340,7 +2341,7 @@ int lfd_linker(void)
 
                              
                 if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
                         max_wspd = shm_conn_info->stats[i].max_sqspd;
                         max_chan = i; //?
                     }
@@ -2399,6 +2400,7 @@ int lfd_linker(void)
         // head switch hystersis (averaging) block
         // WARNING!!: double head possible here!
         if( (head_in + head_out) > 300) {
+            // TODO: sync head
             if(head_in > head_out) { 
                 if( (head_out == 0) || ((head_in*100 / head_out) > 150) ) { // [h1/h2 == 1.09] => [rel == 109]
                     if(info.head_channel != 1) skip++;
@@ -2416,6 +2418,7 @@ int lfd_linker(void)
 
         if(channel_dead) {
             info.head_channel=0;
+            // TODO: dead chan to SHM
         }
         
 #ifdef FIX_HEAD_CHAN
