@@ -372,6 +372,7 @@ struct conn_stats {
     int my_max_send_q_chan_num;
     int ag_flag_local;
     int hold;
+    int channel_dead;
 };
 
 /**
