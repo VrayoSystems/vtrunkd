@@ -2197,6 +2197,7 @@ int lfd_linker(void)
     int send_q_eff_mean = 0;
     int head_in = 0;
     int head_out = 0;
+    int channel_dead = 0;
     //int head_rel = 0;
 
     
@@ -2215,6 +2216,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
+        channel_dead = (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1);
 
         old_time = info.current_time;
         gettimeofday(&info.current_time, NULL);
@@ -2343,7 +2345,7 @@ int lfd_linker(void)
                         max_chan = i; //?
                     }
                 }
-                
+
                 /*
                 if ( shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed > max_wspd ) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
@@ -2410,6 +2412,10 @@ int lfd_linker(void)
             }
             head_in = 0;
             head_out = 0;
+        }
+
+        if(channel_dead) {
+            info.head_channel=0;
         }
         
 #ifdef FIX_HEAD_CHAN
@@ -2519,6 +2525,7 @@ int lfd_linker(void)
         ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
                            || (send_q_limit_cubic_apply < info.rsr) 
+                           || ( channel_dead )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
