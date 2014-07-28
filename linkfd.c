@@ -2578,6 +2578,8 @@ int lfd_linker(void)
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
+        // TODO: use min of rtt/rtt2
+        // TODO: use max_ACS thru all chans
         if(shm_conn_info->stats[max_chan].rtt2 > shm_conn_info->stats[info.process_num].rtt2) {
             rtt_shift = shm_conn_info->stats[max_chan].rtt2 - shm_conn_info->stats[info.process_num].rtt2;
         } else {
