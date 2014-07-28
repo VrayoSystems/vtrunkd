@@ -531,6 +531,7 @@ struct conn_info {
     struct timeval chanel_info_time;
     int flood_flag[MAX_TCP_PHYSICAL_CHANNELS];
     struct timeval last_flood_sent;
+    struct timeval bdp1;
 };
 
 struct resent_chk {

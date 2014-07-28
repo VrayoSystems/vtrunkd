@@ -174,6 +174,8 @@ uint32_t my_max_send_q = 0, max_reorder_byte = 0;
 uint32_t last_channels_mask = 0;
 int32_t send_q_eff = 0;
 int max_chan=-1;
+uint32_t start_of_train = 0, end_of_train = 0;
+struct timeval flood_start_time = { 0, 0 };
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
@@ -1094,7 +1096,7 @@ int select_devread_send(char *buf, char *out2) {
 
             if (timercmp(&time_tmp, &time_tmp2, >)) {
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
-                    shm_conn_info->flood_flag[i] = 14;
+                    shm_conn_info->flood_flag[i] = 1;
                 shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
                 ret = 0;
@@ -1112,42 +1114,27 @@ int select_devread_send(char *buf, char *out2) {
         int flood_flag = 0;
         sem_wait(&(shm_conn_info->common_sem));
         if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = shm_conn_info->flood_flag[info.process_num];
-        shm_conn_info->flood_flag[info.process_num]--;
+            flood_flag = 15;
+        shm_conn_info->flood_flag[info.process_num] = 0;
         sem_post(&(shm_conn_info->common_sem));
         uint32_t local_seq_num_p;
         uint16_t tmp_flag;
         uint16_t sum;
-        for (; flood_flag > 0;) {
+        if (flood_flag > 0) {
+            gettimeofday(&flood_start_time, NULL );
+            start_of_train = info.channel[1].local_seq_num;
+            end_of_train = start_of_train + flood_flag;
+        }
+        for (; flood_flag > 0; flood_flag--) {
             len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
-            len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num, tmp_flag);
+            len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num++, tmp_flag);
             if (info.rtt2_lsn[1] == 0) {
                 info.rtt2_lsn[1] = info.channel[1].local_seq_num;
                 info.rtt2_tv[1] = info.current_time;
                 info.rtt2_send_q[1] = info.channel[1].send_q;
             }
-            FD_ZERO(&fdset_tun);
-            FD_SET(info.channel[1].descriptor, &fdset_tun);
-            tv.tv_sec = 0;
-            tv.tv_usec = 0;
-            select_ret = select(info.channel[1].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
-            if (select_ret != 1) {
-                sem_wait(&(shm_conn_info->common_sem));
-                shm_conn_info->flood_flag[info.process_num] = flood_flag;
-                sem_post(&(shm_conn_info->common_sem));
-                return NET_WRITE_BUSY_NOTIFY;
-            }
             // send DATA
             int len_ret = udp_write(info.channel[1].descriptor, buf, len);
-            if ((len && len_ret) < 0) {
-                vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", 1, strerror(errno), errno);
-                sem_wait(&(shm_conn_info->common_sem));
-                shm_conn_info->flood_flag[info.process_num] = flood_flag;
-                sem_post(&(shm_conn_info->common_sem));
-                return BREAK_ERROR;
-            }
-            info.channel[1].local_seq_num++;
-            flood_flag--;
         }
         // now determine packet IP..
         ip = (struct my_ip*) (buf);
@@ -2798,6 +2785,7 @@ int lfd_linker(void)
                 skip=0;
                 add_json(js_buf, &js_cur, "head_in", "%d", head_in);
                 add_json(js_buf, &js_cur, "head_out", "%d", head_out);
+                add_json(js_buf, &js_cur, "bdp", "%d", shm_conn_info->bdp1.tv_sec * 1000 + shm_conn_info->bdp1.tv_sec / 1000);
                 
                 // bandwidth utilization extimation experiment
                 int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
@@ -3911,6 +3899,17 @@ int lfd_linker(void)
                             // calculate speed.. ?
                             info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 50;
                             //vtun_syslog(LOG_INFO, "max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
+                        }
+                    }
+
+                    if ((start_of_train != 0) && (chan_num == 1)) {
+                        if (last_recv_lsn >= end_of_train) {
+                            uint32_t packet_lag = last_recv_lsn - start_of_train;
+                            start_of_train = 0;
+                            sem_wait(&(shm_conn_info->common_sem));
+                            timersub(&info.current_time, &flood_start_time, shm_conn_info->bdp1);
+                            sem_post(&(shm_conn_info->common_sem));
+
                         }
                     }
 
