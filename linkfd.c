@@ -112,7 +112,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 180000
-#define MAX_BYTE_DELIVERY_DIFF 200000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
+#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
@@ -2243,6 +2243,7 @@ int lfd_linker(void)
     int head_in = 0;
     int head_out = 0;
     int channel_dead = 0;
+    int exact_rtt = 0;
     //int head_rel = 0;
 
     
@@ -2263,6 +2264,7 @@ int lfd_linker(void)
         errno = 0;
         channel_dead = (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1);
         shm_conn_info->stats[i].channel_dead = channel_dead;
+        exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
 
         old_time = info.current_time;
         gettimeofday(&info.current_time, NULL);
@@ -2351,6 +2353,7 @@ int lfd_linker(void)
         sem_wait(&(shm_conn_info->stats_sem));
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
+        shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
 
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if (chan_mask & (1 << i)) {
@@ -2578,12 +2581,11 @@ int lfd_linker(void)
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
-        // TODO: use min of rtt/rtt2
         // TODO: use max_ACS thru all chans
-        if(shm_conn_info->stats[max_chan].rtt2 > shm_conn_info->stats[info.process_num].rtt2) {
-            rtt_shift = shm_conn_info->stats[max_chan].rtt2 - shm_conn_info->stats[info.process_num].rtt2;
+        if(shm_conn_info->stats[max_chan].exact_rtt > shm_conn_info->stats[info.process_num].exact_rtt) {
+            rtt_shift = shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[info.process_num].exact_rtt;
         } else {
-            rtt_shift = shm_conn_info->stats[info.process_num].rtt2 - shm_conn_info->stats[max_chan].rtt2;
+            rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
         }
         if ( (rtt_shift*shm_conn_info->stats[max_chan].ACK_speed/1000) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
 
@@ -2790,7 +2792,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "bdp", "%d", shm_conn_info->bdp1.tv_sec * 1000 + shm_conn_info->bdp1.tv_sec / 1000);
                 
                 // bandwidth utilization extimation experiment
-                int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+                
                 int rbu = -1;
                 int rbu_s = -1;
 
@@ -3909,7 +3911,7 @@ int lfd_linker(void)
                             uint32_t packet_lag = last_recv_lsn - start_of_train;
                             start_of_train = 0;
                             sem_wait(&(shm_conn_info->common_sem));
-                            timersub(&info.current_time, &flood_start_time, shm_conn_info->bdp1);
+                            timersub(&info.current_time, &flood_start_time, &shm_conn_info->bdp1);
                             sem_post(&(shm_conn_info->common_sem));
 
                         }

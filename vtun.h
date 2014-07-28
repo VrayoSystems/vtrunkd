@@ -373,6 +373,7 @@ struct conn_stats {
     int ag_flag_local;
     int hold;
     int channel_dead;
+    int exact_rtt;
 };
 
 /**
