@@ -1086,13 +1086,69 @@ int select_devread_send(char *buf, char *out2) {
             }
             */
 //#endif
-            return CONTINUE_ERROR;
+            struct timeval time_tmp;
+            int ret = 1;
+            sem_wait(&(shm_conn_info->common_sem));
+            timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
+            struct timeval time_tmp2 = { 10, 0 };
+
+            if (timercmp(&time_tmp, &time_tmp2, >)) {
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
+                    shm_conn_info->flood_flag[i] = 14;
+                shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
+                shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
+                ret = 0;
+            }
+            sem_post(&(shm_conn_info->common_sem));
+            if (ret) {
+                return CONTINUE_ERROR;
+            }
         }
 
 
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
+        int flood_flag = 0;
+        sem_wait(&(shm_conn_info->common_sem));
+        if (shm_conn_info->flood_flag[info.process_num])
+            flood_flag = shm_conn_info->flood_flag[info.process_num];
+        shm_conn_info->flood_flag[info.process_num]--;
+        sem_post(&(shm_conn_info->common_sem));
+        uint32_t local_seq_num_p;
+        uint16_t tmp_flag;
+        uint16_t sum;
+        for (; flood_flag > 0;) {
+            len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+            len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num, tmp_flag);
+            if (info.rtt2_lsn[1] == 0) {
+                info.rtt2_lsn[1] = info.channel[1].local_seq_num;
+                info.rtt2_tv[1] = info.current_time;
+                info.rtt2_send_q[1] = info.channel[1].send_q;
+            }
+            FD_ZERO(&fdset_tun);
+            FD_SET(info.channel[1].descriptor, &fdset_tun);
+            tv.tv_sec = 0;
+            tv.tv_usec = 0;
+            select_ret = select(info.channel[1].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
+            if (select_ret != 1) {
+                sem_wait(&(shm_conn_info->common_sem));
+                shm_conn_info->flood_flag[info.process_num] = flood_flag;
+                sem_post(&(shm_conn_info->common_sem));
+                return NET_WRITE_BUSY_NOTIFY;
+            }
+            // send DATA
+            int len_ret = udp_write(info.channel[1].descriptor, buf, len);
+            if ((len && len_ret) < 0) {
+                vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", 1, strerror(errno), errno);
+                sem_wait(&(shm_conn_info->common_sem));
+                shm_conn_info->flood_flag[info.process_num] = flood_flag;
+                sem_post(&(shm_conn_info->common_sem));
+                return BREAK_ERROR;
+            }
+            info.channel[1].local_seq_num++;
+            flood_flag--;
+        }
         // now determine packet IP..
         ip = (struct my_ip*) (buf);
         unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
@@ -1109,10 +1165,12 @@ int select_devread_send(char *buf, char *out2) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
-        // TODO: is it correct to first get the packet and then check if we can write it to net? 
+        // TODO: is it correct to first get the packet and then check if we can write it to net?
         // LSN is incorrect here! will reqrite it later
         //len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
+
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
+
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);

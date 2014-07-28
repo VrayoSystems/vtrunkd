@@ -528,6 +528,9 @@ struct conn_info {
     sem_t hard_sem;
     int head_process;
     int tflush_counter, tflush_counter_recv;
+    struct timeval chanel_info_time;
+    int flood_flag[MAX_TCP_PHYSICAL_CHANNELS];
+    struct timeval last_flood_sent;
 };
 
 struct resent_chk {
