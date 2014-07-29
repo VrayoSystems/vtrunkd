@@ -375,7 +375,6 @@ struct conn_stats {
     int channel_dead;
     int exact_rtt;
 };
-
 /**
  * Structure for garbage statistic and information
  * about logical channels. Include service channel[0]
@@ -427,6 +426,7 @@ struct logical_status {
     uint32_t old_packet_seq_num_acked;
     uint32_t bytes_put;
 };
+
 
 /**
  * Structure for storing all information about
@@ -487,7 +487,13 @@ struct phisical_status {
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
     struct timeval max_reorder_latency;
-
+    struct {
+#define EFF_LEN_BUFF 15
+        int warming_up;
+        int counter;
+        int len_num[EFF_LEN_BUFF];
+        int sum;
+    } eff_len;
 };
 
 struct conn_info {

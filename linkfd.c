@@ -1239,7 +1239,19 @@ int select_devread_send(char *buf, char *out2) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
-
+    if (info.eff_len.warming_up < EFF_LEN_BUFF) {
+        info.eff_len.warming_up++;
+    }
+    info.eff_len.len_num[info.eff_len.counter] = len_ret;
+    if (info.eff_len.counter++ >= EFF_LEN_BUFF) {
+        info.eff_len.counter = 0;
+    }
+    for (int i = 0; i < info.eff_len.warming_up; i++) {
+        info.eff_len.sum += info.eff_len.len_num[i];
+    }
+    info.eff_len.sum /= info.eff_len.warming_up;
+    if (info.eff_len.sum <= 0)
+        info.eff_len.sum = 1;
     gettimeofday(&send2, NULL );
 
     info.channel[chan_num].local_seq_num++;
@@ -2762,7 +2774,7 @@ int lfd_linker(void)
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
                 for(int i=0; i<info.channel_amount; i++) {
-                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * 1000;
+                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len.sum;
                     info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
                     if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
                 }
@@ -4513,6 +4525,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     chan_info = NULL;
     info.max_send_q_max = 0;
     info.max_send_q_min = 120000;
+    info.eff_len.sum = 1000;
+
     info.check_shm = 1;
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
