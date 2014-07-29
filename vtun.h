@@ -460,6 +460,7 @@ struct phisical_status {
     unsigned int byte_r_mode;
     int rtt;
     uint32_t packet_recv_upload_avg;
+    struct timeval bdp1;
 
     /** Calculated values*/
     uint32_t send_q_limit_cubic;
@@ -532,7 +533,7 @@ struct conn_info {
     struct timeval chanel_info_time;
     int flood_flag[MAX_TCP_PHYSICAL_CHANNELS];
     struct timeval last_flood_sent;
-    struct timeval bdp1;
+    struct timeval bdp1[MAX_TCP_PHYSICAL_CHANNELS];
 };
 
 struct resent_chk {

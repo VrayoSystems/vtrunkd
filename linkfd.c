@@ -1107,6 +1107,7 @@ int select_devread_send(char *buf, char *out2) {
             if (ret) {
                 return CONTINUE_ERROR;
             }
+            vtun_syslog(LOG_INFO, "Send packet train");
         }
 
 
@@ -1137,6 +1138,7 @@ int select_devread_send(char *buf, char *out2) {
             }
             // send DATA
             int len_ret = udp_write(info.channel[1].descriptor, buf, len);
+            vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag, info.channel[1].local_seq_num-1);
         }
         // now determine packet IP..
         ip = (struct my_ip*) (buf);
@@ -2797,10 +2799,9 @@ int lfd_linker(void)
                 skip=0;
                 add_json(js_buf, &js_cur, "head_in", "%d", head_in);
                 add_json(js_buf, &js_cur, "head_out", "%d", head_out);
-                add_json(js_buf, &js_cur, "bdp", "%d", shm_conn_info->bdp1.tv_sec * 1000 + shm_conn_info->bdp1.tv_sec / 1000);
-                
                 // bandwidth utilization extimation experiment
-                
+                add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&info.bdp1));
+                int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
                 int rbu = -1;
                 int rbu_s = -1;
 
@@ -3915,13 +3916,17 @@ int lfd_linker(void)
                     }
 
                     if ((start_of_train != 0) && (chan_num == 1)) {
+
                         if (last_recv_lsn >= end_of_train) {
                             uint32_t packet_lag = last_recv_lsn - start_of_train;
                             start_of_train = 0;
-                            sem_wait(&(shm_conn_info->common_sem));
-                            timersub(&info.current_time, &flood_start_time, &shm_conn_info->bdp1);
-                            sem_post(&(shm_conn_info->common_sem));
 
+                            timersub(&info.current_time, &flood_start_time, &info.bdp1);
+                            sem_wait(&(shm_conn_info->common_sem));
+                            shm_conn_info->bdp1[info.process_num] = info.bdp1;
+                            sem_post(&(shm_conn_info->common_sem));
+                            vtun_syslog(LOG_INFO, "paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms", packet_lag, info.bdp1.tv_sec,
+                                    info.bdp1.tv_usec, info.bdp1.tv_sec * 1000 + info.bdp1.tv_usec / 1000);
                         }
                     }
 
