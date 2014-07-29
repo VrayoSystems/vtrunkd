@@ -1002,6 +1002,10 @@ int select_devread_send(char *buf, char *out2) {
     struct timeval tv;
     int new_packet = 0;
     fd_set fdset_tun;
+
+    uint32_t local_seq_num_p;
+    uint16_t tmp_flag;
+    uint16_t sum;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1094,7 +1098,7 @@ int select_devread_send(char *buf, char *out2) {
             int ret = 1;
             sem_wait(&(shm_conn_info->common_sem));
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
-            struct timeval time_tmp2 = { 10, 0 };
+            struct timeval time_tmp2 = { 20, 0 };
 
             if (timercmp(&time_tmp, &time_tmp2, >)) {
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
@@ -1114,10 +1118,12 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
+
+        //todo #flood_code need to move
         int flood_flag = 0;
         sem_wait(&(shm_conn_info->common_sem));
         if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = 15;
+            flood_flag = 20;
         shm_conn_info->flood_flag[info.process_num] = 0;
         sem_post(&(shm_conn_info->common_sem));
         uint32_t local_seq_num_p;
@@ -1212,9 +1218,9 @@ int select_devread_send(char *buf, char *out2) {
 
     // now add correct mini_sum and local_seq_num
     //if(!new_packet) {
-        uint32_t local_seq_num_p;
-        uint16_t tmp_flag;
-        uint16_t sum;
+        local_seq_num_p=0;
+        tmp_flag=0;
+        sum=0;
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
         if(info.rtt2_lsn[chan_num] == 0) {
@@ -1233,6 +1239,7 @@ int select_devread_send(char *buf, char *out2) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
+
     gettimeofday(&send2, NULL );
 
     info.channel[chan_num].local_seq_num++;
@@ -3925,7 +3932,7 @@ int lfd_linker(void)
                             sem_wait(&(shm_conn_info->common_sem));
                             shm_conn_info->bdp1[info.process_num] = info.bdp1;
                             sem_post(&(shm_conn_info->common_sem));
-                            vtun_syslog(LOG_INFO, "paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms", packet_lag, info.bdp1.tv_sec,
+                            vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
                                     info.bdp1.tv_usec, info.bdp1.tv_sec * 1000 + info.bdp1.tv_usec / 1000);
                         }
                     }

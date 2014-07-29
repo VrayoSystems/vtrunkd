@@ -426,7 +426,6 @@ struct logical_status {
     int32_t ACS2;
     uint32_t old_packet_seq_num_acked;
     uint32_t bytes_put;
-
 };
 
 /**
