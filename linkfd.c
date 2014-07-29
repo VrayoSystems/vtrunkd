@@ -437,7 +437,9 @@ int check_delivery_time() {
     // RTT-only for now..
     struct timeval max_latency_drop = MAX_LATENCY_DROP;
     sem_wait(&(shm_conn_info->stats_sem));
-    if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
+    //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
+    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
+    
         // no way to deliver in time
         //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
         sem_post(&(shm_conn_info->stats_sem));
@@ -2428,6 +2430,7 @@ int lfd_linker(void)
             max_chan = info.process_num;
         }
 
+
         // head switch block
         if (min_speed != (INT32_MAX - 1)) {
             if (max_chan == info.process_num) {
@@ -2587,7 +2590,7 @@ int lfd_linker(void)
         } else {
             rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
         }
-        if ( (rtt_shift*shm_conn_info->stats[max_chan].ACK_speed/1000) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
+        if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
 
         //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
@@ -2742,6 +2745,11 @@ int lfd_linker(void)
             // JSON LOGS HERE
             timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
+
+                if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
+                    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
+                }
+
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
                 for(int i=0; i<info.channel_amount; i++) {
