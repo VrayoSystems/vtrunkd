@@ -2264,7 +2264,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
-        channel_dead = (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1);
+        channel_dead = (shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1);
         shm_conn_info->stats[i].channel_dead = channel_dead;
         exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
 
@@ -2451,12 +2451,13 @@ int lfd_linker(void)
         
 
         // head switch hystersis (averaging) block
-        // TODO: dead channel?
         int max_head = 0, head_num = info.process_num, head_sum = 0;
         if( shm_conn_info->head_all > 300) {
             // TODO: check amount of cycles in head_all > 300 condition
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if (chan_mask & (1 << i)) {
+                if (      (chan_mask & (1 << i)) 
+                      && !( (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1) ) 
+                    ) {
                     head_sum += shm_conn_info->stats[i].head_in;
                     if(max_head < shm_conn_info->stats[i].head_in) {
                         max_head = shm_conn_info->stats[i].head_in;
@@ -2806,8 +2807,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
                 skip=0;
-                add_json(js_buf, &js_cur, "head_in", "%d", head_in);
-                add_json(js_buf, &js_cur, "head_out", "%d", head_out);
+                add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
+                //add_json(js_buf, &js_cur, "head_out", "%d", head_out);
                 add_json(js_buf, &js_cur, "bdp", "%d", shm_conn_info->bdp1.tv_sec * 1000 + shm_conn_info->bdp1.tv_sec / 1000);
                 
                 // bandwidth utilization extimation experiment
