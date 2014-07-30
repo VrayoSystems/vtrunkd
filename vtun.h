@@ -374,6 +374,7 @@ struct conn_stats {
     int hold;
     int channel_dead;
     int exact_rtt;
+    int head_in;
 };
 /**
  * Structure for garbage statistic and information
@@ -539,6 +540,7 @@ struct conn_info {
     int flood_flag[MAX_TCP_PHYSICAL_CHANNELS];
     struct timeval last_flood_sent;
     struct timeval bdp1[MAX_TCP_PHYSICAL_CHANNELS];
+    int head_all;
 };
 
 struct resent_chk {

@@ -2263,8 +2263,8 @@ int lfd_linker(void)
     info.max_sqspd = 0;
     int was_hold_mode = 0; // TODO: remove, testing only!
     int send_q_eff_mean = 0;
-    int head_in = 0;
-    int head_out = 0;
+    //int head_in = 0;
+    //int head_out = 0;
     int channel_dead = 0;
     int exact_rtt = 0;
     //int head_rel = 0;
@@ -2285,7 +2285,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
-        channel_dead = (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1);
+        channel_dead = (shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1);
         shm_conn_info->stats[i].channel_dead = channel_dead;
         exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
 
@@ -2455,42 +2455,54 @@ int lfd_linker(void)
         // head switch block
         if (min_speed != (INT32_MAX - 1)) {
             if (max_chan == info.process_num) {
-                head_in++;
+                shm_conn_info->stats[info.process_num].head_in++;
                 //if(info.head_channel != 1) skip++;
                 //info.head_channel = 1;
             } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
-                head_out++;
+                //shm_conn_info->stats[info.process_num].head_out++;
                 //if(info.head_channel != 0) skip++;
                 //info.head_channel = 0;
             } else {
-                head_out++;
+                //shm_conn_info->stats[info.process_num].head_out++;
                 //if(info.head_channel != 0) skip++;
                 //info.head_channel = 0;
             }
         }
 
+        
+
         // head switch hystersis (averaging) block
-        // WARNING!!: double head possible here!
-        if( (head_in + head_out) > 300) {
-            // TODO: sync head
-            if(head_in > head_out) { 
-                if( (head_out == 0) || ((head_in*100 / head_out) > 150) ) { // [h1/h2 == 1.09] => [rel == 109]
-                    if(info.head_channel != 1) skip++;
-                    info.head_channel = 1;
-                }
-            } else {
-                if( (head_in == 0) || (head_out*100 / head_in) > 150) { // [h1/h2 == 1.09] => [rel == 109]
-                    if(info.head_channel != 0) skip++;
-                    info.head_channel = 0;
+        int max_head = 0, head_num = info.process_num, head_sum = 0;
+        if( shm_conn_info->head_all > 300) {
+            // TODO: check amount of cycles in head_all > 300 condition
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if (      (chan_mask & (1 << i)) 
+                      && !( (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1) ) 
+                    ) {
+                    head_sum += shm_conn_info->stats[i].head_in;
+                    if(max_head < shm_conn_info->stats[i].head_in) {
+                        max_head = shm_conn_info->stats[i].head_in;
+                        head_num = i;
+                    }
                 }
             }
-            head_in = 0;
-            head_out = 0;
+            if(head_num == info.process_num) {
+                    if(info.head_channel != 1) skip++;
+                    info.head_channel = 1;
+            } else {
+                if(info.head_channel != 0) skip++;
+                info.head_channel = 0;
+            }
+            if(head_sum == 0) {
+                shm_conn_info->head_all = 0;
+            }
+            shm_conn_info->stats[info.process_num].head_in = 0;
+        } else {
+            shm_conn_info->head_all++;
         }
 
         if(channel_dead) {
             info.head_channel=0;
-            // TODO: dead chan to SHM
         }
         
 #ifdef FIX_HEAD_CHAN
@@ -2816,8 +2828,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
                 skip=0;
-                add_json(js_buf, &js_cur, "head_in", "%d", head_in);
-                add_json(js_buf, &js_cur, "head_out", "%d", head_out);
+                add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
+                //add_json(js_buf, &js_cur, "head_out", "%d", head_out);
                 // bandwidth utilization extimation experiment
                 add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&info.bdp1));
                 int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
