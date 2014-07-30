@@ -1123,7 +1123,7 @@ int select_devread_send(char *buf, char *out2) {
         int flood_flag = 0;
         sem_wait(&(shm_conn_info->common_sem));
         if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = 20;
+            flood_flag = 40;
         shm_conn_info->flood_flag[info.process_num] = 0;
         sem_post(&(shm_conn_info->common_sem));
         uint32_t local_seq_num_p;
@@ -1636,10 +1636,10 @@ int ag_switcher() {
     timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
     //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
     //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-    bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].packet_recv_upload
+    bytes_pass = time_sub_tmp.tv_sec * info.eff_len.sum * info.channel[my_max_send_q_chan_num].packet_recv_upload
             + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass;
+    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
@@ -2314,8 +2314,8 @@ int lfd_linker(void)
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
-            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000) > bytes_pass ?
-                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000 - bytes_pass : 0;
+            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum) > bytes_pass ?
+                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass : 0;
         
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
 
