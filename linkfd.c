@@ -2453,9 +2453,9 @@ int lfd_linker(void)
 
                 // BDP test
                 if( tv2ms(&shm_conn_info->stats[i].bdp1) > 0) {
-                    if ( tv2ms(&shm_conn_info->stats[i].bdp1) > max_wspd ) {
+                    if ( (100000 / tv2ms(&shm_conn_info->stats[i].bdp1)) > max_wspd ) {
                         if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
-                            max_wspd = tv2ms(&shm_conn_info->stats[i].bdp1);
+                            max_wspd = 100000 / tv2ms(&shm_conn_info->stats[i].bdp1);
                             max_chan = i;
                         }
                     }
