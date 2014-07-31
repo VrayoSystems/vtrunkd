@@ -2516,7 +2516,7 @@ int lfd_linker(void)
 
         // head switch hystersis (averaging) block
         int max_head = 0, head_num = info.process_num, head_sum = 0;
-        if( shm_conn_info->head_all > 300) {
+        if( shm_conn_info->head_all > 100) {
             // TODO: check amount of cycles in head_all > 300 condition
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if (      (chan_mask & (1 << i)) 
