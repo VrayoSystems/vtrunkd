@@ -2481,7 +2481,7 @@ int lfd_linker(void)
                 if (      (chan_mask & (1 << i)) 
                       && !( (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1) ) 
                     ) {
-                    head_sum += shm_conn_info->stats[i].head_in;
+                    head_sum += shm_conn_info->stats[i].head_use;
                     if(max_head < shm_conn_info->stats[i].head_in) {
                         max_head = shm_conn_info->stats[i].head_in;
                         head_num = i;
@@ -2489,16 +2489,20 @@ int lfd_linker(void)
                 }
             }
             if(head_num == info.process_num) {
-                    if(info.head_channel != 1) skip++;
-                    info.head_channel = 1;
+                if(info.head_channel != 1) skip++;
+                info.head_channel = 1;
             } else {
                 if(info.head_channel != 0) skip++;
                 info.head_channel = 0;
             }
             if(head_sum == 0) {
                 shm_conn_info->head_all = 0;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    shm_conn_info->stats[i].head_in = 0;
+                    shm_conn_info->stats[i].head_use = 1;
+                }
             }
-            shm_conn_info->stats[info.process_num].head_in = 0;
+            shm_conn_info->stats[info.process_num].head_use = 0;
         } else {
             if (max_chan == info.process_num) shm_conn_info->head_all++;
         }

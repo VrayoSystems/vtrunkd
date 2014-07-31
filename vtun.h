@@ -375,6 +375,7 @@ struct conn_stats {
     int channel_dead;
     int exact_rtt;
     int head_in;
+    int head_use;
 };
 /**
  * Structure for garbage statistic and information
