@@ -1136,7 +1136,7 @@ int select_devread_send(char *buf, char *out2) {
             end_of_train = start_of_train + flood_flag;
             sem_wait(&(shm_conn_info->resend_buf_sem));
 
-            int j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
+            int j = shm_conn_info->resend_buf_idx;
             for (int i = 0; i < RESEND_BUF_SIZE; i++) { // TODO need to reduce search depth 100 200 1000 ??????
                 //        vtun_syslog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
                 if ((shm_conn_info->resend_frames_buf[j].chan_num == 1) && (shm_conn_info->resend_frames_buf[j].seq_num <= tmp_seq_counter)
