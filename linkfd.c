@@ -2500,7 +2500,7 @@ int lfd_linker(void)
             }
             shm_conn_info->stats[info.process_num].head_in = 0;
         } else {
-            shm_conn_info->head_all++;
+            if (max_chan == info.process_num) shm_conn_info->head_all++;
         }
 
         if(channel_dead) {
