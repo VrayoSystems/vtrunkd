@@ -1096,7 +1096,7 @@ int select_devread_send(char *buf, char *out2) {
 //#endif
             struct timeval time_tmp;
             int ret = 1;
-            /*
+            
             sem_wait(&(shm_conn_info->common_sem));
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
@@ -1109,7 +1109,7 @@ int select_devread_send(char *buf, char *out2) {
                 ret = 0;
             }
             sem_post(&(shm_conn_info->common_sem));
-            */
+            
             if (ret) {
                 return CONTINUE_ERROR;
             }
@@ -2433,14 +2433,6 @@ int lfd_linker(void)
                 }
                 */
 
-                             
-                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
-                        max_wspd = shm_conn_info->stats[i].max_sqspd;
-                        max_chan = i; //?
-                    }
-                }
-
                 /*
                 if ( shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed > max_wspd ) {
                     if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
@@ -2449,6 +2441,34 @@ int lfd_linker(void)
                     }
                 }
                 */
+
+                /*           
+                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
+                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
+                        max_wspd = shm_conn_info->stats[i].max_sqspd;
+                        max_chan = i; //?
+                    }
+                }
+                */
+
+                // BDP test
+                if( tv2ms(&shm_conn_info->stats[i].bdp1) > 0) {
+                    if ( tv2ms(&shm_conn_info->stats[i].bdp1) > max_wspd ) {
+                        if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
+                            max_wspd = tv2ms(&shm_conn_info->stats[i].bdp1);
+                            max_chan = i;
+                        }
+                    }
+                } else {
+                    if ( (100000 / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd ) {
+                        if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
+                            max_wspd = 100000 / shm_conn_info->stats[i].rtt_phys_avg;
+                            max_chan = i;
+                        }
+                    }
+                }
+
+                
 
                 if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
                     min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
@@ -3980,9 +4000,10 @@ int lfd_linker(void)
                             start_of_train = 0;
 
                             timersub(&info.current_time, &flood_start_time, &info.bdp1);
-                            sem_wait(&(shm_conn_info->common_sem));
-                            shm_conn_info->bdp1[info.process_num] = info.bdp1;
-                            sem_post(&(shm_conn_info->common_sem));
+                            sem_wait(&(shm_conn_info->stats_sem));
+                            //shm_conn_info->bdp1[info.process_num] = info.bdp1;
+                            shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
+                            sem_post(&(shm_conn_info->stats_sem));
                             vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
                                     info.bdp1.tv_usec, info.bdp1.tv_sec * 1000 + info.bdp1.tv_usec / 1000);
                         }
