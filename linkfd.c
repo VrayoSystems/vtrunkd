@@ -1096,6 +1096,7 @@ int select_devread_send(char *buf, char *out2) {
 //#endif
             struct timeval time_tmp;
             int ret = 1;
+            /*
             sem_wait(&(shm_conn_info->common_sem));
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
@@ -1108,6 +1109,7 @@ int select_devread_send(char *buf, char *out2) {
                 ret = 0;
             }
             sem_post(&(shm_conn_info->common_sem));
+            */
             if (ret) {
                 return CONTINUE_ERROR;
             }
