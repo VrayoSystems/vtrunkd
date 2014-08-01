@@ -2502,8 +2502,9 @@ int lfd_linker(void)
                     shm_conn_info->stats[i].head_in = 0;
                     shm_conn_info->stats[i].head_use = 1;
                 }
+            } else {
+                shm_conn_info->stats[info.process_num].head_use = 0;
             }
-            shm_conn_info->stats[info.process_num].head_use = 0;
         } else {
             if (max_chan == info.process_num) shm_conn_info->head_all++;
         }
