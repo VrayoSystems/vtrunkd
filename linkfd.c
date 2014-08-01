@@ -2840,7 +2840,8 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
                 //add_json(js_buf, &js_cur, "head_out", "%d", head_out);
                 // bandwidth utilization extimation experiment
-                add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&info.bdp1));
+                //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&info.bdp1));
+                add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
                 int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
                 int rbu = -1;
                 int rbu_s = -1;
