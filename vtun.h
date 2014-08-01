@@ -542,6 +542,7 @@ struct conn_info {
     int flood_flag[MAX_TCP_PHYSICAL_CHANNELS];
     struct timeval last_flood_sent;
     int head_all;
+    int max_chan;
 };
 
 struct resent_chk {

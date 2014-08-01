@@ -2348,9 +2348,7 @@ int lfd_linker(void)
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
         
-        int32_t max_wspd = 0;
-        int32_t max_wcubic = 0;
-        int32_t min_wspd = 1e9;
+
         if(info.rtt == 0) {
             info.rtt = 1;
         }
@@ -2362,165 +2360,26 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
+        max_chan = shm_conn_info->max_chan;
 
-        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if (chan_mask & (1 << i)) {
-                //vtun_syslog(LOG_INFO, "send_q  %"PRIu32" rtt %d", shm_conn_info->stats[i].max_send_q, shm_conn_info->stats[i].rtt_phys_avg);
-                if (shm_conn_info->stats[i].ACK_speed == 0) {
-                    continue;
-                }
-                if (shm_conn_info->stats[i].ACK_speed > max_speed) {
-                    max_speed = shm_conn_info->stats[i].ACK_speed;
-                    //max_chan = i;
-                }
-                if (shm_conn_info->stats[i].ACK_speed < min_speed) {
-                    min_speed = shm_conn_info->stats[i].ACK_speed;
-                }
-                
-                /*
-                if ( (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd) {
-                    max_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        max_chan = i; //?
-                    }
-                }
-                */
 
-                /*
-                if ( shm_conn_info->stats[i].W_cubic > max_wcubic ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        max_wcubic = shm_conn_info->stats[i].W_cubic;
-                        max_chan = i;
-                    }
-                }
-                */
-
-                /*
-                if ( shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed > max_wspd ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        max_wspd = shm_conn_info->stats[i].speed_chan_data[my_max_send_q_chan_num].up_current_speed;
-                        max_chan = i; //?
-                    }
-                }
-                */
-
-                /*           
-                if ( shm_conn_info->stats[i].max_sqspd > max_wspd ) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
-                        max_wspd = shm_conn_info->stats[i].max_sqspd;
-                        max_chan = i; //?
-                    }
-                }
-                */
-
-                // BDP test
-                if( tv2ms(&shm_conn_info->stats[i].bdp1) > 0) {
-                    if ( (100000 / tv2ms(&shm_conn_info->stats[i].bdp1)) > max_wspd ) {
-                        if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
-                            max_wspd = 100000 / tv2ms(&shm_conn_info->stats[i].bdp1);
-                            max_chan = i;
-                        }
-                    }
-                } else {
-                    if ( (100000 / shm_conn_info->stats[i].rtt_phys_avg) > max_wspd ) {
-                        if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0) && (!shm_conn_info->stats[i].channel_dead)) {
-                            max_wspd = 100000 / shm_conn_info->stats[i].rtt_phys_avg;
-                            max_chan = i;
-                        }
-                    }
-                }
-
-                
-
-                if ((shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg) < min_wspd) {
-                    min_wspd = (shm_conn_info->stats[i].W_cubic / shm_conn_info->stats[i].rtt_phys_avg);
-                }
-                
-            }
-
-        }
-
-        if(max_chan == -1) {
-            /*
-            vtun_syslog(LOG_ERR, "WARNING! Could not detect max_chan! Defaulting to my process_num");
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if (chan_mask & (1 << i)) {
-                    if((shm_conn_info->stats[i].max_ACS2 > 3) && (shm_conn_info->stats[i].max_PCS2 > 0)) {
-                        // ok2
-                    } else {
-                        vtun_syslog(LOG_ERR, "process %d ACS2 %d PCS2 %d", i, shm_conn_info->stats[i].max_ACS2, shm_conn_info->stats[i].max_PCS2);
-                    }
-                }
-            }
-            */
-            max_chan = info.process_num;
-        }
-
-        #define HEAD_SW_COUNT 100
         // head switch block
-        if (min_speed != (INT32_MAX - 1)) {
-            if (max_chan == info.process_num) {
-                if(shm_conn_info->head_all < HEAD_SW_COUNT) shm_conn_info->stats[info.process_num].head_in++;
-            } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
-            } else {
+        if(max_chan == info.process_num) {
+            if(info.head_channel != 1) {
+                skip++;
+                vtun_syslog(LOG_INFO, "Switching head to 1 (ON)");
             }
-        }
-
-        
-
-        // head switch hystersis (averaging) block
-        int max_head = -1, head_num = info.process_num, head_sum = 0;
-        if( shm_conn_info->head_all > HEAD_SW_COUNT) {
-            // TODO: check amount of cycles in head_all > 300 condition
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if (      (chan_mask & (1 << i)) 
-                      && !( (shm_conn_info->stats[i].max_ACS2 <= 3) || (shm_conn_info->stats[i].max_PCS2 <= 1) ) 
-                    ) {
-                    head_sum += shm_conn_info->stats[i].head_use;
-                    if(max_head < shm_conn_info->stats[i].head_in) {
-                        max_head = shm_conn_info->stats[i].head_in;
-                        head_num = i;
-                    }
-                }
-            }
-            if(head_num == info.process_num) {
-                if(info.head_channel != 1)  { 
-                    skip++;
-                    vtun_syslog(LOG_INFO, "Switching HEAD to 1 (ON) head_all %d head_in %d head_num %d pnum %d, head_sum %d, max_head %d", shm_conn_info->head_all, shm_conn_info->stats[info.process_num].head_in, head_num, info.process_num, head_sum, max_head);
-                }
-                info.head_channel = 1;
-            } else {
-                if(info.head_channel != 0) {
-                    skip++;
-                    vtun_syslog(LOG_INFO, "Switching HEAD to 0 (OFF) head_all %d head_in %d head_num %d pnum %d, head_sum %d, max_head %d", shm_conn_info->head_all, shm_conn_info->stats[info.process_num].head_in, head_num, info.process_num, head_sum, max_head);
-                }
-                info.head_channel = 0;
-            }
-            if(head_sum == 0) {
-                shm_conn_info->head_all = 0;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    shm_conn_info->stats[i].head_in = 0;
-                    shm_conn_info->stats[i].head_use = 1;
-                }
-            } else {
-                shm_conn_info->stats[info.process_num].head_use = 0;
-            }
+            info.head_channel = 1;
         } else {
-            if (max_chan == info.process_num) shm_conn_info->head_all++;
-        }
-
-        if(channel_dead) {
-            if(info.head_channel) {
-                shm_conn_info->head_all = 100000;
-                vtun_syslog(LOG_ERR, "WARNING! Head channel suddenly died");
-            } 
-            info.head_channel=0;
+            if(info.head_channel != 0) {
+                skip++;
+                vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
+            }
+            info.head_channel = 0;
         }
         
-#ifdef FIX_HEAD_CHAN
-        if(info.process_num == FIX_HEAD_CHAN) info.head_channel=1;
-	   else info.head_channel=0;
-#endif
+
+        
         if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
             shm_conn_info->stats[info.process_num].ACK_speed = 0;
         }
@@ -2547,22 +2406,6 @@ int lfd_linker(void)
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
-            
-            //vtun_syslog(LOG_INFO, "rtt my %d, rtt fast %d, ACS %d, rs %d",
-            //            shm_conn_info->stats[info.process_num].rtt_phys_avg,
-            //            shm_conn_info->stats[max_chan].rtt_phys_avg,
-            //            shm_conn_info->stats[max_chan].ACK_speed,
-            //            rtt_shift);
-            
-            //vtun_syslog(LOG_INFO, "pnum %d, sql %"PRId32", acs_our %"PRId32", acs_max %"PRId32", rtt_shift %"PRId32", rsr %"PRId32"",
-            //            info.process_num,
-            //        info.send_q_limit,
-            //        shm_conn_info->stats[info.process_num].ACK_speed,
-            //        shm_conn_info->stats[max_chan].ACK_speed,
-            //        rtt_shift, info.rsr);
-            
-            
-            //rtt_shift=0;
             
             if(rtt_shift < info.send_q_limit) {
                 info.send_q_limit -= rtt_shift;
@@ -3966,9 +3809,26 @@ int lfd_linker(void)
                             start_of_train = 0;
 
                             timersub(&info.current_time, &flood_start_time, &info.bdp1);
+
+                            sem_wait(&(shm_conn_info->AG_flags_sem));
+                            uint32_t chan_mask = shm_conn_info->channels_mask;
+                            sem_post(&(shm_conn_info->AG_flags_sem));
+                            
                             sem_wait(&(shm_conn_info->stats_sem));
                             //shm_conn_info->bdp1[info.process_num] = info.bdp1;
                             shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
+                            // now find max_chan
+                            int min_bdp = 1000000;
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if (chan_mask & (1 << i)) { // hope this works..
+                                    if(tv2ms(&shm_conn_info->stats[i].bdp1) < min_bdp) {
+                                        min_bdp = tv2ms(&shm_conn_info->stats[i].bdp1);
+                                        max_chan = i;
+                                    }
+                                }
+                            }
+                            shm_conn_info->max_chan = i;
+
                             sem_post(&(shm_conn_info->stats_sem));
                             vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
                                     info.bdp1.tv_usec, info.bdp1.tv_sec * 1000 + info.bdp1.tv_usec / 1000);
