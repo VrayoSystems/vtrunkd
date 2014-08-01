@@ -4410,7 +4410,6 @@ int lfd_linker(void)
                 len = 0;
             }
         }
-        sem_post(&shm_conn_info->hard_sem);
 
         //todo #flood_code need to move
         int flood_flag = 0;
@@ -4443,8 +4442,8 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
                         info.channel[1].local_seq_num - 1);
             }
-            return CONTINUE_ERROR;
         }
+        sem_post(&shm_conn_info->hard_sem);
 
             //Check time interval and ping if need.
         if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
