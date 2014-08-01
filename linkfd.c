@@ -1095,7 +1095,6 @@ int select_devread_send(char *buf, char *out2) {
             */
 //#endif
             struct timeval time_tmp;
-            int ret = 1;
             
             sem_wait(&(shm_conn_info->common_sem));
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
@@ -1106,13 +1105,11 @@ int select_devread_send(char *buf, char *out2) {
                     shm_conn_info->flood_flag[i] = 1;
                 shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
-                ret = 0;
             }
             sem_post(&(shm_conn_info->common_sem));
             
-            if (ret) {
-                return CONTINUE_ERROR;
-            }
+            return CONTINUE_ERROR;
+
             vtun_syslog(LOG_INFO, "Send packet train");
         }
 
@@ -1121,44 +1118,6 @@ int select_devread_send(char *buf, char *out2) {
         vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
 
-        //todo #flood_code need to move
-        int flood_flag = 0;
-        sem_wait(&(shm_conn_info->common_sem));
-        if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = 40;
-        shm_conn_info->flood_flag[info.process_num] = 0;
-//        tmp_seq_counter = shm_conn_info->seq_counter[1];
-        sem_post(&(shm_conn_info->common_sem));
-        uint32_t local_seq_num_p;
-        uint16_t tmp_flag=0, gg1;
-        uint32_t  gg2, gg3;
-        if (flood_flag > 0) {
-            gettimeofday(&flood_start_time, NULL );
-            start_of_train = info.channel[1].local_seq_num;
-            end_of_train = start_of_train + flood_flag;
-            sem_wait(&(shm_conn_info->resend_buf_sem));
-            uint32_t seq_tmp;
-            get_last_packet_seq_num(1, &seq_tmp);
-            int sender_pid;
-            char *out;
-            len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
-            memcpy(buf, out, len);
-            sem_post(&(shm_conn_info->resend_buf_sem));
-            for (; flood_flag > 0; flood_flag--) {
-                len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
-                len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num++, 0);
-                if (info.rtt2_lsn[1] == 0) {
-                    info.rtt2_lsn[1] = info.channel[1].local_seq_num;
-                    info.rtt2_tv[1] = info.current_time;
-                    info.rtt2_send_q[1] = info.channel[1].send_q;
-                }
-                // send DATA
-                int len_ret = udp_write(info.channel[1].descriptor, buf, len);
-                vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
-                        info.channel[1].local_seq_num - 1);
-            }
-            return CONTINUE_ERROR;
-        }
         // now determine packet IP..
         ip = (struct my_ip*) (buf);
         unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
@@ -2331,7 +2290,19 @@ int lfd_linker(void)
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass : 0;
         
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
-
+        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
+            sem_wait(&(shm_conn_info->common_sem));
+            struct timeval time_tmp;
+            timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
+            struct timeval time_tmp2 = { 20, 0 };
+            if (timercmp(&time_tmp, &time_tmp2, >)) {
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
+                    shm_conn_info->flood_flag[i] = 1;
+                shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
+                shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
+            }
+            sem_post(&(shm_conn_info->common_sem));
+        }
         #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
@@ -4440,7 +4411,41 @@ int lfd_linker(void)
                 len = 0;
             }
         }
+
+        //todo #flood_code need to move
+        int flood_flag = 0;
+        sem_wait(&(shm_conn_info->common_sem));
+        if (shm_conn_info->flood_flag[info.process_num])
+            flood_flag = 40;
+        shm_conn_info->flood_flag[info.process_num] = 0;
+//        tmp_seq_counter = shm_conn_info->seq_counter[1];
+        sem_post(&(shm_conn_info->common_sem));
+        uint32_t local_seq_num_p;
+        uint16_t tmp_flag=0, gg1;
+        uint32_t  gg2, gg3;
+        if (flood_flag > 0) {
+            gettimeofday(&flood_start_time, NULL );
+            start_of_train = info.channel[1].local_seq_num;
+            end_of_train = start_of_train + flood_flag;
+            sem_wait(&(shm_conn_info->resend_buf_sem));
+            uint32_t seq_tmp;
+            get_last_packet_seq_num(1, &seq_tmp);
+            int sender_pid;
+            char *out;
+            int len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
+            memcpy(buf, out, len);
+            sem_post(&(shm_conn_info->resend_buf_sem));
+            for (; flood_flag > 0; flood_flag--) {
+                len = seqn_break_tail(buf, len, &seq_tmp, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
+                len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num++, 0);
+                // send DATA
+                int len_ret = udp_write(info.channel[1].descriptor, buf, len);
+                vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
+                        info.channel[1].local_seq_num - 1);
+            }
+        }
         sem_post(&shm_conn_info->hard_sem);
+
             //Check time interval and ping if need.
         if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (len <= 0)) {
 				ping_rcvd = 0;
