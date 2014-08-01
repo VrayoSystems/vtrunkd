@@ -2539,6 +2539,7 @@ int lfd_linker(void)
         }
 
         if(channel_dead) {
+            if(info.head_channel) shm_conn_info->head_all = 100000;
             info.head_channel=0;
         }
         
