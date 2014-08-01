@@ -3828,7 +3828,7 @@ int lfd_linker(void)
                                     }
                                 }
                             }
-                            shm_conn_info->max_chan = i;
+                            shm_conn_info->max_chan = max_chan;
 
                             sem_post(&(shm_conn_info->stats_sem));
                             vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
