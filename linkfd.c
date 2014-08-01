@@ -2456,21 +2456,13 @@ int lfd_linker(void)
             max_chan = info.process_num;
         }
 
-
+        #define HEAD_SW_COUNT 100
         // head switch block
         if (min_speed != (INT32_MAX - 1)) {
             if (max_chan == info.process_num) {
-                shm_conn_info->stats[info.process_num].head_in++;
-                //if(info.head_channel != 1) skip++;
-                //info.head_channel = 1;
+                if(shm_conn_info->head_all < HEAD_SW_COUNT) shm_conn_info->stats[info.process_num].head_in++;
             } else if (min_speed == info.packet_recv_upload_avg) { // TODO: remove
-                //shm_conn_info->stats[info.process_num].head_out++;
-                //if(info.head_channel != 0) skip++;
-                //info.head_channel = 0;
             } else {
-                //shm_conn_info->stats[info.process_num].head_out++;
-                //if(info.head_channel != 0) skip++;
-                //info.head_channel = 0;
             }
         }
 
@@ -2478,7 +2470,7 @@ int lfd_linker(void)
 
         // head switch hystersis (averaging) block
         int max_head = -1, head_num = info.process_num, head_sum = 0;
-        if( shm_conn_info->head_all > 100) {
+        if( shm_conn_info->head_all > HEAD_SW_COUNT) {
             // TODO: check amount of cycles in head_all > 300 condition
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if (      (chan_mask & (1 << i)) 
