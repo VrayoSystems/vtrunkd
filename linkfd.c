@@ -2477,7 +2477,7 @@ int lfd_linker(void)
         
 
         // head switch hystersis (averaging) block
-        int max_head = 0, head_num = info.process_num, head_sum = 0;
+        int max_head = -1, head_num = info.process_num, head_sum = 0;
         if( shm_conn_info->head_all > 100) {
             // TODO: check amount of cycles in head_all > 300 condition
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -2494,13 +2494,13 @@ int lfd_linker(void)
             if(head_num == info.process_num) {
                 if(info.head_channel != 1)  { 
                     skip++;
-                    vtun_syslog(LOG_INFO, "Switching HEAD to 1 (ON)");
+                    vtun_syslog(LOG_INFO, "Switching HEAD to 1 (ON) head_all %d head_in %d head_num %d pnum %d, head_sum %d, max_head %d", shm_conn_info->head_all, shm_conn_info->stats[info.process_num].head_in, head_num, info.process_num, head_sum, max_head);
                 }
                 info.head_channel = 1;
             } else {
                 if(info.head_channel != 0) {
                     skip++;
-                    vtun_syslog(LOG_INFO, "Switching HEAD to 0 (OFF)");
+                    vtun_syslog(LOG_INFO, "Switching HEAD to 0 (OFF) head_all %d head_in %d head_num %d pnum %d, head_sum %d, max_head %d", shm_conn_info->head_all, shm_conn_info->stats[info.process_num].head_in, head_num, info.process_num, head_sum, max_head);
                 }
                 info.head_channel = 0;
             }
