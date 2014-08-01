@@ -2682,6 +2682,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
+                add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
                 skip=0;
                 add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
                 //add_json(js_buf, &js_cur, "head_out", "%d", head_out);
