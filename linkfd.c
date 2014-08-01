@@ -2257,8 +2257,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
-        channel_dead = (shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1);
-        shm_conn_info->stats[i].channel_dead = channel_dead;
+        
         exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
 
         old_time = info.current_time;
@@ -2358,6 +2357,8 @@ int lfd_linker(void)
         int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
+        channel_dead = (shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1);
+        shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
@@ -2491,10 +2492,16 @@ int lfd_linker(void)
                 }
             }
             if(head_num == info.process_num) {
-                if(info.head_channel != 1) skip++;
+                if(info.head_channel != 1)  { 
+                    skip++;
+                    vtun_syslog(LOG_INFO, "Switching HEAD to 1 (ON)");
+                }
                 info.head_channel = 1;
             } else {
-                if(info.head_channel != 0) skip++;
+                if(info.head_channel != 0) {
+                    skip++;
+                    vtun_syslog(LOG_INFO, "Switching HEAD to 0 (OFF)");
+                }
                 info.head_channel = 0;
             }
             if(head_sum == 0) {
@@ -2510,7 +2517,10 @@ int lfd_linker(void)
         }
 
         if(channel_dead) {
-            if(info.head_channel) shm_conn_info->head_all = 100000;
+            if(info.head_channel) {
+                shm_conn_info->head_all = 100000;
+                vtun_syslog(LOG_ERR, "WARNING! Head channel suddenly died");
+            } 
             info.head_channel=0;
         }
         
