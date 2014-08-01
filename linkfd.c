@@ -1127,37 +1127,26 @@ int select_devread_send(char *buf, char *out2) {
         if (shm_conn_info->flood_flag[info.process_num])
             flood_flag = 40;
         shm_conn_info->flood_flag[info.process_num] = 0;
-        tmp_seq_counter = shm_conn_info->seq_counter[1];
+//        tmp_seq_counter = shm_conn_info->seq_counter[1];
         sem_post(&(shm_conn_info->common_sem));
         uint32_t local_seq_num_p;
-        uint16_t tmp_flag=0;
-        uint16_t sum;
+        uint16_t tmp_flag=0, gg1;
+        uint32_t  gg2, gg3;
         if (flood_flag > 0) {
             gettimeofday(&flood_start_time, NULL );
             start_of_train = info.channel[1].local_seq_num;
             end_of_train = start_of_train + flood_flag;
             sem_wait(&(shm_conn_info->resend_buf_sem));
-
-            int j = shm_conn_info->resend_buf_idx;
-            for (int i = 0; i < RESEND_BUF_SIZE; i++) { // TODO need to reduce search depth 100 200 1000 ??????
-                //        vtun_syslog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
-                if ((shm_conn_info->resend_frames_buf[j].chan_num == 1) && (shm_conn_info->resend_frames_buf[j].seq_num <= tmp_seq_counter)
-                        && (shm_conn_info->resend_frames_buf[j].seq_num != 0)) {
-                    tmp_seq_counter = shm_conn_info->resend_frames_buf[j].seq_num;
-                    len = shm_conn_info->resend_frames_buf[j].len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
-
-                    memcpy(buf,  shm_conn_info->resend_frames_buf[j].out,len);
-                    break;
-                }
-                j--;
-                if (j == -1) {
-                    j = RESEND_BUF_SIZE - 1;
-                }
-            }
+            uint32_t seq_tmp;
+            get_last_packet_seq_num(1, &seq_tmp);
+            int sender_pid;
+            char *out;
+            len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
+            memcpy(buf, out, len);
             sem_post(&(shm_conn_info->resend_buf_sem));
             for (; flood_flag > 0; flood_flag--) {
-//                len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
-                len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num++, tmp_flag);
+                len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
+                len = pack_packet(1, buf, len, tmp_seq_counter, info.channel[1].local_seq_num++, 0);
                 if (info.rtt2_lsn[1] == 0) {
                     info.rtt2_lsn[1] = info.channel[1].local_seq_num;
                     info.rtt2_tv[1] = info.current_time;
@@ -1168,6 +1157,7 @@ int select_devread_send(char *buf, char *out2) {
                 vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
                         info.channel[1].local_seq_num - 1);
             }
+            return CONTINUE_ERROR;
         }
         // now determine packet IP..
         ip = (struct my_ip*) (buf);
