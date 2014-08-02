@@ -2294,13 +2294,16 @@ int lfd_linker(void)
         
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t chan_mask = shm_conn_info->channels_mask;
+            sem_post(&(shm_conn_info->AG_flags_sem));
             sem_wait(&(shm_conn_info->common_sem));
             struct timeval time_tmp;
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
             if (timercmp(&time_tmp, &time_tmp2, >)) {
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if (chan_mask & (1 << i)) { // hope this works..
+                    if (chan_mask & (1 << i)) {
                         shm_conn_info->flood_flag[i] = 1;
                     }
                 }
