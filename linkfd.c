@@ -3925,19 +3925,19 @@ int lfd_linker(void)
                                 info.channel[chan_num].loss_time = info.current_time;
                             }
                         } else {
-                            vtun_syslog(LOG_INFO, "DUP +1 calced NO REORDER seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                            vtun_syslog(LOG_INFO, "DUP +1 calced NO REORDER local seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                 local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
                         }
 //#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "loss -1 calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                        vtun_syslog(LOG_INFO, "loss -1 calced local seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                 local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
 //#endif
                     } else if ((local_seq_tmp == info.channel[chan_num].local_seq_num_recv) || (local_seq_tmp <= info.channel[chan_num].local_seq_num_beforeloss)) {
                         if(info.channel[chan_num].local_seq_num_beforeloss > 0) {
-                            vtun_syslog(LOG_INFO, "DUP +1 +REORDER calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                            vtun_syslog(LOG_INFO, "DUP +1 +REORDER calced local seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                     local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
                         } else {
-                            vtun_syslog(LOG_INFO, "DUP +1 calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
+                            vtun_syslog(LOG_INFO, "DUP +1 calced local seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", info.channel[chan_num].local_seq_num_recv,
                                     local_seq_tmp, (int)info.channel[chan_num].packet_loss_counter, seq_num);
                         }
                     } //else { } // OK, we're in order
@@ -4327,7 +4327,7 @@ int lfd_linker(void)
                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
                 vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
                         info.channel[1].local_seq_num);
-                info.channel[i].local_seq_num++;
+                info.channel[1].local_seq_num++;
             }
         }
         sem_post(&shm_conn_info->hard_sem);
