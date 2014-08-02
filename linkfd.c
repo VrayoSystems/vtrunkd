@@ -122,7 +122,7 @@ struct my_ip {
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
-#define TRAIN_PKTS 40
+#define TRAIN_PKTS 80
 //#define NOCONTROL
 //#define NO_ACK
 
@@ -1096,6 +1096,7 @@ int select_devread_send(char *buf, char *out2) {
             }
             */
 //#endif
+            /*
             struct timeval time_tmp;
             
             sem_wait(&(shm_conn_info->common_sem));
@@ -1112,7 +1113,7 @@ int select_devread_send(char *buf, char *out2) {
                 shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
             }
             sem_post(&(shm_conn_info->common_sem));
-            
+            */
             return CONTINUE_ERROR;
         }
 
@@ -3812,14 +3813,14 @@ int lfd_linker(void)
                         if (last_recv_lsn >= end_of_train) {
                             uint32_t packet_lag = last_recv_lsn - start_of_train;
                             start_of_train = 0;
-                            if(packet_lag > (TRAIN_PKTS + TRAIN_PKTS/2)) {
-                                vtun_syslog(LOG_ERR, "WARNING Train calc wrong! packet_lag %d need train restart ASAP", packet_lag);
-                                sem_wait(&(shm_conn_info->common_sem));
-                                shm_conn_info->last_flood_sent.tv_sec = 0;
-                                sem_post(&(shm_conn_info->common_sem));
-                            } else {
+                            //if(packet_lag > (TRAIN_PKTS + TRAIN_PKTS/2)) {
+                            //    vtun_syslog(LOG_ERR, "WARNING Train calc wrong! packet_lag %d need train restart ASAP", packet_lag);
+                            //    sem_wait(&(shm_conn_info->common_sem));
+                            //    shm_conn_info->last_flood_sent.tv_sec = 0;
+                            //    sem_post(&(shm_conn_info->common_sem));
+                            //} else {
                                 timersub(&info.current_time, &flood_start_time, &info.bdp1);
-                            }
+                            //}
 
                             // Now set max_chan -->
                             sem_wait(&(shm_conn_info->AG_flags_sem));
