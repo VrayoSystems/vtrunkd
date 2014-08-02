@@ -2294,6 +2294,7 @@ int lfd_linker(void)
         
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
+            vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
