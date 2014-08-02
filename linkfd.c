@@ -2299,8 +2299,11 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
             if (timercmp(&time_tmp, &time_tmp2, >)) {
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
-                    shm_conn_info->flood_flag[i] = 1;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if (chan_mask & (1 << i)) { // hope this works..
+                        shm_conn_info->flood_flag[i] = 1;
+                    }
+                }
                 shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
             }
