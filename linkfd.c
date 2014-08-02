@@ -122,6 +122,7 @@ struct my_ip {
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
+#define TRAIN_PKTS 40
 //#define NOCONTROL
 //#define NO_ACK
 
@@ -1083,10 +1084,11 @@ int select_devread_send(char *buf, char *out2) {
             else other_chan = 0;
             vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
             
-            /*
+            
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
+            /*
             for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
                 if (chan_mask & (1 << p)) {
                     vtun_syslog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", p, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));   
@@ -1101,16 +1103,17 @@ int select_devread_send(char *buf, char *out2) {
             struct timeval time_tmp2 = { 20, 0 };
 
             if (timercmp(&time_tmp, &time_tmp2, >)) {
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++)
-                    shm_conn_info->flood_flag[i] = 1;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if (chan_mask & (1 << i)) {
+                       shm_conn_info->flood_flag[i] = 1;
+                    }
+                }
                 shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
             }
             sem_post(&(shm_conn_info->common_sem));
             
             return CONTINUE_ERROR;
-
-            vtun_syslog(LOG_INFO, "Send packet train");
         }
 
 
@@ -3808,13 +3811,19 @@ int lfd_linker(void)
                         if (last_recv_lsn >= end_of_train) {
                             uint32_t packet_lag = last_recv_lsn - start_of_train;
                             start_of_train = 0;
+                            if(packet_lag > (TRAIN_PKTS + TRAIN_PKTS/2)) {
+                                vtun_syslog(LOG_ERR, "WARNING Train calc wrong! packet_lag %d need train restart ASAP", packet_lag);
+                                sem_wait(&(shm_conn_info->common_sem));
+                                shm_conn_info->last_flood_sent.tv_sec = 0;
+                                sem_post(&(shm_conn_info->common_sem));
+                            } else {
+                                timersub(&info.current_time, &flood_start_time, &info.bdp1);
+                            }
 
-                            timersub(&info.current_time, &flood_start_time, &info.bdp1);
-
+                            // Now set max_chan -->
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             uint32_t chan_mask = shm_conn_info->channels_mask;
                             sem_post(&(shm_conn_info->AG_flags_sem));
-                            
                             sem_wait(&(shm_conn_info->stats_sem));
                             //shm_conn_info->bdp1[info.process_num] = info.bdp1;
                             shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
@@ -3829,10 +3838,11 @@ int lfd_linker(void)
                                 }
                             }
                             shm_conn_info->max_chan = max_chan;
-
                             sem_post(&(shm_conn_info->stats_sem));
+                            // <-- end max_chan set
+                            
                             vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
-                                    info.bdp1.tv_usec, info.bdp1.tv_sec * 1000 + info.bdp1.tv_usec / 1000);
+                                    info.bdp1.tv_usec, tv2ms(&info.bdp1));
                         }
                     }
 
@@ -4281,7 +4291,7 @@ int lfd_linker(void)
         int flood_flag = 0;
         sem_wait(&(shm_conn_info->common_sem));
         if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = 40;
+            flood_flag = TRAIN_PKTS;
         shm_conn_info->flood_flag[info.process_num] = 0;
 //        tmp_seq_counter = shm_conn_info->seq_counter[1];
         sem_post(&(shm_conn_info->common_sem));
@@ -4298,15 +4308,26 @@ int lfd_linker(void)
             int sender_pid;
             char *out;
             int len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
-            memcpy(buf, out, len);
+            if (len == -1) {
+                len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &sender_pid);
+            }
+            if (len == -1) {
+                vtun_syslog(LOG_ERR, "WARNING Cannot send train");
+            } else {
+                memcpy(buf, out, len);
+            }
+            if(len < 900) {
+                vtun_syslog(LOG_ERR, "WARNING Train car too small to load track!");
+            }
             sem_post(&(shm_conn_info->resend_buf_sem));
             for (; flood_flag > 0; flood_flag--) {
                 len = seqn_break_tail(buf, len, &seq_tmp, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
-                len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num++, 0);
+                len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num, 0);
                 // send DATA
                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
                 vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
-                        info.channel[1].local_seq_num - 1);
+                        info.channel[1].local_seq_num);
+                info.channel[i].local_seq_num++;
             }
         }
         sem_post(&shm_conn_info->hard_sem);
