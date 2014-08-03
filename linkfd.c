@@ -1077,12 +1077,11 @@ int select_devread_send(char *buf, char *out2) {
 
         if (drop_packet_flag == 1) {
             drop_counter++;
-            if (drop_counter>1000) drop_counter=0;
 //#ifdef DEBUGG
             int other_chan = 0;
             if(info.process_num == 0) other_chan=1;
             else other_chan = 0;
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
+            //vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
             
             
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -1115,6 +1114,11 @@ int select_devread_send(char *buf, char *out2) {
             sem_post(&(shm_conn_info->common_sem));
             */
             return CONTINUE_ERROR;
+        } else {
+            if(drop_counter > 0) {
+                vtun_syslog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+                drop_counter = 0;
+            }
         }
 
 
@@ -2294,7 +2298,6 @@ int lfd_linker(void)
         
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
-            vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
@@ -2303,6 +2306,7 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
             if (timercmp(&time_tmp, &time_tmp2, >)) {
+                vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                     if (chan_mask & (1 << i)) {
                         shm_conn_info->flood_flag[i] = 1;
@@ -2645,9 +2649,9 @@ int lfd_linker(void)
             timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
 
-                if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
-                    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
-                }
+                //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
+                //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
+                //}
 
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
