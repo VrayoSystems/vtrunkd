@@ -114,11 +114,11 @@ struct my_ip {
 #define RSR_TOP 180000
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
-#define SUPERLOOP_MAX_LAG_USEC 15000 // 15ms max superloop lag allowed!
+#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
-#define CUBIC_T_MAX 2000
+#define CUBIC_T_MAX 200
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -458,7 +458,9 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if( (shm_conn_info->stats[p].max_PCS2 == 0) || (shm_conn_info->stats[p].max_ACS2 == 0) ) continue;
+                if( (shm_conn_info->stats[p].max_PCS2 == 0) || (shm_conn_info->stats[p].max_ACS2 == 0) ) {
+// vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
+ continue;}
                 if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 }
@@ -2209,7 +2211,7 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    info.C = C_LOW/2;
+    info.C = C_HI;
     info.max_send_q = 0;
 
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
@@ -2248,7 +2250,9 @@ int lfd_linker(void)
     int channel_dead = 0;
     int exact_rtt = 0;
     //int head_rel = 0;
-
+struct timeval cpulag;
+    gettimeofday(&cpulag, NULL);
+int super = 0;
     
 /**
  *
@@ -2265,14 +2269,16 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         errno = 0;
+super++;
         
         exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
 
-        old_time = info.current_time;
-        gettimeofday(&info.current_time, NULL);
+        old_time = cpulag;
+        gettimeofday(&cpulag, NULL);
 
-        timersub(&info.current_time, &old_time, &tv_tmp_tmp_tmp);
-        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
+        timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
+        //if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
+        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
             vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
 
@@ -2305,7 +2311,7 @@ int lfd_linker(void)
             struct timeval time_tmp;
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
-            if (timercmp(&time_tmp, &time_tmp2, >)) {
+/*            if (timercmp(&time_tmp, &time_tmp2, >)) {
                 vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                     if (chan_mask & (1 << i)) {
@@ -2314,7 +2320,7 @@ int lfd_linker(void)
                 }
                 shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
-            }
+            }*/
             sem_post(&(shm_conn_info->common_sem));
         }
         #ifdef SEND_Q_LOG
@@ -2377,7 +2383,7 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
         max_chan = shm_conn_info->max_chan;
 
-
+/*
         // head switch block
         if(max_chan == info.process_num) {
             if(info.head_channel != 1) {
@@ -2391,8 +2397,9 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
             }
             info.head_channel = 0;
-        }
-        
+        }*/
+       if(info.process_num == 1)  info.head_channel = 1;
+	else info.head_channel = 0;
 
         
         if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
@@ -2494,7 +2501,7 @@ int lfd_linker(void)
             rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
         }
         if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
-
+ag_flag_local = R_MODE;
         //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
@@ -2674,6 +2681,7 @@ int lfd_linker(void)
                 add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
+                add_json(js_buf, &js_cur, "super", "%d", super);
                 add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
                 was_hold_mode = 0; // TODO: remove
                 //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
@@ -3567,7 +3575,7 @@ int lfd_linker(void)
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
+                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=) && 0) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
