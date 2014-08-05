@@ -823,6 +823,9 @@ int check_fast_resend() {
  * Function for trying resend
  */ 
 int retransmit_send(char *out2, int n_to_send) {
+    if (drop_packet_flag) {
+        return LASTPACKETMY_NOTIFY; // go dropping
+    }
     if (hold_mode) {
         return CONTINUE_ERROR;
     }
@@ -960,6 +963,7 @@ int retransmit_send(char *out2, int n_to_send) {
         info.channel[i].up_len += len_ret;
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
+if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
         info.byte_r_mode += len_ret;
 
         send_counter++;
@@ -1253,6 +1257,7 @@ if(drop_packet_flag) {
     info.channel[chan_num].up_len += len_ret;
     info.channel[chan_num].up_packets++;
     info.channel[chan_num].bytes_put++;
+if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ select_send"); } 
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
@@ -2255,7 +2260,7 @@ int lfd_linker(void)
 struct timeval cpulag;
     gettimeofday(&cpulag, NULL);
 int super = 0;
-    
+uint32_t my_max_send_q_prev=0;    
 /**
  *
  *
@@ -2285,25 +2290,31 @@ super++;
         }
 
         uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
+// if ( my_max_send_q_prev!=my_max_send_q){
+//                vtun_syslog(LOG_ERR,"new my_max_send_q %u", my_max_send_q);
+//                my_max_send_q_prev=my_max_send_q;
+//        }
 
-        uint32_t bytes_pass = 0;
+        int64_t bytes_pass = 0;
 
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
         
-        int upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
+        int64_t upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         if(upload_eff < 10) upload_eff = 100000; // 1000kpkts default start speed
         
-        bytes_pass = ((t_tv.tv_sec * upload_eff
-                + ((t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
+        bytes_pass = (((int64_t)t_tv.tv_sec * upload_eff
+                + (((int64_t)t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass : 0;
-        
+       if(drop_packet_flag) {
+vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len.sum, bytes_pass);
+} 
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -3884,10 +3895,13 @@ if(drop_packet_flag) {
                     info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
+                    info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
                     }
-                    //vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
+if(drop_packet_flag) {
+                    vtun_syslog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
+}
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
