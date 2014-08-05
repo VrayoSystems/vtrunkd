@@ -3890,12 +3890,14 @@ if(drop_packet_flag) {
 
                     // calculate send_q and speed
                     // send_q
-                    info.channel[chan_num].send_q_time = info.current_time;
+                    if(info.channel[chan_num].packet_seq_num_acked != last_recv_lsn) {
+                        info.channel[chan_num].send_q_time = info.current_time;
+                        info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
+                    }
                     info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
                     info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
-                    info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
                     }
