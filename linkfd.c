@@ -825,6 +825,9 @@ int check_fast_resend() {
 int retransmit_send(char *out2, int n_to_send) {
     if (drop_packet_flag) {
         return LASTPACKETMY_NOTIFY; // go dropping
+    } else if (drop_counter > 0) {
+        vtun_syslog(LOG_INFO, "drop_packet_flag (retransmit_send) TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+        drop_counter = 0;
     }
     if (hold_mode) {
         return CONTINUE_ERROR;
