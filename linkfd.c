@@ -115,7 +115,7 @@ struct my_ip {
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
-#define FCI_P_INTERVAL 20 // interval in packets to send ACK. 7 ~ 7% speed loss, 5 ~ 15%, 0 ~ 45%
+#define FCI_P_INTERVAL 5 // interval in packets to send ACK if ACK is not sent via payload packets
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
@@ -956,6 +956,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
         // send DATA
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
+        info.channel[i].packet_recv_counter = 0;
         if ((len && len_ret) < 0) {
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
             return BREAK_ERROR;
@@ -1226,6 +1227,7 @@ if(drop_packet_flag) {
     gettimeofday(&send1, NULL );
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
+    info.channel[chan_num].packet_recv_counter = 0;
     if ((len && len_ret) < 0) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
@@ -4379,6 +4381,7 @@ len = select_devread_send(buf, out2);
             for (; flood_flag > 0; flood_flag--) {
                 len = seqn_break_tail(buf, len, &seq_tmp, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
                 len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num, 0);
+                info.channel[1].packet_recv_counter = 0;
                 // send DATA
                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
                 vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
