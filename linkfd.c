@@ -2518,7 +2518,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
         }
         if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
-ag_flag_local = R_MODE;
         //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
