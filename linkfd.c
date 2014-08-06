@@ -114,7 +114,7 @@ struct my_ip {
 #define RSR_TOP 180000
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
-#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
+#define SUPERLOOP_MAX_LAG_USEC 20000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
@@ -2289,8 +2289,7 @@ super++;
         gettimeofday(&cpulag, NULL);
 
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
-        //if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
-        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
+        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
             vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
 
