@@ -115,7 +115,7 @@ struct my_ip {
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
-#define FCI_P_INTERVAL 5 // interval in packets to send ACK if ACK is not sent via payload packets
+#define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
@@ -3590,7 +3590,6 @@ if(drop_packet_flag) {
 if(drop_packet_flag) {
                             vtun_syslog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             //print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
-
 }
                             //#endif
                             //vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
