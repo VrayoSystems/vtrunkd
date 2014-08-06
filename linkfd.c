@@ -3599,7 +3599,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=) && 0) {
+                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
