@@ -2328,7 +2328,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             struct timeval time_tmp;
             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
             struct timeval time_tmp2 = { 20, 0 };
-/*            if (timercmp(&time_tmp, &time_tmp2, >)) {
+            if (timercmp(&time_tmp, &time_tmp2, >)) {
                 vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                     if (chan_mask & (1 << i)) {
@@ -2337,7 +2337,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
                 shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
                 shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
-            }*/
+            }
             sem_post(&(shm_conn_info->common_sem));
         }
         #ifdef SEND_Q_LOG
@@ -2400,7 +2400,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
         max_chan = shm_conn_info->max_chan;
 
-/*
+#ifdef FIX_HEAD_CHAN
+        if(info.process_num == FIX_HEAD_CHAN)  info.head_channel = 1;
+        else info.head_channel = 0;
+#else
         // head switch block
         if(max_chan == info.process_num) {
             if(info.head_channel != 1) {
@@ -2414,9 +2417,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
             }
             info.head_channel = 0;
-        }*/
-       if(info.process_num == 1)  info.head_channel = 1;
-	else info.head_channel = 0;
+        }
+#endif
 
         
         if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
