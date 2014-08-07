@@ -4289,11 +4289,12 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
                     vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
-if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
-len = 0; // shittyhold
-} else {
-len = select_devread_send(buf, out2);
-}
+                if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
+                len = 0; // shittyhold
+                } else {
+                len = select_devread_send(buf, out2);
+                }
+                
                 if (len > 0) {
                 } else if (len == BREAK_ERROR) {
                     vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
@@ -4309,7 +4310,11 @@ len = select_devread_send(buf, out2);
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: AG_MODE");
 #endif
+            if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
+            len = 0; // shittyhold
+            } else {
             len = select_devread_send(buf, out2);
+            }
             if (len > 0) {
                 dirty_seq_num++;
 #ifdef DEBUGG
