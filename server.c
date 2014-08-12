@@ -65,6 +65,7 @@ static void sig_term(int sig)
 
 void connection(int sock)
 {
+#ifndef CLIENTONLY
      struct sockaddr_in my_addr, cl_addr;
      struct vtun_host *host;
      struct sigaction sa;
@@ -114,7 +115,7 @@ void connection(int sock)
 					ntohs(cl_addr.sin_port), reason );
      }
      close(sock);
-
+#endif
      exit(0);
 }
 

@@ -2036,6 +2036,9 @@ int lfd_linker(void)
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
     sem_post(&(shm_conn_info->stats_sem));    
+#ifdef CLIENTONLY
+    info.srv = 0;
+#endif
     if(info.srv) {
         /** Server accepted all logical channel here and get and send pid */
         // now read one single byte
