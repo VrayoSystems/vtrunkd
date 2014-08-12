@@ -116,7 +116,7 @@ struct my_ip {
 #define RSR_TOP 180000
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
-#define SUPERLOOP_MAX_LAG_USEC 20000 // 15ms max superloop lag allowed!
+#define SUPERLOOP_MAX_LAG_USEC 50000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
@@ -2338,9 +2338,11 @@ super++;
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass : 0;
-       if(drop_packet_flag) {
+#ifdef DEBUGG
+if(drop_packet_flag) {
 vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len.sum, bytes_pass);
 } 
+#endif
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
