@@ -106,9 +106,11 @@ struct my_ip {
 #define SENQ_Q_LIMIT_THRESHOLD 13000
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
-#define MAX_LATENCY_DROP { 0, 550000 }
+//#define MAX_LATENCY_DROP { 0, 550000 }
+#define MAX_LATENCY_DROP_USEC 550000
+#define MAX_LATENCY_FACTOR 3 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
-#define MAX_REORDER_LATENCY_MAX 999999 // usec
+#define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 180000
@@ -436,7 +438,8 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 /* Check if the packet sent right now will be delivered in time */
 int check_delivery_time() {
     // RTT-only for now..
-    struct timeval max_latency_drop = MAX_LATENCY_DROP;
+//    struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    struct timeval max_latency_drop = info.max_latency_drop;
     sem_wait(&(shm_conn_info->stats_sem));
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
     if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
@@ -452,7 +455,9 @@ int check_delivery_time() {
 
 int get_write_buf_wait_data() {
     // TODO WARNING: is it synchronized?
-    struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
+    //struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    struct timeval max_latency_drop = info.max_latency_drop;
+    struct timeval tv_tmp;
     uint32_t chan_mask = shm_conn_info->channels_mask;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
@@ -1274,7 +1279,9 @@ int write_buf_check_n_flush(int logical_channel) {
     int fprev = -1;
     int fold = -1;
     int len;
-    struct timeval max_latency_drop = MAX_LATENCY_DROP, tv_tmp;
+    //struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    struct timeval max_latency_drop = info.max_latency_drop;
+    struct timeval tv_tmp;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -3802,7 +3809,7 @@ if(drop_packet_flag) {
                             }
                             info.rtt = shm_conn_info->stats[info.process_num].rtt_phys_avg;
                             // now update max_reorder_latency
-                            if(info.rtt >= 1000) {
+                            if(info.rtt >= (MAX_REORDER_LATENCY_MAX/1000)) {
                                 info.max_reorder_latency.tv_sec = 0;
                                 info.max_reorder_latency.tv_usec = MAX_REORDER_LATENCY_MAX;
                             } else if (info.rtt == 1) {
@@ -3812,6 +3819,8 @@ if(drop_packet_flag) {
                                 info.max_reorder_latency.tv_sec = 0;
                                 info.max_reorder_latency.tv_usec = info.rtt * 1000;
                             }
+                            info.max_latency_drop.tv_usec = info.max_reorder_latency.tv_usec * MAX_LATENCY_FACTOR;
+                            if(info.max_latency_drop.tv_usec > MAX_LATENCY_DROP_USEC) info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             
                             sem_post(&(shm_conn_info->stats_sem));
                         }

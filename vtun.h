@@ -490,6 +490,7 @@ struct phisical_status {
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
     struct timeval max_reorder_latency;
+    struct timeval max_latency_drop;
     struct {
 #define EFF_LEN_BUFF 15
         int warming_up;
