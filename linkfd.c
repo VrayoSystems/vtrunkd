@@ -108,7 +108,7 @@ struct my_ip {
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
 #define MAX_LATENCY_DROP_USEC 550000
-#define MAX_LATENCY_FACTOR 3 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
+#define MAX_LATENCY_FACTOR 10 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
