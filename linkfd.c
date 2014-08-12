@@ -973,7 +973,7 @@ int retransmit_send(char *out2, int n_to_send) {
         info.channel[i].up_len += len_ret;
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
-if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
+//if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
         info.byte_r_mode += len_ret;
 
         send_counter++;
@@ -1028,11 +1028,11 @@ int select_devread_send(char *buf, char *out2) {
     sem_post(&(shm_conn_info->resend_buf_sem));
     if (idx == -1) {
         if (!FD_ISSET(info.tun_device, &fdset)) {
-//#ifdef DEBUGG
+#ifdef DEBUGG
 if(drop_packet_flag) {
             vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
 }
-//#endif
+#endif
             return TRYWAIT_NOTIFY;
         }
         FD_ZERO(&fdset_tun);
@@ -1099,7 +1099,7 @@ if(drop_packet_flag) {
             int other_chan = 0;
             if(info.process_num == 0) other_chan=1;
             else other_chan = 0;
-            vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
+            //vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
             
             
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -4410,8 +4410,8 @@ if(drop_packet_flag) {
                 info.channel[1].packet_recv_counter = 0;
                 // send DATA
                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
-                vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
-                        info.channel[1].local_seq_num);
+//                vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
+//                        info.channel[1].local_seq_num);
                 info.channel[1].local_seq_num++;
             }
         }
