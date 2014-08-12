@@ -441,7 +441,7 @@ int check_delivery_time() {
 //    struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     sem_wait(&(shm_conn_info->stats_sem));
-    if(shm_conn_info->stats[info.process_num].channel_dead) {
+    if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
         sem_post(&(shm_conn_info->stats_sem));
         return 0;
     }
