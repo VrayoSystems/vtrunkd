@@ -3224,12 +3224,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
-//#ifdef DEBUGG
+#ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
         vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", len);
 }
-//#endif
+#endif
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
             if( errno != EAGAIN && errno != EINTR ) {
@@ -3349,11 +3349,11 @@ if(drop_packet_flag) {
                     len = udp_read(fd0, buf);
                 }
 
-//#ifdef DEBUGG
+#ifdef DEBUGG
 if(drop_packet_flag) {
                 vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
 }
-//#endif
+#endif
                 if( len<= 0 ) {
                     if (len == 0) {
                         vtun_syslog(LOG_INFO, "proto_read return 0, the peer with %d has performed an orderly shutdown. TERM_NONFATAL", chan_num);
@@ -3611,12 +3611,12 @@ if(drop_packet_flag) {
                             //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
-                            //#ifdef TIMEWARP
-if(drop_packet_flag) {
-                            vtun_syslog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
-                            //print_tw(timewarp, &tw_cur, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
-}
-                            //#endif
+
+#ifdef DEBUGG
+                            if(drop_packet_flag) {
+                                vtun_syslog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
+                            }
+#endif
                             //vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
@@ -3923,9 +3923,11 @@ if(drop_packet_flag) {
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
                     }
+#ifdef DEBUGG
 if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 }
+#endif
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
@@ -4036,11 +4038,11 @@ if(drop_packet_flag) {
                     }
 
                     info.channel[chan_num].packet_recv_counter++;
-//#ifdef DEBUGG
+#ifdef DEBUGG
 if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
 }
-//#endif
+#endif
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
