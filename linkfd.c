@@ -1771,6 +1771,20 @@ int ag_switcher() {
     return R_MODE;
 }
 
+int set_max_chan(uint32_t chan_mask) {
+    //must sync on stats_sem
+    int min_bdp = 1000000;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i))
+            && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+            if(tv2ms(&shm_conn_info->stats[i].bdp1) < min_bdp) {
+                min_bdp = tv2ms(&shm_conn_info->stats[i].bdp1);
+                max_chan = i;
+            }
+        }
+    }
+    shm_conn_info->max_chan = max_chan;
+}
 
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
@@ -2394,6 +2408,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         
         sem_wait(&(shm_conn_info->stats_sem));
         channel_dead = (shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1);
+        if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
+            set_max_chan(chan_mask);
+        }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
@@ -3874,16 +3891,7 @@ if(drop_packet_flag) {
                             //shm_conn_info->bdp1[info.process_num] = info.bdp1;
                             shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
                             // now find max_chan
-                            int min_bdp = 1000000;
-                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                if (chan_mask & (1 << i)) { // hope this works..
-                                    if(tv2ms(&shm_conn_info->stats[i].bdp1) < min_bdp) {
-                                        min_bdp = tv2ms(&shm_conn_info->stats[i].bdp1);
-                                        max_chan = i;
-                                    }
-                                }
-                            }
-                            shm_conn_info->max_chan = max_chan;
+                            set_max_chan(chan_mask);
                             sem_post(&(shm_conn_info->stats_sem));
                             // <-- end max_chan set
                             
