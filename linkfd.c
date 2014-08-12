@@ -2315,7 +2315,7 @@ super++;
         gettimeofday(&cpulag, NULL);
 
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
-        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC) {
+        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < SELECT_SLEEP_USEC-5000) {
             vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
 
