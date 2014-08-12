@@ -441,6 +441,10 @@ int check_delivery_time() {
 //    struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     sem_wait(&(shm_conn_info->stats_sem));
+    if(shm_conn_info->stats[info.process_num].channel_dead) {
+        sem_post(&(shm_conn_info->stats_sem));
+        return 0;
+    }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
     if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
     
@@ -911,7 +915,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
+                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
                     continue;
                 }
             }
@@ -930,7 +934,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; sending new");
+                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
                     continue;
                 }
             }
