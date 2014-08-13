@@ -107,7 +107,7 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_LATENCY_DROP_USEC 70000
+#define MAX_LATENCY_DROP_USEC 100000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_FACTOR 30 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
@@ -3826,8 +3826,9 @@ if(drop_packet_flag) {
                                 info.max_reorder_latency.tv_sec = 0;
                                 info.max_reorder_latency.tv_usec = info.rtt * 1000;
                             }
-                            info.max_latency_drop.tv_usec = info.max_reorder_latency.tv_usec * MAX_LATENCY_FACTOR;
-                            if(info.max_latency_drop.tv_usec > MAX_LATENCY_DROP_USEC) info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
+                            //info.max_latency_drop.tv_usec = info.max_reorder_latency.tv_usec * MAX_LATENCY_FACTOR;
+                            //if(info.max_latency_drop.tv_usec > MAX_LATENCY_DROP_USEC) 
+                            info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             
                             sem_post(&(shm_conn_info->stats_sem));
                         }
