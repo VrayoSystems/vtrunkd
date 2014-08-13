@@ -438,22 +438,24 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 /* Check if the packet sent right now will be delivered in time */
 int check_delivery_time() {
     // RTT-only for now..
-//    struct timeval max_latency_drop = MAX_LATENCY_DROP;
-    struct timeval max_latency_drop = info.max_latency_drop;
+    //    struct timeval max_latency_drop = MAX_LATENCY_DROP;
     sem_wait(&(shm_conn_info->stats_sem));
+    int ret = check_delivery_time_unsynced();
+    sem_post(&(shm_conn_info->stats_sem));
+    return ret;
+}
+
+int check_delivery_time_unsynced() {
+    struct timeval max_latency_drop = info.max_latency_drop;
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
-        sem_post(&(shm_conn_info->stats_sem));
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
     if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
-    
         // no way to deliver in time
         //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
-        sem_post(&(shm_conn_info->stats_sem));
         return 0;
     }
-    sem_post(&(shm_conn_info->stats_sem));
     return 1;
 }
 
@@ -2307,9 +2309,13 @@ uint32_t my_max_send_q_prev=0;
  */
     while( !linker_term ) {
         errno = 0;
-super++;
+        super++;
         
-        exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+        if(send_q_eff_mean > 10000) { // TODO: threshold depends on phys RTT and speed; investigate that!
+            exact_rtt = info.rtt2; 
+        } else {
+            exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+        }
 
         old_time = cpulag;
         gettimeofday(&cpulag, NULL);
@@ -2540,6 +2546,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
                            || (send_q_limit_cubic_apply < info.rsr) 
                            || ( channel_dead )
+                           //|| ( !check_delivery_time_unsynced() )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
