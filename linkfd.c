@@ -459,6 +459,18 @@ int check_delivery_time_unsynced() {
     return 1;
 }
 
+int check_delivery_time_simple() {
+    struct timeval max_latency_drop = info.max_latency_drop;
+    if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+        return 0;
+    }
+    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
+        return 0;
+    }
+    return 1;
+}
+
+
 int get_write_buf_wait_data() {
     // TODO WARNING: is it synchronized?
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
@@ -927,6 +939,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 last_sent_packet_num[i].seq_num--;
                 if (check_delivery_time()) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
+                    // TODO: disable AG in case of this event!
                     vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
                     continue; // ok to send new packet
                 } 
@@ -2355,24 +2368,40 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 #endif
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
+            // now check all other chans
+            // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
+            // shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
+            int need_send = 1;
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
-            sem_wait(&(shm_conn_info->common_sem));
-            struct timeval time_tmp;
-            timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
-            struct timeval time_tmp2 = { 20, 0 };
-            if (timercmp(&time_tmp, &time_tmp2, >)) {
-                vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if (chan_mask & (1 << i)) {
-                        shm_conn_info->flood_flag[i] = 1;
+
+            sem_wait(&(shm_conn_info->stats_sem));
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if( !( (shm_conn_info->stats[i].sqe_mean < 10000) && (shm_conn_info->stats[i].max_send_q > 10000) )) {
+                        need_send = 0;
                     }
                 }
-                shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
-                shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
             }
-            sem_post(&(shm_conn_info->common_sem));
+            sem_post(&(shm_conn_info->stats_sem));
+            if(need_send) {
+                sem_wait(&(shm_conn_info->common_sem));
+                struct timeval time_tmp;
+                timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
+                struct timeval time_tmp2 = { 20, 0 };
+                if (timercmp(&time_tmp, &time_tmp2, >)) {
+                    vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if (chan_mask & (1 << i)) {
+                            shm_conn_info->flood_flag[i] = 1;
+                        }
+                    }
+                    shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
+                    shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
+                }
+                sem_post(&(shm_conn_info->common_sem));
+            }
         }
         #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
@@ -2546,7 +2575,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
                            || (send_q_limit_cubic_apply < info.rsr) 
                            || ( channel_dead )
-                           //|| ( !check_delivery_time_unsynced() )
+                           || ( !check_delivery_time_simple() )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
