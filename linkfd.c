@@ -2591,7 +2591,14 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         if(ag_flag_local == AG_MODE) {
-            // check our protup against 
+            // check our protup against all other chans
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if( (shm_conn_info->stats[info.process_num].rtt2 - shm_conn_info->stats[i].rtt2)*1000 > info.max_latency_drop.tv_usec ) {
+                        vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel");
+                    }
+                }
+            }
         }
         
         sem_post(&(shm_conn_info->stats_sem));
