@@ -2833,6 +2833,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }                
                 add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
                 
+                sem_wait(&(shm_conn_info->stats_sem));
+                int Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                sem_post(&(shm_conn_info->stats_sem));
+                add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+                
                 print_json(js_buf, &js_cur);
 
                 #ifdef SEND_Q_LOG
@@ -3916,6 +3921,7 @@ if(drop_packet_flag) {
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
+                        info.srtt2_10 += (info.rtt2*10 - info.srtt2_10) / 7;
                         if (info.rtt2 <= 0) info.rtt2 = 1;
 
                         if ((chan_num == my_max_send_q_chan_num)) {
@@ -4000,6 +4006,7 @@ if(drop_packet_flag) {
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                     shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
                     shm_conn_info->stats[info.process_num].rtt2 = info.rtt2; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
+                    shm_conn_info->stats[info.process_num].srtt2_10 = info.srtt2_10; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     sem_post(&(shm_conn_info->stats_sem));
 
                     //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
