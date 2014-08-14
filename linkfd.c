@@ -2594,8 +2594,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // check our protup against all other chans
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    if( (shm_conn_info->stats[info.process_num].rtt2 - shm_conn_info->stats[i].rtt2)*1000 > info.max_latency_drop.tv_usec ) {
-                        vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel");
+                    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) ) {
+                        vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
+                        if(info.head_channel) {
+                            vtun_syslog(LOG_ERR, "         ^^^ HEAD channel!");
+                        }
                     }
                 }
             }
