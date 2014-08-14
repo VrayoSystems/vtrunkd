@@ -1955,10 +1955,12 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
         return 0;
     }
+    char *save_buf = buf;
     if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
+    char *save_out_buf = out_buf;
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(uint32_t) * MAX_TCP_LOGICAL_CHANNELS);
     memset((void *)&statb, 0, sizeof(statb));
@@ -4547,8 +4549,18 @@ if(drop_packet_flag) {
 
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
-    lfd_free(buf);
-    lfd_free(out_buf);
+    if(buf != save_buf) {
+        vtun_syslog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
+        free(save_buf);
+    } else {
+        lfd_free(buf);
+    }
+    if(save_out_buf != out_buf) {
+        vtun_syslog(LOG_ERR,"ERROR: cannot free out_buf: CORRUPT!");
+        free(save_out_buf);
+    } else {
+        lfd_free(out_buf);
+    }
     free(js_buf);
     #ifdef SEND_Q_LOG
         free(jsSQ_buf);
