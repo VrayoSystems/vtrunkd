@@ -2590,6 +2590,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
+        if(ag_flag_local == AG_MODE) {
+            // check our protup against 
+        }
+        
         sem_post(&(shm_conn_info->stats_sem));
         
         // now calculate AGAG
