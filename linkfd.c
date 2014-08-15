@@ -2760,6 +2760,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
                 //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
                 //}
+                if(buf != save_buf) {
+                    vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
+                }
 
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
