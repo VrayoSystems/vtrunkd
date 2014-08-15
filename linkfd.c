@@ -4451,7 +4451,7 @@ if(drop_packet_flag) {
         uint32_t local_seq_num_p;
         uint16_t tmp_flag=0, gg1;
         uint32_t  gg2, gg3;
-        if (flood_flag > 0) {
+        if (flood_flag > 0 && linker_term != TERM_NONFATAL) {
             gettimeofday(&flood_start_time, NULL );
             start_of_train = info.channel[1].local_seq_num;
             end_of_train = start_of_train + flood_flag;
