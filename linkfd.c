@@ -325,6 +325,12 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
 /* Termination flag */
 static volatile sig_atomic_t linker_term;
 
+void segfault_sigaction(int signal, siginfo_t *si, void *arg)
+{
+    printf("CRITICAL ERROR Caught mem-free segfault at address %p; will continue anyway since we are USS 1408 Enterprise !! q:-)\-<\n", si->si_addr);
+    //exit(0);
+}
+
 static void sig_term(int sig)
 {
     vtun_syslog(LOG_INFO, "Get sig_term");
@@ -4552,6 +4558,21 @@ if(drop_packet_flag) {
 
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
+    
+    for (i = 0; i < info.channel_amount; i++) {
+        close(info.channel[i].descriptor);
+    }
+    close(prio_s);
+
+    if(linker_term == TERM_NONFATAL) linker_term = 0; // drop nonfatal flag
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sigaction));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = segfault_sigaction;
+    sa.sa_flags   = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
+
     if(buf != save_buf) {
         vtun_syslog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
         free(save_buf);
@@ -4569,13 +4590,11 @@ if(drop_packet_flag) {
         free(jsSQ_buf);
     #endif
 
-
-    for (i = 0; i < info.channel_amount; i++) {
-        close(info.channel[i].descriptor);
-    }
-    close(prio_s);
-
-    if(linker_term == TERM_NONFATAL) linker_term = 0; // drop nonfatal flag
+    memset(&sa, 0, sizeof(sigaction));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = SIG_DFL;
+    //sa.sa_flags   = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
 
     return 0;
 }
