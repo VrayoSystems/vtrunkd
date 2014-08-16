@@ -4575,13 +4575,13 @@ if(drop_packet_flag) {
 
     if(buf != save_buf) {
         vtun_syslog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
-        free(save_buf);
+        lfd_free(save_buf);
     } else {
         lfd_free(buf);
     }
     if(save_out_buf != out_buf) {
         vtun_syslog(LOG_ERR,"ERROR: cannot free out_buf: CORRUPT!");
-        free(save_out_buf);
+        lfd_free(save_out_buf);
     } else {
         lfd_free(out_buf);
     }
