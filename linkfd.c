@@ -4569,13 +4569,13 @@ if(drop_packet_flag) {
 
     if(linker_term == TERM_NONFATAL) linker_term = 0; // drop nonfatal flag
 
-    struct sigaction sa;
+    /*struct sigaction sa;
     memset(&sa, 0, sizeof(sigaction));
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = segfault_sigaction;
     sa.sa_flags   = SA_SIGINFO;
     sigaction(SIGSEGV, &sa, NULL);
-
+    */
     if(buf != save_buf) {
         vtun_syslog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
         lfd_free(save_buf);
@@ -4593,11 +4593,11 @@ if(drop_packet_flag) {
         free(jsSQ_buf);
     #endif
 
-    memset(&sa, 0, sizeof(sigaction));
+    /*memset(&sa, 0, sizeof(sigaction));
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = SIG_DFL;
     //sa.sa_flags   = SA_SIGINFO;
-    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);*/
 
     return 0;
 }
