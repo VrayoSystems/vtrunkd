@@ -988,7 +988,7 @@ int retransmit_send(char *out2, int n_to_send) {
         // send DATA
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
         info.channel[i].packet_recv_counter = 0;
-        if ((len && len_ret) < 0) {
+        if (len && (len_ret < 0)) {
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
             return BREAK_ERROR;
         }
@@ -1262,7 +1262,7 @@ if(drop_packet_flag) {
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     info.channel[chan_num].packet_recv_counter = 0;
-    if ((len && len_ret) < 0) {
+    if (len && (len_ret < 0)) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
