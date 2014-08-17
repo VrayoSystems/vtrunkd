@@ -1130,6 +1130,9 @@ if(drop_packet_flag) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
+            
+            // set dropped_flag here
+            
             /*
             for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
                 if (chan_mask & (1 << p)) {
