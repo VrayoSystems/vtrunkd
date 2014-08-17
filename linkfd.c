@@ -4474,7 +4474,7 @@ if(drop_packet_flag) {
             char *out;
             int len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
             if (len == -1) {
-                len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &sender_pid);
+                len = get_last_packet(1, &last_sent_packet_num[1].seq_num, &out2, &sender_pid);
             }
             if (len == -1) {
                 vtun_syslog(LOG_ERR, "WARNING Cannot send train");
