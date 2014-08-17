@@ -327,7 +327,7 @@ static volatile sig_atomic_t linker_term;
 
 void segfault_sigaction(int signal, siginfo_t *si, void *arg)
 {
-    printf("CRITICAL ERROR Caught mem-free segfault at address %p; will continue anyway since we are USS 1408 Enterprise !! q:-)\-<\n", si->si_addr);
+    printf("CRITICAL ERROR Caught mem-free segfault at address %p; will continue anyway since we are USS 1408 Enterprise !! q:-)\\-<\n", si->si_addr);
     //exit(0);
 }
 
