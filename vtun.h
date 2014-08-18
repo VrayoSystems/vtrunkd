@@ -491,6 +491,7 @@ struct phisical_status {
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
     int srtt2_10; // max..?
+    int dropping;
     struct timeval max_reorder_latency;
     struct timeval max_latency_drop;
     struct {
@@ -546,6 +547,7 @@ struct conn_info {
     struct timeval last_flood_sent;
     int head_all;
     int max_chan;
+    int dropping;
 };
 
 struct resent_chk {
