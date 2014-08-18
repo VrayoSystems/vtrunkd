@@ -2315,7 +2315,7 @@ int lfd_linker(void)
     int channel_dead = 0;
     int exact_rtt = 0;
     //int head_rel = 0;
-    struct timeval dropping = info.current_time;
+    struct timeval drop_time = info.current_time;
 struct timeval cpulag;
     gettimeofday(&cpulag, NULL);
 int super = 0;
