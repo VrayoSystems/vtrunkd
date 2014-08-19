@@ -2816,6 +2816,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
                 add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
                 add_json(js_buf, &js_cur, "super", "%d", super);
+                super = 0;
                 add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
                 was_hold_mode = 0; // TODO: remove
                 //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
