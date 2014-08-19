@@ -1960,12 +1960,12 @@ int lfd_linker(void)
     int i, j, fd0;
     int break_out = 0;
 
-    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
+    if( !(buf = lfd_alloc(VTUN_FRAME_SIZE+VTUN_FRAME_OVERHEAD)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
         return 0;
     }
     char *save_buf = buf;
-    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
+    if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE+VTUN_FRAME_OVERHEAD)) ) {
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
