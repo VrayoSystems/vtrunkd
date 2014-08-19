@@ -2490,7 +2490,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
         max_chan = shm_conn_info->max_chan;
-#define FIX_HEAD_CHAN 1
 #ifdef FIX_HEAD_CHAN
         if(info.process_num == FIX_HEAD_CHAN)  info.head_channel = 1;
         else info.head_channel = 0;
