@@ -451,9 +451,14 @@ int check_delivery_time() {
     return ret;
 }
 
+// this method is crutial as it controls AG/R_MODE operation while in R_MODE
 int check_delivery_time_unsynced() {
     struct timeval max_latency_drop = info.max_latency_drop;
+    // check for dead channel
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+        return 0;
+    }
+    if( (info.rsr < SENQ_Q_LIMIT_THRESHOLD) || ((int32_t)info.send_q_limit_cubic < info.rsr)) {
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
@@ -465,7 +470,7 @@ int check_delivery_time_unsynced() {
     return 1;
 }
 
-int check_delivery_time_simple() {
+int check_rtt_latency_drop() {
     struct timeval max_latency_drop = info.max_latency_drop;
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
         return 0;
@@ -1124,6 +1129,7 @@ if(drop_packet_flag) {
             int other_chan = 0;
             if(info.process_num == 0) other_chan=1;
             else other_chan = 0;
+            info.dropping = 1;
             //vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
             
             
@@ -2314,6 +2320,7 @@ int lfd_linker(void)
     int channel_dead = 0;
     int exact_rtt = 0;
     //int head_rel = 0;
+    struct timeval drop_time = info.current_time;
 struct timeval cpulag;
     gettimeofday(&cpulag, NULL);
 int super = 0;
@@ -2586,7 +2593,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
                            || (send_q_limit_cubic_apply < info.rsr) 
                            || ( channel_dead )
-                           || ( !check_delivery_time_simple() )
+                           || ( !check_rtt_latency_drop() )
+                           || ( !shm_conn_info->dropping )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // now see if we are actually good enough to kick in AG?
@@ -2772,6 +2780,19 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 if(buf != save_buf) {
                     vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
                 }
+                sem_wait(&(shm_conn_info->stats_sem));
+                if(info.dropping) {
+                    info.dropping = 0;
+                    drop_time = info.current_time;
+                    shm_conn_info->dropping = 1;
+                } else {
+                    timersub(&info.current_time, &drop_time, &tv_tmp_tmp_tmp);
+                    if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {2, 000000}), >=)) {
+                        shm_conn_info->dropping = 0;
+                    } else {
+                        shm_conn_info->dropping = 1;
+                    }
+                }
 
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
@@ -2782,7 +2803,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
                 // now put max_ACS2 to SHM:
 
-                sem_wait(&(shm_conn_info->stats_sem));
+                
                 shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
                 miss_packets_max = shm_conn_info->miss_packets_max;
                 sem_post(&(shm_conn_info->stats_sem));
