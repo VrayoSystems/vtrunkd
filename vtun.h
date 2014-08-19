@@ -548,6 +548,7 @@ struct conn_info {
     int head_all;
     int max_chan;
     int dropping;
+    struct timeval drop_time;
 };
 
 struct resent_chk {

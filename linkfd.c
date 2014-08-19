@@ -113,7 +113,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
-#define RSR_TOP 180000
+#define RSR_TOP 280000
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
@@ -456,17 +456,20 @@ int check_delivery_time_unsynced() {
     struct timeval max_latency_drop = info.max_latency_drop;
     // check for dead channel
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD");
         return 0;
     }
-    if( (info.rsr < SENQ_Q_LIMIT_THRESHOLD) || ((int32_t)info.send_q_limit_cubic < info.rsr)) {
+    if( info.rsr < SENQ_Q_LIMIT_THRESHOLD) {
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < RSR", info.rsr, (int32_t)info.send_q_limit_cubic);
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
-    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
+    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop))) ) {
         // no way to deliver in time
-        //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[max_chan].rtt_phys_avg, (tv2ms(&max_latency_drop) / 2));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[max_chan].exact_rtt, (tv2ms(&max_latency_drop)));
         return 0;
     }
+    //vtun_syslog(LOG_ERR, "CDT OK");
     return 1;
 }
 
@@ -902,7 +905,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
             }
             // else means that we need to send something old
-            //vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
+            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
             send_counter++;
             continue; // do not send anything at all
         }
@@ -2597,6 +2600,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || ( !shm_conn_info->dropping )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
+        //ag_flag_local = R_MODE;
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
         // TODO: use max_ACS thru all chans
@@ -2783,11 +2787,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 sem_wait(&(shm_conn_info->stats_sem));
                 if(info.dropping) {
                     info.dropping = 0;
-                    drop_time = info.current_time;
+                    shm_conn_info->drop_time = info.current_time;
                     shm_conn_info->dropping = 1;
                 } else {
-                    timersub(&info.current_time, &drop_time, &tv_tmp_tmp_tmp);
-                    if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {2, 000000}), >=)) {
+                    timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
+                    if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {4, 0}), >=)) {
                         shm_conn_info->dropping = 0;
                     } else {
                         shm_conn_info->dropping = 1;
