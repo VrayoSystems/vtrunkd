@@ -688,7 +688,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
 
 // cycle resend buffer from top down to old to get any packet
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
-    int j = shm_conn_info->resend_buf_idx;
+    int j = shm_conn_info->resend_buf_idx-1;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
@@ -936,8 +936,8 @@ int retransmit_send(char *out2, int n_to_send) {
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
                     continue; // ok to send new packet
                 } 
-                vtun_syslog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+                vtun_syslog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
@@ -957,7 +957,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 // else there is no way we can deliver anything in time; now get latest packet
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
                 // TODO: counter here -->
-                vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting oldest packet... seq_num %"PRIu32"", last_sent_packet_num[i].seq_num);
+                vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
