@@ -465,7 +465,7 @@ int check_delivery_time_unsynced() {
     return 1;
 }
 
-int check_delivery_time_simple() {
+int check_rtt_latency_drop() {
     struct timeval max_latency_drop = info.max_latency_drop;
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
         return 0;
@@ -2588,7 +2588,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
                            || (send_q_limit_cubic_apply < info.rsr) 
                            || ( channel_dead )
-                           || ( !check_delivery_time_simple() )
+                           || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
