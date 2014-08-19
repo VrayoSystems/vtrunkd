@@ -451,9 +451,14 @@ int check_delivery_time() {
     return ret;
 }
 
+// this method is crutial as it controls AG/R_MODE operation while in R_MODE
 int check_delivery_time_unsynced() {
     struct timeval max_latency_drop = info.max_latency_drop;
+    // check for dead channel
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+        return 0;
+    }
+    if( (info.rsr < SENQ_Q_LIMIT_THRESHOLD) || ((int32_t)info.send_q_limit_cubic < info.rsr)) {
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
