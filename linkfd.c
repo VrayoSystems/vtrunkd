@@ -901,13 +901,17 @@ int retransmit_send(char *out2, int n_to_send) {
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
-            if(check_delivery_time()) {
-                continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
+            if( (!info.head_channel) && (shm_conn_info->dropping)) {
+                last_sent_packet_num[i].seq_num--; // push to top!
+            } else {
+                if(check_delivery_time()) {
+                    continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
+                }
+                // else means that we need to send something old
+                vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
+                send_counter++;
+                continue; // do not send anything at all
             }
-            // else means that we need to send something old
-            vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
-            send_counter++;
-            continue; // do not send anything at all
         }
 
         // perform check that we can write w/o blocking I/O; take into account that we need to notify that we still need to retransmit
@@ -2486,7 +2490,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
         max_chan = shm_conn_info->max_chan;
-
+#define FIX_HEAD_CHAN 1
 #ifdef FIX_HEAD_CHAN
         if(info.process_num == FIX_HEAD_CHAN)  info.head_channel = 1;
         else info.head_channel = 0;
@@ -3274,8 +3278,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
             }
             sem_post(&(shm_conn_info->common_sem));
+            if( (shm_conn_info->dropping) && (!info.head_channel) ) { // semi-atomic, no need to sync, TODO: can optimize with above
+                need_retransmit = 1; // flood not-head to top for 'dropping time'
+            }
         }
-
+        
 
                     /*
                      *
