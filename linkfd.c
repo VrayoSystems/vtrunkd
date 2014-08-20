@@ -2021,6 +2021,11 @@ int lfd_linker(void)
             info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
             linker_term = TERM_NONFATAL;
         }
+        if(info.channel_amount < 1) {
+            vtun_syslog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
+            info.channel_amount = 1;
+            linker_term = TERM_NONFATAL;
+        }
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
