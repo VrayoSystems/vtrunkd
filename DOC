@@ -31,4 +31,5 @@ Algo:
 Q:
 
 - Why still no packets to send (not pushed to RSR_TOP on HEAD even in 1 ch?)
+- Can we detect condition where congestion occurs after the tunnel?
 

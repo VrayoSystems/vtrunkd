@@ -3102,7 +3102,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             int Ch = 0;
             int Cs = 0;
             
-            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[max_chan].ACK_speed > 0) {
+            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
                     sem_wait(&(shm_conn_info->stats_sem));
 
                     int min_Ch = 1000000;
