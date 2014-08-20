@@ -2894,9 +2894,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 int Ch = 0;
                 int Cs = 0;
                 sem_wait(&(shm_conn_info->stats_sem));
+                max_chan = shm_conn_info->max_chan;
                 if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[max_chan].ACK_speed > 0) {
                     Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                    Cs = 100*shm_conn_info->stats[info.process_num].ACK_speed/shm_conn_info->stats[max_chan].ACK_speed;
+                    Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
                 }
                 sem_post(&(shm_conn_info->stats_sem));
                 
@@ -3105,6 +3106,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
                     sem_wait(&(shm_conn_info->stats_sem));
 
+                    max_chan = shm_conn_info->max_chan;
                     int min_Ch = 1000000;
                     int min_Ch_chan = 1000000;
                     int min_Cs = 1000000;
@@ -3113,7 +3115,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         if ((chan_mask & (1 << i))
                             && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
                             Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                            Cs = shm_conn_info->stats[i].ACK_speed/(shm_conn_info->stats[max_chan].ACK_speed/100);
+                            Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
                             if(Ch < min_Ch) {
                                 min_Ch = Ch;
                                 min_Ch_chan = i;
