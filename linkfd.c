@@ -2488,7 +2488,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
-        channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 <= 3) || (shm_conn_info->stats[info.process_num].max_PCS2 <= 1));
+        channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0));
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
             set_max_chan(chan_mask);
         }
