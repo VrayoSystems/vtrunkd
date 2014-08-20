@@ -2890,12 +2890,15 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }                
                 add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
                 int Ch = 0;
+                int Cs = 0;
                 if(shm_conn_info->stats[max_chan].srtt2_10 > 0) {
                     sem_wait(&(shm_conn_info->stats_sem));
                     Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                    Cs = 100*shm_conn_info->stats[info.process_num].ACK_speed/shm_conn_info->stats[max_chan].ACK_speed;
                     sem_post(&(shm_conn_info->stats_sem));
                 }
                 add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+                add_json(js_buf, &js_cur, "Cs", "%d", Cs);
                 
                 print_json(js_buf, &js_cur);
 
