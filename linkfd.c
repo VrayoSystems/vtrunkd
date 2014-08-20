@@ -2895,7 +2895,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 int Cs = 0;
                 sem_wait(&(shm_conn_info->stats_sem));
                 max_chan = shm_conn_info->max_chan;
-                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[max_chan].ACK_speed > 0) {
+                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
                     Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
                     Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
                 }
@@ -3114,6 +3114,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                         if ((chan_mask & (1 << i))
                             && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                            if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
                             Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
                             Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
                             if(Ch < min_Ch) {
