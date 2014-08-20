@@ -99,7 +99,7 @@
 #define P_PING_INTERVAL 1 // seconds
 // this controls jitter and congestion on tun device (set to higher on faster links, lower on slower)
 // setting it to low value will result in packet loss on full load; setting too high will result in significant tx delay
-#define P_TUN_TXQUEUE_LEN 100 // int
+#define P_TUN_TXQUEUE_LEN 1000 // int
 // maximum VPNs allocated at server side (aaffects SHM memory)
 #define P_MAX_TUNNELS_NUM 20
 // amount of tcp channels per process (vpn link) requested by CLIENT mode
