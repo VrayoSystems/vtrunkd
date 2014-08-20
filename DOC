@@ -1,0 +1,34 @@
+Adjustable parameters:
+
+Realtime:
+- RSR_TOP
+- MAX_LATENCY_DROP
+- TRAIN_PKTS
+- dropping time
+- AGAG period
+- SEND_Q_LIMIT_MINIMAL 9000
+- SENQ_Q_LIMIT_THRESHOLD 13000
+- rtt2 smoothing
+(- sum length)
+(- code %) - only in AG mode!
+
+Semi-static:
+- Cubic B
+- Cubic C
+- reordering (latency, packets)
+- Network timeout time
+
+Static:
+- WRITE_BUF_LEN
+
+Algo:
+
+- RSR_TOP < W_cubic logic: RSR_TOP = rtt*spd*K || W_cubic ???
+- R_MODE new algo: if no losses detected on HEAD(W_cubic >> RSR_TOP*2 ?), set send_q_limit = RSR_TOP on ALL chans until agag ==0; then add period == rtt after setting send_q_limit = rsr and before starting to increment agag!
+    along with push algo, this will ensure that at least in R_MODE we will get 100% max_chan detection
++ Detect HEAD wrong markers: Ch < 50 && Cs=max_ACS*100/ACS < 50: if min_Ch_chan == min_Cs_chan: max_chan=min_Ch_chan
+
+Q:
+
+- Why still no packets to send (not pushed to RSR_TOP on HEAD even in 1 ch?)
+
