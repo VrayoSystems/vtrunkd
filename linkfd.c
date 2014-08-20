@@ -102,6 +102,8 @@ struct my_ip {
     struct	in_addr ip_src,ip_dst;	/* source and dest address */
 };
 
+#define CH_THRESH 30
+#define CS_THRESH 60
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD 13000
 // TODO: use mean send_q value for the following def
@@ -2891,12 +2893,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
                 int Ch = 0;
                 int Cs = 0;
-                if(shm_conn_info->stats[max_chan].srtt2_10 > 0) {
-                    sem_wait(&(shm_conn_info->stats_sem));
+                sem_wait(&(shm_conn_info->stats_sem));
+                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[max_chan].ACK_speed > 0) {
                     Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
                     Cs = 100*shm_conn_info->stats[info.process_num].ACK_speed/shm_conn_info->stats[max_chan].ACK_speed;
-                    sem_post(&(shm_conn_info->stats_sem));
                 }
+                sem_post(&(shm_conn_info->stats_sem));
+                
                 add_json(js_buf, &js_cur, "Ch", "%d", Ch);
                 add_json(js_buf, &js_cur, "Cs", "%d", Cs);
                 
@@ -3094,6 +3097,39 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
+            }
+            
+            int Ch = 0;
+            int Cs = 0;
+            
+            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[max_chan].ACK_speed > 0) {
+                    sem_wait(&(shm_conn_info->stats_sem));
+
+                    int min_Ch = 1000000;
+                    int min_Ch_chan = 1000000;
+                    int min_Cs = 1000000;
+                    int min_Cs_chan = 1000000;
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if ((chan_mask & (1 << i))
+                            && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                            Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                            Cs = shm_conn_info->stats[i].ACK_speed/(shm_conn_info->stats[max_chan].ACK_speed/100);
+                            if(Ch < min_Ch) {
+                                min_Ch = Ch;
+                                min_Ch_chan = i;
+                            }
+                            if(Cs < min_Cs) {
+                                min_Cs = Cs;
+                                min_Cs_chan = i;
+                            }
+                        }
+                    }
+                    if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
+                        vtun_syslog(LOG_INFO, "Changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
+                        shm_conn_info->max_chan = min_Ch_chan;
+                    }
+
+                    sem_post(&(shm_conn_info->stats_sem));
             }
             if (info.just_started_recv == 1) {
                 uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
