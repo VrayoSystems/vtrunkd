@@ -488,7 +488,7 @@ int tunnel(struct vtun_host *host, int srv)
                              
                     
                     if(fd[0] < 0) { // still...
-                         vtun_syslog(LOG_ERR,"Can't allocate tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
+                         vtun_syslog(LOG_ERR,"CRITICAL ERROR Can't allocate tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
                          return 0;     
                     } else {
                          // now we are forked, and have everything set up (?)
@@ -499,11 +499,11 @@ int tunnel(struct vtun_host *host, int srv)
                     if(srv) {
                          vtun_syslog(LOG_INFO,"vtrunkd SERVER: setting up fresh connection");
                          if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
-                              vtun_syslog(LOG_ERR,"shmget 5");
+                              vtun_syslog(LOG_ERR,"CRITICAL ERROR shmget 5");
                               return -1;
                          }
                          if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) -1) {
-                              vtun_syslog(LOG_ERR,"shmat 5");
+                              vtun_syslog(LOG_ERR,"CRITICAL ERROR shmat 5");
                               return -1;
                          }
                          // now scan for free names
@@ -522,11 +522,11 @@ int tunnel(struct vtun_host *host, int srv)
                          vtun_syslog(LOG_INFO,"vtrunkd CLIENT: setting up fresh connection");
 
                          if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info), 0666)) < 0) {
-                              vtun_syslog(LOG_ERR,"shmget 6");
+                              vtun_syslog(LOG_ERR,"CRITICAL ERROR shmget 6");
                               return -1;
                          }
                          if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) -1) {
-                              vtun_syslog(LOG_ERR,"shmat 6");
+                              vtun_syslog(LOG_ERR,"CRITICAL ERROR shmat 6");
                               return -1;
                          }
 
@@ -538,7 +538,7 @@ int tunnel(struct vtun_host *host, int srv)
                               vtun_syslog(LOG_INFO,"copied tun name to shm_conn_info: %s", shm_conn_info[0].devname);
                               connid = 0;
                          } else {
-                              vtun_syslog(LOG_ERR,"Can't allocate tun device %s. %s(%d) - did not find freeslot at running buddy shm", dev, strerror(errno), errno);
+                              vtun_syslog(LOG_ERR,"CRITICAL ERROR Can't allocate tun device %s. %s(%d) - did not find freeslot at running buddy shm", dev, strerror(errno), errno);
                               return -1;
                          }
                     }
