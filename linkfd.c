@@ -2850,6 +2850,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "max_sqspd", "%d", info.max_sqspd);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
                 add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
+                add_json(js_buf, &js_cur, "dropping", "%d", shm_conn_info->dropping);
+                add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
