@@ -115,7 +115,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
-#define RSR_TOP 580000
+#define RSR_TOP 280000
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
@@ -441,6 +441,19 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
     //vtun_syslog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
     *buf_len = blen;
     return idx;
+}
+
+/* check if we are allowed to drop packet again  */
+int check_drop_period_unsync() {
+    struct timeval tv_tm, tv_rtt;
+    timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
+    ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
+    if(timercmp(&tv_tm, &tv_rtt, >=)) {
+        vtun_syslog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
+        return 1;
+    }
+    // else
+    return 0;
 }
 
 /* Check if the packet sent right now will be delivered in time */
@@ -2418,6 +2431,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             sem_post(&(shm_conn_info->AG_flags_sem));
 
             sem_wait(&(shm_conn_info->stats_sem));
+
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
                     if( !( (shm_conn_info->stats[i].sqe_mean < 10000) && (shm_conn_info->stats[i].max_send_q > 10000) )) {
@@ -2497,6 +2511,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
+        if(info.dropping) {
+            info.dropping = 0;
+            shm_conn_info->drop_time = info.current_time;
+            shm_conn_info->dropping = 1;
+        }
+
+
         channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0));
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
             set_max_chan(chan_mask);
@@ -2646,7 +2667,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
         }
         
-        sem_post(&(shm_conn_info->stats_sem));
         
         // now calculate AGAG
         uint32_t dirty_seq = 0;
@@ -2691,7 +2711,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
                 if (send_q_eff > info.rsr) {
-                    drop_packet_flag = 1;
+                    if(check_drop_period_unsync()) { // Remember to have large txqueue!
+                        drop_packet_flag = 1;
+                    } else {
+                        hold_mode = 1;
+                    }
                     //vtun_syslog(LOG_INFO, "AG_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d (  %d)", send_q_eff, info.rsr, send_q_limit_cubic_apply,info.send_q_limit_cubic );
                 } else {
                     drop_packet_flag = 0;
@@ -2710,7 +2734,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if(info.head_channel) {
                 if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
                     //vtun_syslog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                    drop_packet_flag = 1;
+                    if(check_drop_period_unsync()) { // Remember to have large txqueue!
+                        drop_packet_flag = 1;
+                    } else {
+                        hold_mode = 1;
+                    }
                 } else {
                     //vtun_syslog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
@@ -2726,6 +2754,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
             }
         }
+        sem_post(&(shm_conn_info->stats_sem));
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         #ifdef NOCONTROL
         hold_mode = 0;
@@ -2804,18 +2833,14 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
                 }
                 sem_wait(&(shm_conn_info->stats_sem));
-                if(info.dropping) {
-                    info.dropping = 0;
-                    shm_conn_info->drop_time = info.current_time;
-                    shm_conn_info->dropping = 1;
+                                
+                timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
+                if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {4, 0}), >=)) {
+                    shm_conn_info->dropping = 0;
                 } else {
-                    timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
-                    if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {4, 0}), >=)) {
-                        shm_conn_info->dropping = 0;
-                    } else {
-                        shm_conn_info->dropping = 1;
-                    }
+                    shm_conn_info->dropping = 1;
                 }
+                
 
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
@@ -4491,7 +4516,8 @@ if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
-                len = 0; // shittyhold
+                    len = 0; // shittyhold - should never kick in again!
+                    vtun_syslog(LOG_INFO, "shit! hold!");
                 } else {
                 len = select_devread_send(buf, out2);
                 }
@@ -4512,7 +4538,8 @@ if(drop_packet_flag) {
         vtun_syslog(LOG_INFO, "debug: AG_MODE");
 #endif
             if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
-            len = 0; // shittyhold
+                    len = 0; // shittyhold // never
+                    vtun_syslog(LOG_INFO, "shit! hold!");
             } else {
             len = select_devread_send(buf, out2);
             }
