@@ -3019,12 +3019,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 tmp32_n = htonl(info.channel[i].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
-#ifdef DEBUGG
+                        if(debug_trace) {
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-#endif
+                        }
                 // send FCI-LLRS
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
@@ -3078,12 +3078,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     tmp32_n = htonl(info.channel[i].packet_download); // down speed per current chan (ACS?)
                     memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
 
-    #ifdef DEBUGG
+                        if(debug_trace) {
                     vtun_syslog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                             i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
-                            (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
-    #endif
+                            (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tv_tmp.tv_sec * 1000000 + tv_tmp.tv_usec));
+                        }
                     // send FCI
                     // TODO: select here ???
                     int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
@@ -3106,6 +3106,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             sem_post(&(shm_conn_info->write_buf_sem));
             if ((last_written_seq_tmp > (last_last_written_seq[i] + LWS_NOTIFY_MAX_SUB_SEQ))) {
                 // TODO: DUP code!
+                
+                if(debug_trace) {
+                    vtun_syslog(LOG_ERR, "Sending LWS...");
+                }
                 sem_wait(&(shm_conn_info->write_buf_sem));
                 *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
                 last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
@@ -3295,6 +3299,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     sem_post(&(shm_conn_info->write_buf_sem));
                     if (((info.current_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
                         // TODO: DUP code!
+                        if(debug_trace) {
+                            vtun_syslog(LOG_ERR, "Sending LWS...");
+                        }
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
                         last_last_written_seq[i] = shm_conn_info->write_buf[i].last_written_seq;
@@ -3731,6 +3738,9 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
 #endif
+                            if(debug_trace) {
+                                vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
+                            }
                             // TODO: no sync here!!?!?!
                             if( ntohl(*((uint32_t *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((uint32_t *)buf));
                             continue;
@@ -3770,11 +3780,11 @@ if(drop_packet_flag) {
                                     break;
                                 }
                             }
-#ifdef DEBUGG
-                            if (recv_lag) {
+
+                            if (debug_trace) {
                                 vtun_syslog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
                             }
-#endif
+
 							time_lag_local.time_lag = shm_conn_info->stats[info.process_num].time_lag;
 							time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
 							sem_post(&(shm_conn_info->stats_sem));
@@ -3810,11 +3820,9 @@ if(drop_packet_flag) {
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 
-#ifdef DEBUGG
-                            if(drop_packet_flag) {
+                            if(debug_trace) {
                                 vtun_syslog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             }
-#endif
                             //vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
@@ -3969,9 +3977,9 @@ if(drop_packet_flag) {
                     if( fl==VTUN_ECHO_REQ ) {
                         /* Send ECHO reply */
                         last_net_read = info.current_time.tv_sec;
-#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "sending PONG...");
-#endif
+                        if(debug_trace) {
+                            vtun_syslog(LOG_INFO, "sending PONG...");
+                        }
                         int len_ret;
                         if (chan_num == 0) {
                             len_ret = proto_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
@@ -3990,9 +3998,9 @@ if(drop_packet_flag) {
                     }
                     if( fl==VTUN_ECHO_REP ) {
                         /* Just ignore ECHO reply */
-#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "... was echo reply");
-#endif
+                        if(debug_trace) {
+                            vtun_syslog(LOG_INFO, "... was echo reply");
+                        }
                         
                         if(chan_num == 0) ping_rcvd = 1;
                         last_net_read = info.current_time.tv_sec;
@@ -4311,9 +4319,9 @@ if(drop_packet_flag) {
                     sem_post(write_buf_sem);
                     if(cond_flag) {
                         sem_wait(write_buf_sem);
-#ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
-#endif
+                        if(debug_trace) {
+                            vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
+                        }
                         *((uint32_t *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
                         shm_conn_info->write_buf[chan_num_virt].last_lws_notified = info.current_time.tv_sec;
@@ -4627,18 +4635,21 @@ if(drop_packet_flag) {
 				gettimeofday(&info.current_time, NULL);
 
 				last_ping = info.current_time.tv_sec;
-#ifdef DEBUGG
-				vtun_syslog(LOG_INFO, "PING2");
-#endif
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
             for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
                 ping_req_tv[i] = info.current_time;
                 int len_ret;
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                    if(debug_trace) {
+                        vtun_syslog(LOG_INFO, "PING2 chan_num %d", i);
+                    }
                 } else {
                     // send ping request - 2
                     len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                    if(debug_trace) {
+                        vtun_syslog(LOG_INFO, "PING2 chan_num %d", i);
+                    }
                 }
                 if (len_ret < 0) {
 						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
