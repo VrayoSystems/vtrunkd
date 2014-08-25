@@ -105,7 +105,8 @@ struct my_ip {
 #define CH_THRESH 30
 #define CS_THRESH 60
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
-#define SENQ_Q_LIMIT_THRESHOLD 13000
+#define SENQ_Q_LIMIT_THRESHOLD 13000 // the value with which that AG starts
+#define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -2359,8 +2360,12 @@ int lfd_linker(void)
     struct timeval drop_time = info.current_time;
 struct timeval cpulag;
     gettimeofday(&cpulag, NULL);
-int super = 0;
-uint32_t my_max_send_q_prev=0;    
+    int super = 0;
+    uint32_t my_max_send_q_prev=0;
+    int buf_len_sent[MAX_TCP_PHYSICAL_CHANNELS];
+    for(i=0; i<MAX_TCP_PHYSICAL_CHANNELS;i++) {
+        buf_len_sent[i]=0;
+    }
 /**
  *
  *
@@ -2378,7 +2383,7 @@ uint32_t my_max_send_q_prev=0;
         errno = 0;
         super++;
         
-        if(send_q_eff_mean > 10000) { // TODO: threshold depends on phys RTT and speed; investigate that!
+        if(send_q_eff_mean > SEND_Q_EFF_WORK) { // TODO: threshold depends on phys RTT and speed; investigate that!
             exact_rtt = info.rtt2; 
         } else {
             exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
@@ -2993,7 +2998,14 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
         }
 
-        int timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
+        int timer_result=0;
+        if(shm_conn_info->dropping) {
+            timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
+        } else {
+            // idle timer?
+            timersub(&info.current_time, &(recv_n_loss_send_timer->start_time), &(recv_n_loss_send_timer->tmp));
+            timer_result = timercmp(&(recv_n_loss_send_timer->tmp), &((struct timeval) {60, 0}), >=); // send each 60 seconds?
+        }
         for (i = 1; i < info.channel_amount; i++) {
             uint32_t tmp32_n;
             uint16_t tmp16_n;
@@ -3237,46 +3249,50 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 //todo send time_lag for all process(PHYSICAL CHANNELS)
                 uint32_t time_lag_remote;
                 uint16_t pid_remote;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    sem_wait(&(shm_conn_info->stats_sem));
-                    /* If pid is null --> link didn't up --> continue*/
-                    if (shm_conn_info->stats[i].pid == 0) {
+                if(send_q_eff_mean > 1000) { // TODO: invent a more neat way to start sending buf_len (>0? changed?)
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if(buf_len_sent == my_miss_packets_max) continue;
+                        buf_len_sent[i] = my_miss_packets_max;
+                        sem_wait(&(shm_conn_info->stats_sem));
+                        /* If pid is null --> link didn't up --> continue*/
+                        if (shm_conn_info->stats[i].pid == 0) {
+                            sem_post(&(shm_conn_info->stats_sem));
+                            continue;
+                        }
+                        if (debug_trace) {
+                            vtun_syslog(LOG_INFO, "Sending time lag (now buf_len) for %i buf_len %i.", i, my_miss_packets_max);
+                        }
+                        time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
+                        /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
+                        time_lag_remote &= 0xFFFFF; // shrink to 20bit
+                        time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
+                        pid_remote = shm_conn_info->stats[i].pid_remote;
+                        uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
+                        tmp_host &= 0xFFFF;
+    //vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                         sem_post(&(shm_conn_info->stats_sem));
-                        continue;
+                        sem_wait(write_buf_sem);
+                        tmp_host |= shm_conn_info->tflush_counter << 16;
+                        shm_conn_info->tflush_counter = 0;
+                        sem_post(write_buf_sem);
+    //                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
+                        uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
+                        memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
+                        uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
+                        memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t));
+                        uint16_t pid_remote_h = htons(pid_remote);
+                        memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
+                        uint32_t miss_packet_counter_h = htonl(tmp_host);
+                        memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h, sizeof(uint32_t));
+                        int len_ret = proto_write(info.channel[0].descriptor, buf,
+                                ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                        if (len_ret < 0) {
+                            vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
+                            linker_term = TERM_NONFATAL; //?????
+                        }
+                        shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                        info.channel[0].up_len += len_ret;
                     }
-#ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "DEBUGG Sending time lag for %i buf_len %i.", i, my_miss_packets_max);
-#endif
-                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
-                    /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
-                    time_lag_remote &= 0xFFFFF; // shrink to 20bit
-                    time_lag_remote = shm_conn_info->stats[i].time_lag_remote | (my_miss_packets_max << 20);
-                    pid_remote = shm_conn_info->stats[i].pid_remote;
-                    uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
-                    tmp_host &= 0xFFFF;
-//vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
-                    sem_post(&(shm_conn_info->stats_sem));
-                    sem_wait(write_buf_sem);
-                    tmp_host |= shm_conn_info->tflush_counter << 16;
-                    shm_conn_info->tflush_counter = 0;
-                    sem_post(write_buf_sem);
-//                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
-                    uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
-                    memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
-                    uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
-                    memcpy(buf + sizeof(uint32_t), &FRAME_TIME_LAG_h, sizeof(uint16_t));
-                    uint16_t pid_remote_h = htons(pid_remote);
-                    memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t), &pid_remote_h, sizeof(uint16_t));
-                    uint32_t miss_packet_counter_h = htonl(tmp_host);
-                    memcpy(buf + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t), &miss_packet_counter_h, sizeof(uint32_t));
-                    int len_ret = proto_write(info.channel[0].descriptor, buf,
-                            ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
-                    if (len_ret < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
-                        linker_term = TERM_NONFATAL; //?????
-                    }
-                    shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                    info.channel[0].up_len += len_ret;
                 }
                 my_miss_packets_max = 0;
                 if (delay_cnt == 0)
