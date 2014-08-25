@@ -48,6 +48,7 @@
 /* Global options for the server and client */
 struct vtun_opts vtun;
 struct vtun_host default_host;
+int debug_trace = 0;
 
 void write_pid(void);
 void reread_config(int sig);
@@ -125,7 +126,7 @@ int main(int argc, char *argv[], char *env[])
      /* Start logging to syslog and stderr */
      openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
-    while ((opt = getopt(argc, argv, "S:R:misf:P:L:t:M:npvh?")) != EOF) {
+    while ((opt = getopt(argc, argv, "S:R:mDisf:P:L:t:M:npvh?")) != EOF) {
 	switch(opt){
 	    case 'S':
 	        vtun.shm_key = atoi(optarg);
@@ -145,6 +146,10 @@ int main(int argc, char *argv[], char *env[])
 		    exit(-1);
 	        }
 		break;
+        case 'D':
+        // enable debug
+        debug_trace = 1;
+        break;
 	    case 'i':
 		vtun.svr_type = VTUN_INETD;
 	    case 's':
@@ -307,12 +312,12 @@ void usage(void)
      printf("vtrunkd ver %s %s\n", VTUN_VER, BUILD_DATE);
      printf("Usage: \n");
      printf("  Server:\n");
-     printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address]\n");
+     printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
      printf("  Client:\n");
      /* I don't think these work. I'm disabling the suggestion - bish 20050601*/
      /* these actually do work. At least given in config file -- grandrew 20110507*/
      printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
-	    "[-p] [-m] [-t timeout] <host profile> <server address>\n");
+	    "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)]\n");
 }
 
 void version() {

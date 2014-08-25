@@ -686,6 +686,7 @@ struct vtun_opts {
 #endif
 
 extern struct vtun_opts vtun;
+extern int debug_trace;
 
 void server(int sock);
 void client(struct vtun_host *host);

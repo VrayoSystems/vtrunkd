@@ -983,6 +983,9 @@ int retransmit_send(char *out2, int n_to_send) {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
 #endif
+        if(debug_trace) {
+            vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
+        }
 
         statb.bytes_sent_rx += len;        
         
@@ -1256,6 +1259,9 @@ if(drop_packet_flag) {
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
     vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, len);
 #endif
+    if(debug_trace) {
+        vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
+    }
 
     // now add correct mini_sum and local_seq_num
     //if(!new_packet) {
@@ -1422,6 +1428,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
 #endif
+    if(debug_trace) {
+        vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
+    }
     // place into correct position first..
     int i = shm_conn_info->write_buf[conn_num].frames.rel_head, n;
     int newf;
@@ -3542,6 +3551,9 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
 #endif
+                if(debug_trace) {
+                    vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+                }
                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_data_len_amt += len;
                 if( fl ) {
                     if( fl==VTUN_BAD_FRAME ) {
@@ -4207,6 +4219,9 @@ if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
 }
 #endif
+                    if(debug_trace) {
+                        vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
+                    }
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
