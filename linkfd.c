@@ -1301,19 +1301,21 @@ if(drop_packet_flag) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
-    if (info.eff_len.warming_up < EFF_LEN_BUFF) {
-        info.eff_len.warming_up++;
+    sem_wait(&shm_conn_info->common_sem);
+    if (shm_conn_info->eff_len.warming_up < EFF_LEN_BUFF) {
+        shm_conn_info->eff_len.warming_up++;
     }
-    info.eff_len.len_num[info.eff_len.counter] = len_ret;
-    if (info.eff_len.counter++ >= EFF_LEN_BUFF) {
-        info.eff_len.counter = 0;
+    shm_conn_info->eff_len.len_num[shm_conn_info->eff_len.counter] = len_ret;
+    if (shm_conn_info->eff_len.counter++ >= EFF_LEN_BUFF) {
+        shm_conn_info->eff_len.counter = 0;
     }
-    for (int i = 0; i < info.eff_len.warming_up; i++) {
-        info.eff_len.sum += info.eff_len.len_num[i];
+    for (int i = 0; i < shm_conn_info->eff_len.warming_up; i++) {
+        shm_conn_info->eff_len.sum += shm_conn_info->eff_len.len_num[i];
     }
-    info.eff_len.sum /= info.eff_len.warming_up;
-    if (info.eff_len.sum <= 0)
-        info.eff_len.sum = 1;
+    shm_conn_info->eff_len.sum /= shm_conn_info->eff_len.warming_up;
+    if (shm_conn_info->eff_len.sum <= 0)
+        shm_conn_info->eff_len.sum = 1;
+    sem_post(&shm_conn_info->common_sem);
     gettimeofday(&send2, NULL );
 
     info.channel[chan_num].local_seq_num++;
@@ -1704,10 +1706,10 @@ int ag_switcher() {
     timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
     //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
     //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-    bytes_pass = time_sub_tmp.tv_sec * info.eff_len.sum * info.channel[my_max_send_q_chan_num].packet_recv_upload
+    bytes_pass = time_sub_tmp.tv_sec * info.eff_len * info.channel[my_max_send_q_chan_num].packet_recv_upload
             + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
 
-    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass;
+    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass;
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
             info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
@@ -2416,13 +2418,15 @@ struct timeval cpulag;
                 + (((int64_t)t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
-        
+        sem_wait(&shm_conn_info->common_sem);
+        info.eff_len = shm_conn_info->eff_len.sum;
+        sem_post(&shm_conn_info->common_sem);
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
-            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum) > bytes_pass ?
-                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len.sum - bytes_pass : 0;
+            (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len) > bytes_pass ?
+                    my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass : 0;
 #ifdef DEBUGG
 if(drop_packet_flag) {
-vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len.sum, bytes_pass);
+vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
 } 
 #endif
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
@@ -2850,7 +2854,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
                 for(int i=0; i<info.channel_amount; i++) {
-                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len.sum;
+                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len;
                     info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
                     if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
                 }
@@ -2895,7 +2899,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
                 add_json(js_buf, &js_cur, "skip", "%d", skip);
-                add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len.sum);
+                add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
                 add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
                 skip=0;
                 add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
@@ -4766,6 +4770,7 @@ ___________       __                    _____
  */
 int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_channel_num)
 {
+    shm_conn_info = ci;
     memset(last_sent_packet_num, 0, sizeof(struct last_sent_packet) * MAX_TCP_LOGICAL_CHANNELS);
     memset(&info, 0, sizeof(struct phisical_status));
     rxmt_mode_request = 0; // flag
@@ -4806,8 +4811,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     chan_info = NULL;
     info.max_send_q_max = 0;
     info.max_send_q_min = 120000;
-    info.eff_len.sum = 1000;
-
+    sem_wait(&shm_conn_info->common_sem);
+    if (shm_conn_info->eff_len.sum == 0) {
+        shm_conn_info->eff_len.sum = 1000;
+    }
+    sem_post(&shm_conn_info->common_sem);
     info.check_shm = 1;
     struct sigaction sa, sa_oldterm, sa_oldint, sa_oldhup, sa_oldusr1;
     int old_prio;
@@ -4815,7 +4823,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
 
     lfd_host = host;
     info.srv = ss;
-    shm_conn_info = ci;
     info.pid = getpid();
     info.process_num = physical_channel_num;
     info.mode = R_MODE;
