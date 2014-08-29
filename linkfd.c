@@ -1309,7 +1309,8 @@ if(drop_packet_flag) {
     if (shm_conn_info->eff_len.counter++ >= EFF_LEN_BUFF) {
         shm_conn_info->eff_len.counter = 0;
     }
-    for (int i = 0; i < shm_conn_info->eff_len.warming_up; i++) {
+    shm_conn_info->eff_len.sum = shm_conn_info->eff_len.len_num[0];
+    for (int i = 1; i < shm_conn_info->eff_len.warming_up; i++) {
         shm_conn_info->eff_len.sum += shm_conn_info->eff_len.len_num[i];
     }
     shm_conn_info->eff_len.sum /= shm_conn_info->eff_len.warming_up;
