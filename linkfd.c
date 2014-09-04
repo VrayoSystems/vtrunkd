@@ -258,6 +258,16 @@ uint32_t tv2ms(struct timeval *a) {
     return ((a->tv_sec * 1000) + (a->tv_usec / 1000));
 }
 
+int percent_delta_compare(int A, int B, int percent) {
+    int delta = A>B?A-B:B-A;
+    if(delta > 10000000) return 0;
+    int dp = delta * 100 / (A/2 + B/2);
+    if(dp <= percent) {
+        return 1;
+    }
+    return 0;
+}
+
 int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
     int len = 0;
     *size = 0;
@@ -3168,41 +3178,79 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
+            sem_wait(&(shm_conn_info->stats_sem));
+            timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
+            sem_post(&(shm_conn_info->stats_sem));
+            int max_chan_CS = -1;
+            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {5, 0}), >=)) {
+                int Ch = 0;
+                int Cs = 0;
+                
+                sem_wait(&(shm_conn_info->stats_sem));
+                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
 
-            
-            int Ch = 0;
-            int Cs = 0;
-            
-            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
-                    sem_wait(&(shm_conn_info->stats_sem));
-
-                    max_chan = shm_conn_info->max_chan;
-                    int min_Ch = 1000000;
-                    int min_Ch_chan = 1000000;
-                    int min_Cs = 1000000;
-                    int min_Cs_chan = 1000000;
-                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                        if ((chan_mask & (1 << i))
-                            && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                            if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
-                            Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                            Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
-                            if(Ch < min_Ch) {
-                                min_Ch = Ch;
-                                min_Ch_chan = i;
+                        max_chan = shm_conn_info->max_chan;
+                        int min_Ch = 1000000;
+                        int min_Ch_chan = 1000000;
+                        int min_Cs = 1000000;
+                        int min_Cs_chan = 1000000;
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ((chan_mask & (1 << i))
+                                && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
+                                Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                                Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
+                                if(Ch < min_Ch) {
+                                    min_Ch = Ch;
+                                    min_Ch_chan = i;
+                                }
+                                if(Cs < min_Cs) {
+                                    min_Cs = Cs;
+                                    min_Cs_chan = i;
+                                }
                             }
-                            if(Cs < min_Cs) {
-                                min_Cs = Cs;
-                                min_Cs_chan = i;
+                        }
+                        if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
+                            vtun_syslog(LOG_INFO, "CS/CH: Need changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
+                            //shm_conn_info->max_chan = min_Ch_chan;
+                            max_chan_CS = min_Ch_chan; // is result here!
+                        }
+
+                }
+                int moremax = 0;
+                int max_chan_HA = -1;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                        if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
+                            // TODO: need smoothed percent compare! with selections auto-mgmt!
+                            if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
+                                    && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                max_chan_HA = i;
+                                moremax++;
+                                vtun_syslog(LOG_INFO, "Si/Sh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
                             }
                         }
                     }
-                    if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
-                        vtun_syslog(LOG_INFO, "Changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
-                        shm_conn_info->max_chan = min_Ch_chan;
-                    }
+                }
+                if(moremax > 1) {
+                    vtun_syslog(LOG_INFO, "WARNING More than one channel are better than current HEAD: %d", moremax);
+                }
 
-                    sem_post(&(shm_conn_info->stats_sem));
+                if(max_chan_HA != -1 && max_chan_CS == -1) {
+                    shm_conn_info->max_chan = max_chan_HA;
+                    shm_conn_info->last_switch_time = info.current_time;
+                } else if (max_chan_HA == -1 && max_chan_CS != -1) {
+                    shm_conn_info->max_chan = max_chan_CS;
+                    shm_conn_info->last_switch_time = info.current_time;
+                } else {
+                    if(max_chan_HA != max_chan_CS) {
+                        vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
+                    }
+                    shm_conn_info->max_chan = max_chan_HA;
+                    shm_conn_info->last_switch_time = info.current_time;
+                }
+
+                sem_post(&(shm_conn_info->stats_sem));
             }
             if (info.just_started_recv == 1) {
                 uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
