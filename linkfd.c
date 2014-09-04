@@ -116,7 +116,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
-#define RSR_TOP 280000
+#define RSR_TOP 2990000 // now infinity...
 #define DROPPING_LOSSING_DETECT_SECONDS 4 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
@@ -2562,7 +2562,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // RSR section here
 //      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
-            info.rsr = RSR_TOP;
+            //info.rsr = RSR_TOP;
+            info.rsr = info.send_q_limit_cubic;
         } else {
             if (shm_conn_info->stats[max_chan].ACK_speed < 1000) {
                 shm_conn_info->stats[max_chan].ACK_speed = 1000;
@@ -2573,7 +2574,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
             
             
-            info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
+            //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
+            info.send_q_limit = (info.send_q_limit_cubic * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
                                          / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             
             
@@ -2622,10 +2624,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
         shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
         
-        int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
-        if (send_q_limit_cubic_apply > RSR_TOP) {
-            send_q_limit_cubic_apply = RSR_TOP;
-        }
+        //int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
+        int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
+        //if (send_q_limit_cubic_apply > RSR_TOP) {
+        //    send_q_limit_cubic_apply = RSR_TOP;
+        //}
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
