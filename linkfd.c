@@ -2437,7 +2437,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 } 
 #endif
         send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
-        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000)) {
+        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
             // now check all other chans
             // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
             // shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
