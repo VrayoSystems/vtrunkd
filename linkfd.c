@@ -117,6 +117,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 280000
+#define DROPPING_LOSSING_DETECT_SECONDS 4 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 100000 // was 50000
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
@@ -2642,7 +2643,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                            || (send_q_limit_cubic_apply < info.rsr) 
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
-                           || ( !shm_conn_info->dropping )
+                           || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         //ag_flag_local = R_MODE;
@@ -2826,7 +2827,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 //            info.mode = ag_switcher();
             get_info_time_last.tv_sec = info.current_time.tv_sec;
             get_info_time_last.tv_usec = info.current_time.tv_usec;
-#if !defined(DEBUGG) && defined(JSON)
             // JSON LOGS HERE
             timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
@@ -2840,12 +2840,20 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 sem_wait(&(shm_conn_info->stats_sem));
                                 
                 timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
-                if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {4, 0}), >=)) {
+                if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
                     shm_conn_info->dropping = 0;
                 } else {
                     shm_conn_info->dropping = 1;
                 }
                 
+                if(info.head_channel) {
+                    timersub(&(info.current_time), &loss_time, &tv_tmp_tmp_tmp);
+                    if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
+                        shm_conn_info->head_lossing = 0;
+                    } else {
+                        shm_conn_info->head_lossing = 1;
+                    }
+                }
 
                 // calc ACS2 and DDS detect
                 int max_ACS2=0;
@@ -2864,6 +2872,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
                 sem_post(&(shm_conn_info->AG_flags_sem));
                 
+#if !defined(DEBUGG) && defined(JSON)
                 start_json(js_buf, &js_cur);
                 add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
                 add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
@@ -2951,6 +2960,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "Cs", "%d", Cs);
                 
                 print_json(js_buf, &js_cur);
+#endif
 
                 #ifdef SEND_Q_LOG
                 // now array
@@ -2963,7 +2973,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 info.max_send_q_max = 0;
                 info.max_send_q_min = 120000;
             }
-#endif
         }
         if (info.check_shm) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -3156,6 +3165,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
+
             
             int Ch = 0;
             int Cs = 0;
