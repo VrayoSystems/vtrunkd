@@ -3290,12 +3290,19 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 } else if (max_chan_H == -1 && max_chan_CS != -1) {
                     shm_conn_info->max_chan = max_chan_CS;
                     shm_conn_info->last_switch_time = info.current_time;
-                } else {
+                } else if (max_chan_H != -1 && max_chan_CS != -1) {
                     if(max_chan_H != max_chan_CS) {
                         vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
                     }
                     shm_conn_info->max_chan = max_chan_H;
                     shm_conn_info->last_switch_time = info.current_time;
+                } else { // means max_chan = -1; find first alive chan
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                            shm_conn_info->max_chan = i;
+                            break;
+                        }
+                    }
                 }
 
                 sem_post(&(shm_conn_info->stats_sem));
@@ -3457,7 +3464,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             sem_post(&(shm_conn_info->AG_flags_sem));
             
             
-            for (int i = 0; i < 32; i++) {
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) { 
                 if (chan_mask & (1 << i)) {
                     alive_physical_channels++;
                 }
