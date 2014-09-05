@@ -3222,7 +3222,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
                 // This is AG_MODE algorithm
                 int moremax = 0;
-                int max_chan_HA = -1;
+                int max_chan_H = -1;
 
                 if(ag_flag_local == AG_MODE) {
                         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -3231,33 +3231,50 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                                     // TODO: need smoothed percent compare! with selections auto-mgmt!
                                     if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
                                             && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
-                                        max_chan_HA = i;
+                                        max_chan_H = i;
                                         moremax++;
-                                        vtun_syslog(LOG_INFO, "Si/Sh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                        vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
                                     }
                                 }
                             }
                         }
                 } 
+
+                // This is R_MODE algorithm
                 if(ag_flag_local == R_MODE) {
-                    // TODO HERE
+                    // check ACS and switch
+                    int max_ACS = 0;
+                    int max_ACS_chan = -1;
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                            if(shm_conn_info->stats[i].ACK_speed > max_ACS) { // 10% corridor to consider speeds the same
+                                max_ACS = shm_conn_info->stats[i].ACK_speed;
+                                max_ACS_chan = i;
+                            }
+                        }
+                    }
+                    if(max_ACS_chan == info.process_num) {
+                        // WE are R_MODE AND we are DE BEST!
+                        vtun_syslog(LOG_INFO, "ACS[i]: Need changing HEAD to %d (myself) with ACS %d", max_ACS_chan, shm_conn_info->stats[max_ACS_chan].ACK_speed);
+                        max_chan_H = max_ACS_chan;
+                    }
                 }
                 // any other _MODE ? :-)
                 if(moremax > 1) {
                     vtun_syslog(LOG_INFO, "WARNING More than one channel are better than current HEAD: %d", moremax);
                 }
 
-                if(max_chan_HA != -1 && max_chan_CS == -1) {
-                    shm_conn_info->max_chan = max_chan_HA;
+                if(max_chan_H != -1 && max_chan_CS == -1) {
+                    shm_conn_info->max_chan = max_chan_H;
                     shm_conn_info->last_switch_time = info.current_time;
-                } else if (max_chan_HA == -1 && max_chan_CS != -1) {
+                } else if (max_chan_H == -1 && max_chan_CS != -1) {
                     shm_conn_info->max_chan = max_chan_CS;
                     shm_conn_info->last_switch_time = info.current_time;
                 } else {
-                    if(max_chan_HA != max_chan_CS) {
+                    if(max_chan_H != max_chan_CS) {
                         vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
                     }
-                    shm_conn_info->max_chan = max_chan_HA;
+                    shm_conn_info->max_chan = max_chan_H;
                     shm_conn_info->last_switch_time = info.current_time;
                 }
 
