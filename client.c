@@ -99,9 +99,11 @@ void client(struct vtun_host *host)
      int s, opt, reconnect, sss, len;
      int shm_new = 0;
      struct sockaddr_un remote;
-
+#ifdef CLIENTONLY
+     vtun_syslog(LOG_INFO,"vtrunkd client only ver %s %s started",VTUN_VER, BUILD_DATE);
+#else
      vtun_syslog(LOG_INFO,"vtrunkd client ver %s %s started",VTUN_VER, BUILD_DATE);
-
+#endif
      memset(&sa,0,sizeof(sa));     
      sa.sa_handler=SIG_IGN;
      sa.sa_flags = SA_NOCLDWAIT;

@@ -30,7 +30,7 @@ AC_ARG_ENABLE(mark,
 )
 
 dnl enable low memory opt
-AC_ARG_ENABLE(debugg,
+AC_ARG_ENABLE(lowmem,
    --enable-low-mem         Compile for low ram device,
    LOW_MEM=$enableval,
    LOW_MEM=no
@@ -49,6 +49,11 @@ AC_ARG_ENABLE(debugg,
    DEBUGG=no
 )
 
+AC_ARG_ENABLE(client-only,
+   --enable-client-only     	   Client only version,
+   CLIENTONLY=$enableval,
+   CLIENTONLY=no
+)
 
 AC_ARG_WITH(ssl-headers,
    --with-ssl-headers=DIR  Crypto Include files location,
@@ -137,7 +142,9 @@ if test "$O3" = "yes"; then
 	  CFLAGS="$CFLAGS -O3"
 fi
 
-
+if test "$CLIENTONLY" = "yes"; then
+	  CFLAGS="$CFLAGS -DCLIENTONLY=1"
+fi
 
 AC_MSG_RESULT()
 

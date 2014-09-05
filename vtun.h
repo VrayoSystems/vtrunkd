@@ -494,13 +494,7 @@ struct phisical_status {
     int dropping;
     struct timeval max_reorder_latency;
     struct timeval max_latency_drop;
-    struct {
-#define EFF_LEN_BUFF 15
-        int warming_up;
-        int counter;
-        int len_num[EFF_LEN_BUFF];
-        int sum;
-    } eff_len;
+    int eff_len;
 };
 
 struct conn_info {
@@ -551,6 +545,13 @@ struct conn_info {
     int dropping;
     int head_lossing;
     struct timeval drop_time;
+    struct {
+#define EFF_LEN_BUFF 15
+        int warming_up;
+        int counter;
+        int len_num[EFF_LEN_BUFF];
+        int sum;
+    } eff_len; /**< Session hash for remote machine sync by @see common_sem*/
 };
 
 struct resent_chk {
