@@ -2398,10 +2398,16 @@ struct timeval cpulag;
         super++;
         
         if(send_q_eff_mean > SEND_Q_EFF_WORK) { // TODO: threshold depends on phys RTT and speed; investigate that!
-            if(info.rtt2 == 0) vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
+            if(info.rtt2 == 0) {
+                vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
+                info.rtt2 = 1;
+            }
             exact_rtt = info.rtt2; 
         } else {
-            if(info.rtt == 0) vtun_syslog(LOG_ERR, "WARNING! info.rtt == 0!");
+            if(info.rtt == 0) {
+                vtun_syslog(LOG_ERR, "WARNING! info.rtt == 0!");
+                info.rtt = 1;
+            }
             exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
         }
 
