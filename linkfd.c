@@ -261,6 +261,9 @@ uint32_t tv2ms(struct timeval *a) {
 int percent_delta_compare(int A, int B, int percent) {
     int delta = A>B?A-B:B-A;
     if(delta > 10000000) return 0;
+    if(A < 2 && B < 2) {
+        return 1;
+    }
     int dp = delta * 100 / (A/2 + B/2);
     if(dp <= percent) {
         return 1;
