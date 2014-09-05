@@ -3187,6 +3187,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 int Cs = 0;
                 
                 sem_wait(&(shm_conn_info->stats_sem));
+
+                // This is ALL-mode algorithm
                 if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
 
                         max_chan = shm_conn_info->max_chan;
@@ -3217,21 +3219,30 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         }
 
                 }
+
+                // This is AG_MODE algorithm
                 int moremax = 0;
                 int max_chan_HA = -1;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                        if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
-                            // TODO: need smoothed percent compare! with selections auto-mgmt!
-                            if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
-                                    && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
-                                max_chan_HA = i;
-                                moremax++;
-                                vtun_syslog(LOG_INFO, "Si/Sh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+
+                if(ag_flag_local == AG_MODE) {
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
+                                    // TODO: need smoothed percent compare! with selections auto-mgmt!
+                                    if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
+                                            && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                        max_chan_HA = i;
+                                        moremax++;
+                                        vtun_syslog(LOG_INFO, "Si/Sh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                    }
+                                }
                             }
                         }
-                    }
+                } 
+                if(ag_flag_local == R_MODE) {
+                    // TODO HERE
                 }
+                // any other _MODE ? :-)
                 if(moremax > 1) {
                     vtun_syslog(LOG_INFO, "WARNING More than one channel are better than current HEAD: %d", moremax);
                 }
