@@ -2604,7 +2604,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-            info.send_q_limit = (info.send_q_limit_cubic * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
+            // TODO: WARNING: may overflow here -->
+            info.send_q_limit = (shm_conn_info->stats[max_chan].W_cubic * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
                                          / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             
             
