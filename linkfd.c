@@ -1167,7 +1167,10 @@ if(drop_packet_flag) {
             if(info.process_num == 0) other_chan=1;
             else other_chan = 0;
             info.dropping = 1;
-            //vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
+            if(debug_trace) {
+                vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
+                info.max_send_q=0;
+            }
             
             
             sem_wait(&(shm_conn_info->AG_flags_sem));
