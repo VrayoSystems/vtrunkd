@@ -3970,6 +3970,11 @@ if(drop_packet_flag) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
+                                if(info.head_channel) {
+                                    sem_wait(&(shm_conn_info->stats_sem));
+                                    shm_conn_info->head_lossing = 1;
+                                    sem_post(&(shm_conn_info->stats_sem));
+                                }
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
