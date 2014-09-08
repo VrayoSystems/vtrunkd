@@ -2757,6 +2757,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(ag_flag_local == AG_MODE) {
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
+                drop_packet_flag = 0;
                 if (send_q_eff > info.rsr) {
                     if(check_drop_period_unsync()) { // Remember to have large txqueue!
                         drop_packet_flag = 1;
@@ -2764,8 +2765,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         hold_mode = 1;
                     }
                     //vtun_syslog(LOG_INFO, "AG_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d (  %d)", send_q_eff, info.rsr, send_q_limit_cubic_apply,info.send_q_limit_cubic );
-                } else {
-                    drop_packet_flag = 0;
                 }
             } else {
                 drop_packet_flag = 0;
