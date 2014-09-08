@@ -259,7 +259,7 @@ uint32_t tv2ms(struct timeval *a) {
     return ((a->tv_sec * 1000) + (a->tv_usec / 1000));
 }
 
-int percent_delta_compare(int A, int B, int percent) {
+int percent_delta_equal(int A, int B, int percent) {
     int delta = A>B?A-B:B-A;
     if(delta > 10000000) return 0;
     if(A < 2 && B < 2) {
@@ -3274,10 +3274,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     if(ag_flag_local == AG_MODE) {
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                 if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                    if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
+                                    if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
                                         // TODO: need smoothed percent compare! with selections auto-mgmt!
                                         if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
-                                                && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                                && !percent_delta_equal(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
                                             max_chan_H = i;
                                             moremax++;
                                             vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
@@ -3995,10 +3995,49 @@ if(drop_packet_flag) {
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 if(info.head_channel) {
-                                    // first check if we are really head
-                                    // 
                                     sem_wait(&(shm_conn_info->stats_sem));
-                                    shm_conn_info->head_lossing = 1;
+                                    if(shm_conn_info->idle) {
+                                        // first check if we are really head
+                                        // find max ACS 
+                                        int ch_max_ACS = -1;
+                                        int ch_max_ACS_ch = -1;
+                                        int ch_max_ACS_W = -1;
+                                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) { // hope this works..
+                                                if(shm_conn_info->stats[i].ACK_speed > ch_max_ACS) {
+                                                    ch_max_ACS = shm_conn_info->stats[i].ACK_speed;
+                                                    ch_max_ACS_ch = i;
+                                                    ch_max_ACS_W = shm_conn_info->stats[i].W_cubic;
+                                                }
+                                            }
+                                        }
+                                        if(ch_max_ACS != -1) {
+                                            // check if we are the best from all other
+                                            if(!percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
+                                                    && (shm_conn_info->stats[info.process_num].ACK_speed < ch_max_ACS)) {
+                                                vtun_syslog(LOG_INFO, "Head changed to %d due to ACS>ACSh: %d > %d", ch_max_ACS_ch, ch_max_ACS, shm_conn_info->stats[info.process_num].ACK_speed);
+                                                shm_conn_info->max_chan = ch_max_ACS_ch; // we found chan with better ACS (10% corridor)
+                                            } else if ( percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
+                                                    && (ch_max_ACS_W > shm_conn_info->stats[info.process_num].W_cubic)) {
+                                                // check Wh/Wi here
+                                                // our process has smaller window with same speed; assume we're not the best now
+                                                vtun_syslog(LOG_INFO, "Head changed to %d due to W>Wh: %d > %d", ch_max_ACS_ch, ch_max_ACS_W, shm_conn_info->stats[info.process_num].W_cubic);
+                                                shm_conn_info->max_chan = ch_max_ACS_ch;
+                                            } else {
+                                                vtun_syslog(LOG_INFO, "Head (real) lossing after idle");
+                                                shm_conn_info->idle = 0;
+                                                shm_conn_info->head_lossing = 1;
+                                            }
+                                        } else {
+                                            // we are the ONLY channel, drop flags
+                                            vtun_syslog(LOG_INFO, "Head (only) lossing after idle");
+                                            shm_conn_info->idle = 0;
+                                            shm_conn_info->head_lossing = 1;
+                                        }
+                                    } else {
+                                       // vtun_syslog(LOG_INFO, "Head lossing");
+                                        shm_conn_info->head_lossing = 1;
+                                    }
                                     sem_post(&(shm_conn_info->stats_sem));
                                 }
                                 ms2tv(&loss_tv, info.rtt / 2);
