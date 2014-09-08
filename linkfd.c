@@ -465,7 +465,7 @@ int check_drop_period_unsync() {
     timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
     ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
     if(timercmp(&tv_tm, &tv_rtt, >=)) {
-        vtun_syslog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
+        //vtun_syslog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
         return 1;
     }
     // else
@@ -487,7 +487,7 @@ int check_delivery_time_unsynced() {
     struct timeval max_latency_drop = info.max_latency_drop;
     // check for dead channel
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD");
+        // vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
         return 0;
     }
     if( info.rsr < SENQ_Q_LIMIT_THRESHOLD) {
@@ -2418,7 +2418,8 @@ struct timeval cpulag;
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt == 0!");
                 info.rtt = 1;
             }
-            exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+            //exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+            exact_rtt = info.rtt; // rtt2 may exhibit wrong old value if no data is sent over net!
         }
 
         gettimeofday(&cpulag, NULL);
