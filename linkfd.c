@@ -104,6 +104,7 @@ struct my_ip {
 
 #define CH_THRESH 30
 #define CS_THRESH 60
+#define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD 13000 // the value with which that AG starts
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
@@ -3207,111 +3208,130 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
+            if( (send_q_eff_mean < SEND_Q_IDLE) && !(shm_conn_info->idle)) {
+                shm_conn_info->idle = 1;
+            }
             sem_post(&(shm_conn_info->stats_sem));
             int max_chan_CS = -1;
+            // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {5, 0}), >=)) {
                 int Ch = 0;
                 int Cs = 0;
                 
                 sem_wait(&(shm_conn_info->stats_sem));
-
-                // This is ALL-mode algorithm
-                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
-
-                        max_chan = shm_conn_info->max_chan;
-                        int min_Ch = 1000000;
-                        int min_Ch_chan = 1000000;
-                        int min_Cs = 1000000;
-                        int min_Cs_chan = 1000000;
-                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                            if ((chan_mask & (1 << i))
-                                && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
-                                Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                                Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
-                                if(Ch < min_Ch) {
-                                    min_Ch = Ch;
-                                    min_Ch_chan = i;
-                                }
-                                if(Cs < min_Cs) {
-                                    min_Cs = Cs;
-                                    min_Cs_chan = i;
-                                }
+                if(shm_conn_info->idle) {
+                    // use RTT-only choosing of head!
+                    int min_rtt = 99999;
+                    int min_rtt_chan = 0;
+                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                                min_rtt = shm_conn_info->stats[i].exact_rtt;
+                                min_rtt_chan = i;
                             }
                         }
-                        if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
-                            vtun_syslog(LOG_INFO, "CS/CH: Need changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
-                            //shm_conn_info->max_chan = min_Ch_chan;
-                            max_chan_CS = min_Ch_chan; // is result here!
-                        }
+                    }
+                    vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
+                    shm_conn_info->max_chan = min_rtt_chan;
+                } else {
+                    // this code works only if not idling!
+                    // This is ALL-mode algorithm
+                    if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
 
-                }
-
-                // This is AG_MODE algorithm
-                int moremax = 0;
-                int max_chan_H = -1;
-
-                if(ag_flag_local == AG_MODE) {
-                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
-                                    // TODO: need smoothed percent compare! with selections auto-mgmt!
-                                    if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
-                                            && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
-                                        max_chan_H = i;
-                                        moremax++;
-                                        vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                            max_chan = shm_conn_info->max_chan;
+                            int min_Ch = 1000000;
+                            int min_Ch_chan = 1000000;
+                            int min_Cs = 1000000;
+                            int min_Cs_chan = 1000000;
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if ((chan_mask & (1 << i))
+                                    && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                    if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
+                                    Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                                    Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
+                                    if(Ch < min_Ch) {
+                                        min_Ch = Ch;
+                                        min_Ch_chan = i;
+                                    }
+                                    if(Cs < min_Cs) {
+                                        min_Cs = Cs;
+                                        min_Cs_chan = i;
                                     }
                                 }
                             }
-                        }
-                } 
+                            if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
+                                vtun_syslog(LOG_INFO, "CS/CH: Need changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
+                                //shm_conn_info->max_chan = min_Ch_chan;
+                                max_chan_CS = min_Ch_chan; // is result here!
+                            }
 
-                // This is R_MODE algorithm
-                if(ag_flag_local == R_MODE) {
-                    // check ACS and switch
-                    int max_ACS = 0;
-                    int max_ACS_chan = -1;
-                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                            if(shm_conn_info->stats[i].ACK_speed > max_ACS) { // 10% corridor to consider speeds the same
-                                max_ACS = shm_conn_info->stats[i].ACK_speed;
-                                max_ACS_chan = i;
+                    }
+
+                    // This is AG_MODE algorithm
+                    int moremax = 0;
+                    int max_chan_H = -1;
+
+                    if(ag_flag_local == AG_MODE) {
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                    if(percent_delta_compare(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
+                                        // TODO: need smoothed percent compare! with selections auto-mgmt!
+                                        if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
+                                                && !percent_delta_compare(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                            max_chan_H = i;
+                                            moremax++;
+                                            vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                        }
+                                    }
+                                }
+                            }
+                    } 
+
+                    // This is R_MODE algorithm
+                    if(ag_flag_local == R_MODE) {
+                        // check ACS and switch
+                        int max_ACS = 0;
+                        int max_ACS_chan = -1;
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                if(shm_conn_info->stats[i].ACK_speed > max_ACS) { // 10% corridor to consider speeds the same
+                                    max_ACS = shm_conn_info->stats[i].ACK_speed;
+                                    max_ACS_chan = i;
+                                }
+                            }
+                        }
+                        if(max_ACS_chan == info.process_num) {
+                            // WE are R_MODE AND we are DE BEST!
+                            vtun_syslog(LOG_INFO, "ACS[i]: Need changing HEAD to %d (myself) with ACS %d", max_ACS_chan, shm_conn_info->stats[max_ACS_chan].ACK_speed);
+                            max_chan_H = max_ACS_chan;
+                        }
+                    }
+                    // any other _MODE ? :-)
+                    if(moremax > 1) {
+                        vtun_syslog(LOG_INFO, "WARNING More than one channel are better than current HEAD: %d", moremax);
+                    }
+
+                    if(max_chan_H != -1 && max_chan_CS == -1) {
+                        shm_conn_info->max_chan = max_chan_H;
+                        shm_conn_info->last_switch_time = info.current_time;
+                    } else if (max_chan_H == -1 && max_chan_CS != -1) {
+                        shm_conn_info->max_chan = max_chan_CS;
+                        shm_conn_info->last_switch_time = info.current_time;
+                    } else if (max_chan_H != -1 && max_chan_CS != -1) {
+                        if(max_chan_H != max_chan_CS) {
+                            vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
+                        }
+                        shm_conn_info->max_chan = max_chan_H;
+                        shm_conn_info->last_switch_time = info.current_time;
+                    } else { // means max_chan = -1; find first alive chan
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                shm_conn_info->max_chan = i;
+                                break;
                             }
                         }
                     }
-                    if(max_ACS_chan == info.process_num) {
-                        // WE are R_MODE AND we are DE BEST!
-                        vtun_syslog(LOG_INFO, "ACS[i]: Need changing HEAD to %d (myself) with ACS %d", max_ACS_chan, shm_conn_info->stats[max_ACS_chan].ACK_speed);
-                        max_chan_H = max_ACS_chan;
-                    }
                 }
-                // any other _MODE ? :-)
-                if(moremax > 1) {
-                    vtun_syslog(LOG_INFO, "WARNING More than one channel are better than current HEAD: %d", moremax);
-                }
-
-                if(max_chan_H != -1 && max_chan_CS == -1) {
-                    shm_conn_info->max_chan = max_chan_H;
-                    shm_conn_info->last_switch_time = info.current_time;
-                } else if (max_chan_H == -1 && max_chan_CS != -1) {
-                    shm_conn_info->max_chan = max_chan_CS;
-                    shm_conn_info->last_switch_time = info.current_time;
-                } else if (max_chan_H != -1 && max_chan_CS != -1) {
-                    if(max_chan_H != max_chan_CS) {
-                        vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
-                    }
-                    shm_conn_info->max_chan = max_chan_H;
-                    shm_conn_info->last_switch_time = info.current_time;
-                } else { // means max_chan = -1; find first alive chan
-                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                            shm_conn_info->max_chan = i;
-                            break;
-                        }
-                    }
-                }
-
                 sem_post(&(shm_conn_info->stats_sem));
             }
             if (info.just_started_recv == 1) {
@@ -3975,6 +3995,8 @@ if(drop_packet_flag) {
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 if(info.head_channel) {
+                                    // first check if we are really head
+                                    // 
                                     sem_wait(&(shm_conn_info->stats_sem));
                                     shm_conn_info->head_lossing = 1;
                                     sem_post(&(shm_conn_info->stats_sem));

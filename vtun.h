@@ -544,6 +544,7 @@ struct conn_info {
     int max_chan;
     int dropping;
     int head_lossing;
+    int idle;
     struct timeval drop_time;
     struct {
 #define EFF_LEN_BUFF 15
