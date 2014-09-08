@@ -119,7 +119,7 @@ struct my_ip {
 #define RSR_TOP 2990000 // now infinity...
 #define DROPPING_LOSSING_DETECT_SECONDS 4 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
-#define SELECT_SLEEP_USEC 100000 // was 50000
+#define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
@@ -2458,7 +2458,11 @@ if(drop_packet_flag) {
 vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
 } 
 #endif
-        send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: use time-based mean AND choose speed/aggressiveness for time interval
+        timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
+        if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
+            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            info.tv_sqe_mean_added = info.current_time;
+        }
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
             // now check all other chans
             // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
