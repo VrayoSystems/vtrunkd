@@ -3206,8 +3206,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
            *                       \/     \/ 
            * This is the Tick module
            */
-        if ( timercmp(&tv_tmp, &timer_resolution, >=) || tick_now) {
-            tick_now = 0;
+        if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            tick_now = 0; // TODO HERE: make immediate recalculation! if DDS!?!
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
