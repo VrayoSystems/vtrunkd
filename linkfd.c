@@ -3239,6 +3239,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     }
                     vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
                     shm_conn_info->max_chan = min_rtt_chan;
+                    shm_conn_info->last_switch_time = info.current_time; // nothing bad in this..
                 } else {
                     // this code works only if not idling!
                     // This is ALL-mode algorithm
@@ -3332,12 +3333,17 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         shm_conn_info->max_chan = max_chan_H;
                         shm_conn_info->last_switch_time = info.current_time;
                     } else { // means max_chan = -1; find first alive chan
+                        int OK= 0;
                         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                             if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                vtun_syslog(LOG_INFO, "Head change - first alive (default)");
+                                vtun_syslog(LOG_INFO, "Head change - first alive (default): %d", i);
                                 shm_conn_info->max_chan = i;
+                                OK=1;
                                 break;
                             }
+                        }
+                        if(!OK) {
+                            vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
                         }
                     }
                 }
@@ -3379,10 +3385,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed, info.process_num, i, info.channel[i].lport, info.channel[i].rport);
 #endif
                 }
-//               if(cur_time.tv_sec - last_tick >= lfd_host->TICK_SECS) {
-
-                //time_lag = old last written time - new written time
-                // calculate mean value and send time_lag to another side
                 //github.com - Issue #11
                 int time_lag_cnt = 0, time_lag_sum = 0;
                 for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
