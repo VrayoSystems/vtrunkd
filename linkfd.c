@@ -2381,6 +2381,7 @@ int lfd_linker(void)
     //int head_out = 0;
     int channel_dead = 0;
     int exact_rtt = 0;
+    int tick_now = 0;
     //int head_rel = 0;
     struct timeval drop_time = info.current_time;
 struct timeval cpulag;
@@ -2565,7 +2566,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
         channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0));
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
-            set_max_chan(chan_mask);
+            vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d)", lfd_host->host, info.head_channel);
+            shm_conn_info->last_switch_time.tv_sec = 0;
+            tick_now = 1;
+            //set_max_chan(chan_mask);
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
@@ -3202,7 +3206,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
            *                       \/     \/ 
            * This is the Tick module
            */
-        if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+        if ( timercmp(&tv_tmp, &timer_resolution, >=) || tick_now) {
+            tick_now = 0;
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
