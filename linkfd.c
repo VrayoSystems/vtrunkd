@@ -3277,17 +3277,28 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     // This is AG_MODE algorithm
                     int moremax = 0;
                     int max_chan_H = -1;
+                    int min_rtt = 99999;
 
                     if(ag_flag_local == AG_MODE) {
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                    if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 10% corridor to consider speeds the same
+                                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) {
+                                    if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 15)) { // 15% corridor to consider speeds the same
+                                        // TODO HERE: we can not guarantee fairness of pkt send distribution
+                                        // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
+                                        // now choose best rtt2 from all chans that have same speed!
+                                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                                            min_rtt = shm_conn_info->stats[i].exact_rtt;
+                                            min_chan_H = i;
+                                        }
+
+
                                         // TODO: need smoothed percent compare! with selections auto-mgmt!
-                                        if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
-                                                && !percent_delta_equal(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
-                                            max_chan_H = i;
-                                            moremax++;
-                                            vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                        //if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
+                                        //        && !percent_delta_equal(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                        //    max_chan_H = i;
+                                        //    moremax++;
+                                        //    vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                            // TODO: BAD here: in case of fast chan with lower Wi<Wh but Si~=Sh -> we can not detect!
                                         }
                                     }
                                 }
@@ -3297,6 +3308,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     // This is R_MODE algorithm
                     if(ag_flag_local == R_MODE) {
                         // check ACS and switch
+                        // TODO: correct R_MODE PUSH policy
                         int max_ACS = 0;
                         int max_ACS_chan = -1;
                         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
