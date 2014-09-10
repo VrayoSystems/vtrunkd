@@ -530,6 +530,7 @@ struct conn_info {
     sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
     uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable sync by AG_flags_sem
     uint32_t channels_mask; // 1 - channel is working 0 - channel is dead sync by AG_flags_sem
+    uint32_t hold_mask; // 0 - channel is on hold, 1 = send allowed
     uint32_t need_to_exit; // sync by AG_flags_sem
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/

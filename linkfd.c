@@ -932,8 +932,8 @@ int retransmit_send(char *out2, int n_to_send) {
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
-            if( (!info.head_channel) && (shm_conn_info->dropping)) {
-                last_sent_packet_num[i].seq_num--; // push to top!
+            if( (!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing)) {
+                last_sent_packet_num[i].seq_num--; // push to top! (push policy)
             } else {
                 if(check_delivery_time()) {
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
@@ -2464,7 +2464,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 #endif
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 50; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
             info.tv_sqe_mean_added = info.current_time;
         }
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
@@ -2766,7 +2766,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 drop_packet_flag = 0;
                 if (send_q_eff > info.rsr) {
                     if(check_drop_period_unsync()) { // Remember to have large txqueue!
-                        drop_packet_flag = 1;
+                        if(!shm_conn_info->hold_mask) drop_packet_flag = 1; // ^^ drop exactly one packet
                     } else {
                         hold_mode = 1;
                     }
@@ -2806,6 +2806,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
             }
         }
+
+        if(hold_mode || info.head_channel) {
+            shm_conn_info->hold_mask &= ~(1 << info.process_num); // set bin mask to zero (send not allowed)
+        } else {
+            shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
+        }
+
         sem_post(&(shm_conn_info->stats_sem));
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         #ifdef NOCONTROL
@@ -3223,7 +3230,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {5, 0}), >=)) {
                 int Ch = 0;
                 int Cs = 0;
-                
+                 // This is AG_MODE algorithm
+                int moremax = 0;
+                int max_chan_H = -1;
+                int min_rtt = 99999;
+
+               
                 sem_wait(&(shm_conn_info->stats_sem));
                 if(shm_conn_info->idle) {
                     // use RTT-only choosing of head!
@@ -3274,36 +3286,31 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
                     }
 
-                    // This is AG_MODE algorithm
-                    int moremax = 0;
-                    int max_chan_H = -1;
-                    int min_rtt = 99999;
-
                     if(ag_flag_local == AG_MODE) {
-                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) {
-                                    if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 15)) { // 15% corridor to consider speeds the same
-                                        // TODO HERE: we can not guarantee fairness of pkt send distribution
-                                        // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
-                                        // now choose best rtt2 from all chans that have same speed!
-                                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                                            min_rtt = shm_conn_info->stats[i].exact_rtt;
-                                            min_chan_H = i;
-                                        }
-
-
-                                        // TODO: need smoothed percent compare! with selections auto-mgmt!
-                                        //if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
-                                        //        && !percent_delta_equal(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
-                                        //    max_chan_H = i;
-                                        //    moremax++;
-                                        //    vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
-                                            // TODO: BAD here: in case of fast chan with lower Wi<Wh but Si~=Sh -> we can not detect!
-                                        }
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) {
+                                if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 15)) { // 15% corridor to consider speeds the same
+                                    // TODO HERE: we can not guarantee fairness of pkt send distribution
+                                    // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
+                                    // now choose best rtt2 from all chans that have same speed!
+                                    if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                                        min_rtt = shm_conn_info->stats[i].exact_rtt;
+                                        max_chan_H = i;
                                     }
+
+
+                                    // TODO: need smoothed percent compare! with selections auto-mgmt!
+                                    //if( (shm_conn_info->stats[i].W_cubic > shm_conn_info->stats[shm_conn_info->max_chan].W_cubic) 
+                                    //        && !percent_delta_equal(shm_conn_info->stats[i].W_cubic, shm_conn_info->stats[shm_conn_info->max_chan].W_cubic, 10)) {
+                                    //    max_chan_H = i;
+                                    //    moremax++;
+                                    //    vtun_syslog(LOG_INFO, "Si~=Sh && Wi>Wh: Need changing HEAD to %d with Si %d Sh %d Wi %d Wh %d", i,shm_conn_info->stats[i].ACK_speed,shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed,shm_conn_info->stats[i].W_cubic,shm_conn_info->stats[shm_conn_info->max_chan].W_cubic);
+                                        // TODO: BAD here: in case of fast chan with lower Wi<Wh but Si~=Sh -> we can not detect!
                                 }
                             }
-                    } 
+                        }
+                    }
+                     
 
                     // This is R_MODE algorithm
                     if(ag_flag_local == R_MODE) {
@@ -3549,7 +3556,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
             }
             sem_post(&(shm_conn_info->common_sem));
-            if( (shm_conn_info->dropping) && (!info.head_channel) ) { // semi-atomic, no need to sync, TODO: can optimize with above
+            if( (shm_conn_info->dropping || shm_conn_info->head_lossing) && (!info.head_channel) ) { // semi-atomic, no need to sync, TODO: can optimize with above
                 need_retransmit = 1; // flood not-head to top for 'dropping time'
             }
         }
@@ -4898,6 +4905,7 @@ if(drop_packet_flag) {
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
+    shm_conn_info->hold_mask &= ~(1 << info.process_num); // set bin mask to zero (send not allowed)
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
     vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
@@ -5064,6 +5072,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     info.tun_device = host->loc_fd; // virtual tun device
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask |= (1 << info.process_num); // add channel num to binary mask
+    shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, info.process_num);
