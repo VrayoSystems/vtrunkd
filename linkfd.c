@@ -2787,7 +2787,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 if(ms_passed > RSR_SMOOTH_FULL) {
                     ms_passed = RSR_SMOOTH_FULL;
                 }
-                int rsr_shift = (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
+                int rsr_shift;
+                if( ((info.send_q_limit - info.rsr) >= (INT32_MAX/ms_passed-100)) || ( (info.send_q_limit - info.rsr) <= (-INT32_MAX/ms_passed+100) )) {
+                    rsr_shift = ((info.send_q_limit - info.rsr) > 0 ? info.send_q_limit : -info.send_q_limit );
+                } else {
+                    rsr_shift = (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
+                }
                 info.rsr += rsr_shift;
                 //vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
                 //           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
