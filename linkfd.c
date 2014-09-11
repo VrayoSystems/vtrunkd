@@ -3290,27 +3290,38 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
                     //if(ag_flag_local == AG_MODE) {
                         // ---> ACS == and rtt
+                        min_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
                         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) ) {
+                            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) ) {
                                 if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 15% corridor to consider speeds the same
                                     // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
                                     // now choose best rtt2 from all chans that have same speed!
                                     if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
                                         min_rtt = shm_conn_info->stats[i].exact_rtt;
                                         max_chan_H = i;
-                                        vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", i, shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[i].exact_rtt);
                                     }
                                     // TODO: need smoothed percent compare! with selections auto-mgmt!
                                 }
-                                // TODO: what to do if these two methods disagree? Is it possible?
-                                else if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
+                            }
+                        }
+
+                        if(max_chan_H > -1) {
+                            vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed, shm_conn_info->stats[max_chan_H].exact_rtt);
+                        }
+
+                        // TODO: what to do if these two methods disagree? Is it possible?
+                        
+                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) ) {
+                                if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
                                          && ( shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed )) { // 15% corridor to consider speeds the same
                                     max_chan_H = i;
                                     vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed);
                                 }
-                                // TODO HERE: What if Wf < Wh and Sf > Sh => RSRf < RSRh => f can not get full speed due to RSRf
                             }
                         }
+                                // TODO HERE: What if Wf < Wh and Sf > Sh => RSRf < RSRh => f can not get full speed due to RSRf
+
                     //}
 
                     /*
@@ -3337,7 +3348,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     */
 
                     if(max_chan_H != -1 && max_chan_CS == -1) {
-                        vtun_syslog(LOG_INFO, "Head change H");
+//                        vtun_syslog(LOG_INFO, "Head change H");
                         shm_conn_info->max_chan = max_chan_H;
                         shm_conn_info->last_switch_time = info.current_time;
                     } else if (max_chan_H == -1 && max_chan_CS != -1) {
