@@ -639,10 +639,11 @@ int get_write_buf_wait_data() {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
                 return 1;
-            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) {
-                // TODO: implement MAX_REORDER_LATENCY policy! 
-                // seems done. check it -> implemented in that least_rx_seq does not update until reorder fixed
-                return 1;
+            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { //check for each packet time
+                timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &tv_tmp);
+                if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+                    return 1;
+                }
             }
         }
     }
