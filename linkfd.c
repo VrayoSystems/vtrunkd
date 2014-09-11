@@ -1882,7 +1882,7 @@ int set_max_chan(uint32_t chan_mask) {
     shm_conn_info->max_chan = max_chan;
 }
 
-int redetect_head_synced(int32_t chan_mask, int exclude) {
+int redetect_head_unsynced(int32_t chan_mask, int exclude) {
     int fixed = 0;
     int Ch = 0;
     int Cs = 0;
@@ -1894,7 +1894,6 @@ int redetect_head_synced(int32_t chan_mask, int exclude) {
     int max_ACS = 0;
     int max_ACS_chan = -1;
 
-    sem_wait(&(shm_conn_info->stats_sem));
     if(shm_conn_info->idle) {
         // use RTT-only choosing of head while idle!
         int min_rtt = 99999;
@@ -2010,7 +2009,6 @@ int redetect_head_synced(int32_t chan_mask, int exclude) {
             }
         }
     }
-    sem_post(&(shm_conn_info->stats_sem));
     return fixed;
 }
 
@@ -2702,7 +2700,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // TODO: if HEAD => immediate action required!
             if(info.head_channel) {
                 vtun_syslog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
-                redetect_head_synced(chan_mask, info.head_channel);
+                redetect_head_unsynced(chan_mask, info.head_channel);
             }
             //set_max_chan(chan_mask);
         }
@@ -2849,7 +2847,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
                         if(info.head_channel) {
                             vtun_syslog(LOG_ERR, "         ^^^ HEAD channel!");
-                            redetect_head_synced(chan_mask, info.head_channel);
+                            redetect_head_unsynced(chan_mask, info.head_channel);
                             // TODO: immediate action required!
                         }
                     }
@@ -3363,7 +3361,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             sem_post(&(shm_conn_info->stats_sem));
             // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {5, 0}), >=)) {
-                redetect_head_synced(chan_mask, -1);
+                sem_wait(&(shm_conn_info->stats_sem));
+                redetect_head_unsynced(chan_mask, -1);
+                sem_post(&(shm_conn_info->stats_sem));
             }
             if (info.just_started_recv == 1) {
                 uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
