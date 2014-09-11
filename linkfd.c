@@ -2473,7 +2473,8 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    info.C = C_HI;
+    //info.C = C_HI;
+    info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
@@ -2751,9 +2752,15 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-            // TODO: WARNING: may overflow here -->
-            info.send_q_limit = (shm_conn_info->stats[max_chan].W_cubic * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-                                         / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
+            int rsr_top = shm_conn_info->stats[max_chan].W_cubic;
+            // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
+            if(rsr_top > 500000) {
+                info.send_q_limit = ( (rsr_top / 1000) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
+                                             / (shm_conn_info->stats[        max_chan].ACK_speed / 1000) * 1000;
+            } else {
+                info.send_q_limit = (rsr_top * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
+                                             / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
+            }
             
             
             rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) // dt in ms..
@@ -2820,7 +2827,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
-                           || (send_q_limit_cubic_apply < info.rsr) 
+                           //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!?
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
