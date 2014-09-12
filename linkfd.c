@@ -2012,6 +2012,22 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
     return fixed;
 }
 
+/* M = Wmax, W = desired Wcubic */
+double t_from_W (double W, double M, double B, double C) {
+    // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
+    return cbrt(B * M / C) + cbrt( (W - M) / C );
+}
+
+// t in ms
+int set_W_unsync(int t) {
+    double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
+    uint32_t limit_last = info.send_q_limit_cubic;
+    info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
+    shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
+
+    return 1;
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -2473,8 +2489,8 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    //info.C = C_HI;
-    info.C = 0.9; // VERY FAST!
+    info.C = C_HI;
+    //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
@@ -2958,6 +2974,26 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             shm_conn_info->hold_mask &= ~(1 << info.process_num); // set bin mask to zero (send not allowed)
         } else {
             shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
+        }
+
+        // fast convergence to underlying encap flow
+        if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic
+            //TODO: check if we are not at Plateau
+
+            // calculate old t
+            timersub(&(info.current_time), &loss_time, &t_tv);
+            int old_t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+            old_t = old_t / CUBIC_T_DIV;
+            old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
+
+            drop_packet_flag = 0;
+            int t = (int) t_from_W( info.send_q_limit_cubic + 1, info.send_q_limit_cubic_max, info.B, info.C);
+            struct timeval new_lag;
+            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", info.send_q_limit_cubic + 1, info.send_q_limit_cubic_max, old_t, t * CUBIC_T_DIV);
+            ms2tv(&new_lag, t * CUBIC_T_DIV);
+            timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
+            shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
+            set_W_unsync(t * CUBIC_T_DIV);
         }
 
         sem_post(&(shm_conn_info->stats_sem));
