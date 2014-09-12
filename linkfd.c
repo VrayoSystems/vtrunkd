@@ -2528,6 +2528,7 @@ int lfd_linker(void)
     //int head_out = 0;
     int channel_dead = 0;
     int exact_rtt = 0;
+    int t; // time for W
     //int head_rel = 0;
     struct timeval drop_time = info.current_time;
 struct timeval cpulag;
@@ -2819,16 +2820,14 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
         uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
         
+        if(!info.head_channel) {
+            timersub(&(info.current_time), &loss_time, &t_tv);
+            int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+            t = t / CUBIC_T_DIV;
+            t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
+            set_W_unsync(t);
+        }
 
-        timersub(&(info.current_time), &loss_time, &t_tv);
-        int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-        t = t / CUBIC_T_DIV;
-        t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
-        double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-        uint32_t limit_last = info.send_q_limit_cubic;
-        info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-        shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
-        
         //int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
         int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
         //if (send_q_limit_cubic_apply > RSR_TOP) {
@@ -2977,7 +2976,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
 
         // fast convergence to underlying encap flow
-        if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic
+        if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
             //TODO: check if we are not at Plateau
 
             // calculate old t
@@ -2987,9 +2986,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
 
             drop_packet_flag = 0;
-            int t = (int) t_from_W( info.send_q_limit_cubic + 2000, info.send_q_limit_cubic_max, info.B, info.C);
+            t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
             struct timeval new_lag;
-            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", info.send_q_limit_cubic + 2000, info.send_q_limit_cubic_max, old_t, t);
+            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t);
             ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
             timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
             shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
@@ -4126,17 +4125,18 @@ if(drop_packet_flag) {
                                 }
                                 t = 0;
                                 info.max_send_q = 0;
+                                sem_wait(&(shm_conn_info->stats_sem));
+                                set_W_unsync(t);
+                                sem_post(&(shm_conn_info->stats_sem));
+
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
                                 t = t / CUBIC_T_DIV;
                                 t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 200s limit
                             }
-                            double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-                            uint32_t limit_last = info.send_q_limit_cubic;
-                            info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-                            //                        vtun_syslog(LOG_ERR, "W_max %"PRIu32" B %f C %f K %f t 0 W was %"PRIu32" now %"PRIu32" loss now", info.send_q_limit_cubic_max, info.B, info.C, K, limit_last, info.send_q_limit_cubic);
                             sem_wait(&(shm_conn_info->stats_sem));
+                            // set_W_unsync(t); // not required to recalculate here; will be more predictable
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q; // never ever used!! TODO remove
                             sem_post(&(shm_conn_info->stats_sem));
                             //if (my_max_send_q < info.rsr) {
