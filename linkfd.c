@@ -2987,13 +2987,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
 
             drop_packet_flag = 0;
-            int t = (int) t_from_W( info.send_q_limit_cubic + 1, info.send_q_limit_cubic_max, info.B, info.C);
+            int t = (int) t_from_W( info.send_q_limit_cubic + 2000, info.send_q_limit_cubic_max, info.B, info.C);
             struct timeval new_lag;
-            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", info.send_q_limit_cubic + 1, info.send_q_limit_cubic_max, old_t, t * CUBIC_T_DIV);
-            ms2tv(&new_lag, t * CUBIC_T_DIV);
+            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", info.send_q_limit_cubic + 2000, info.send_q_limit_cubic_max, old_t, t);
+            ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
             timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
             shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
-            set_W_unsync(t * CUBIC_T_DIV);
+            set_W_unsync(t);
         }
 
         sem_post(&(shm_conn_info->stats_sem));
