@@ -2752,7 +2752,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
             info.tv_sqe_mean_added = info.current_time;
-            int s_q_idx = send_q_eff / SD_PARITY;
+            int s_q_idx = send_q_eff / 1000 / SD_PARITY;
             if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
                 // TODO: write averaged data
                 smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg; // TODO: faster speed update!
