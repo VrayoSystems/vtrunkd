@@ -2126,7 +2126,7 @@ int set_smalldata_weights( struct _smalldata *sd) {
         timersub(&info.current_time, &sd->ts[i], &tv_tmp);
         ms = tv2ms(&tv_tmp);
         sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
-        if(sd->w[i] < 0.0) sd->w = 0;
+        if(sd->w[i] < 0.0) sd->w[i] = 0;
         if(sd->w[i] > 1.0) {
             sd->w[i] = 1.0;
             vtun_syslog(LOG_ERR, "ERROR! Weight somehow was > 1.0!");
