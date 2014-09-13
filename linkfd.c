@@ -2128,8 +2128,8 @@ int set_smalldata_weights( struct _smalldata *sd) {
         sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
         if(sd->w[i] < 0.0) sd->w[i] = 0;
         if(sd->w[i] > 1.0) {
+            vtun_syslog(LOG_ERR, "ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
             sd->w[i] = 1.0;
-            vtun_syslog(LOG_ERR, "ERROR! Weight somehow was > 1.0!");
         }
         if(sd->w[i] > 0.7) {
             max_good_sq = i;
@@ -2141,7 +2141,7 @@ int set_smalldata_weights( struct _smalldata *sd) {
 int get_slope(struct _smalldata *sd) {
     int len = SLOPE_POINTS; // 15 datapoints to draw slope
     int to_idx = set_smalldata_weights(sd);
-    if( (to_idx / SD_PARITY) < SLOPE_POINTS+1) return -1; // could not get slope?
+    if( (to_idx / SD_PARITY) < SLOPE_POINTS+1) return -999999; // could not get slope?
     int from_idx = to_idx / SD_PARITY - len;
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
@@ -2672,6 +2672,10 @@ struct timeval cpulag;
 
     for(int i = 0; i < (MAX_SD_W / SD_PARITY); i++) {
         smalldata.send_q[i] = (double) (i * SD_PARITY);
+        smalldata.rtt[i] = 0; // TODO: memset?
+        smalldata.ACS[i] = 0; // TODO: memset?
+        smalldata.w[i] = 0; // TODO: memset?
+        smalldata.ts[i] = info.current_time;
     }
 
 /**
