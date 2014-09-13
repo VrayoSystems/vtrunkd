@@ -127,6 +127,11 @@ struct my_ip {
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
 
+#define MAX_SD_W 1700
+#define SD_PARITY 2
+#define SLOPE_POINTS 15
+#define ZERO_W_THR 2000.0 // ms
+
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
 #define TRAIN_PKTS 80
@@ -258,6 +263,90 @@ void ms2tv(struct timeval *result, unsigned long interval_ms) {
 uint32_t tv2ms(struct timeval *a) {
     return ((a->tv_sec * 1000) + (a->tv_usec / 1000));
 }
+
+
+int fit_wlinear (const double *x, const size_t xstride,
+                 const double *w, const size_t wstride,
+                 const double *y, const size_t ystride,
+                 const size_t n,
+                 double *c0, double *c1,
+                 double *cov_00, double *cov_01, double *cov_11,
+                 double *chisq)
+{
+
+  /* compute the weighted means and weighted deviations from the means */
+
+  /* wm denotes a "weighted mean", wm(f) = (sum_i w_i f_i) / (sum_i w_i) */
+
+  double W = 0, wm_x = 0, wm_y = 0, wm_dx2 = 0, wm_dxdy = 0;
+
+  size_t i;
+
+  for (i = 0; i < n; i++)
+    {
+      const double wi = w[i * wstride];
+
+      if (wi > 0)
+        {
+          W += wi;
+          wm_x += (x[i * xstride] - wm_x) * (wi / W);
+          wm_y += (y[i * ystride] - wm_y) * (wi / W);
+        }
+    }
+
+  W = 0;                        /* reset the total weight */
+
+  for (i = 0; i < n; i++)
+    {
+      const double wi = w[i * wstride];
+
+      if (wi > 0)
+        {
+          const double dx = x[i * xstride] - wm_x;
+          const double dy = y[i * ystride] - wm_y;
+
+          W += wi;
+          wm_dx2 += (dx * dx - wm_dx2) * (wi / W);
+          wm_dxdy += (dx * dy - wm_dxdy) * (wi / W);
+        }
+    }
+
+  /* In terms of y = a + b x */
+
+  {
+    double d2 = 0;
+    double b = wm_dxdy / wm_dx2;
+    double a = wm_y - wm_x * b;
+
+    *c0 = a;
+    *c1 = b;
+
+    *cov_00 = (1 / W) * (1 + wm_x * wm_x / wm_dx2);
+    *cov_11 = 1 / (W * wm_dx2);
+
+    *cov_01 = -wm_x / (W * wm_dx2);
+
+    /* Compute chi^2 = \sum w_i (y_i - (a + b * x_i))^2 */
+
+    for (i = 0; i < n; i++)
+      {
+        const double wi = w[i * wstride];
+
+        if (wi > 0)
+          {
+            const double dx = x[i * xstride] - wm_x;
+            const double dy = y[i * ystride] - wm_y;
+            const double d = dy - b * dx;
+            d2 += wi * d * d;
+          }
+      }
+
+    *chisq = d2;
+  }
+
+  return 1;
+}
+
 
 int percent_delta_equal(int A, int B, int percent) {
     int delta = A>B?A-B:B-A;
@@ -2028,6 +2117,40 @@ int set_W_unsync(int t) {
     return 1;
 }
 
+// returns max value for send_q (index) at which weight is > 0.7
+int set_smalldata_weights( struct _smalldata *sd) {
+    struct timeval tv_tmp;
+    int ms;
+    int max_good_sq = -1;
+    for (int i=0; i< (MAX_SD_W / SD_PARITY); i++) {
+        timersub(&info.current_time, &sd->ts[i], &tv_tmp);
+        ms = tv2ms(&tv_tmp);
+        sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
+        if(sd->w[i] < 0.0) sd->w = 0;
+        if(sd->w[i] > 1.0) {
+            sd->w[i] = 1.0;
+            vtun_syslog(LOG_ERR, "ERROR! Weight somehow was > 1.0!");
+        }
+        if(sd->w[i] > 0.7) {
+            max_good_sq = i;
+        }
+    }
+    return max_good_sq * SD_PARITY;
+}
+
+int get_slope(struct _smalldata *sd) {
+    int len = SLOPE_POINTS; // 15 datapoints to draw slope
+    int to_idx = set_smalldata_weights(sd);
+    if( (to_idx / SD_PARITY) < SLOPE_POINTS+1) return -1; // could not get slope?
+    int from_idx = to_idx / SD_PARITY - len;
+
+    double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
+
+    fit_wlinear (&sd->send_q[from_idx], 1, &sd->w[from_idx], 1, &sd->ACS[from_idx], 1, len, 
+                   &c0, &c1, &cov00, &cov01, &cov11, &chisq);
+    return (int) (c1 * 100.0);
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -2539,6 +2662,18 @@ struct timeval cpulag;
     for(i=0; i<MAX_TCP_PHYSICAL_CHANNELS;i++) {
         buf_len_sent[i]=0;
     }
+
+    struct _smalldata smalldata;
+    smalldata.rtt = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
+    smalldata.ACS = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
+    smalldata.w = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
+    smalldata.send_q = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
+    smalldata.ts = malloc(sizeof(struct timeval) * (MAX_SD_W / SD_PARITY));
+
+    for(int i = 0; i < (MAX_SD_W / SD_PARITY); i++) {
+        smalldata.send_q[i] = (double) (i * SD_PARITY);
+    }
+
 /**
  *
  *
@@ -2613,6 +2748,15 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
             info.tv_sqe_mean_added = info.current_time;
+            int s_q_idx = send_q_eff / SD_PARITY;
+            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+                // TODO: write averaged data
+                smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg; // TODO: faster speed update!
+                smalldata.rtt[s_q_idx] = info.rtt2;
+                smalldata.ts[s_q_idx] = info.current_time;
+            } else {
+                vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
+            }
         }
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
             // now check all other chans
@@ -3193,6 +3337,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 
                 add_json(js_buf, &js_cur, "Ch", "%d", Ch);
                 add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+
+                // now get slope
+                int slope = get_slope(&smalldata);
+                add_json(js_buf, &js_cur, "slope", "%d", slope);
                 
                 print_json(js_buf, &js_cur);
 #endif
