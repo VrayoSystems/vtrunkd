@@ -127,10 +127,11 @@ struct my_ip {
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
 
-#define MAX_SD_W 1700
-#define SD_PARITY 2
-#define SLOPE_POINTS 15
-#define ZERO_W_THR 2000.0 // ms
+#define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
+#define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
+#define SLOPE_POINTS 15 // how many points ( / SD_PARITY ) to make linear fit from
+#define PESO_STAT_PKTS 100 // packets to collect for ACS2 statistics to be correct for PESO
+#define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -2695,6 +2696,8 @@ struct timeval cpulag;
     sem_wait(&(shm_conn_info->stats_sem));
     set_W_unsync(t);
     sem_post(&(shm_conn_info->stats_sem));
+    struct timeval peso_lrl_ts = info.current_time;
+    int32_t peso_old_last_recv_lsn = 10;
     
 /**
  *
@@ -2770,11 +2773,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
             info.tv_sqe_mean_added = info.current_time;
-            int s_q_idx = send_q_eff / 1000 / SD_PARITY;
+            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
             if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                // TODO: write averaged data
+                // TODO: write averaged data ? more points -> more avg!
                 if(last_smalldata_ACS != info.packet_recv_upload_avg) {
-                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg; // TODO: faster speed update!
+                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
                     smalldata.rtt[s_q_idx] = info.rtt2;
                     smalldata.ts[s_q_idx] = info.current_time;
                     last_smalldata_ACS = info.packet_recv_upload_avg;
@@ -4583,6 +4586,20 @@ if(drop_packet_flag) {
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
                     if(info.max_send_q < info.channel[chan_num].send_q) {
                         info.max_send_q = info.channel[chan_num].send_q;
+                    }
+                    if( (last_recv_lsn - peso_old_last_recv_lsn) > PESO_STAT_PKTS) {
+                        // TODO: multi-channels broken here!
+                        timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
+                        // TODO: check for overflow here? -->
+                        int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
+                        int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
+                        if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+                            smalldata.ACS[s_q_idx] = ACS2;
+                            smalldata.rtt[s_q_idx] = info.rtt2;
+                            smalldata.ts[s_q_idx] = info.current_time;
+                        }
+                        peso_lrl_ts = info.current_time;
+                        peso_old_last_recv_lsn = last_recv_lsn;
                     }
 #ifdef DEBUGG
 if(drop_packet_flag) {
