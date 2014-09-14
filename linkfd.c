@@ -3808,7 +3808,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                      */
         sem_wait(write_buf_sem);
         FD_ZERO(&fdset_w);
-        if (get_write_buf_wait_data() || need_retransmit) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
+        if (get_write_buf_wait_data() || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
             FD_SET(info.tun_device, pfdset_w);
         } else {
