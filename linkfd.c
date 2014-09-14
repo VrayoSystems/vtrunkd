@@ -2681,13 +2681,13 @@ struct timeval cpulag;
     smalldata.ts = malloc(sizeof(struct timeval) * (MAX_SD_W / SD_PARITY));
 
     for(int i = 0; i < (MAX_SD_W / SD_PARITY); i++) {
-        smalldata.send_q[i] = (double) (i * SD_PARITY);
+        smalldata.send_q[i] = (double) (i * SD_PARITY * 1000);
         smalldata.rtt[i] = 0; // TODO: memset?
         smalldata.ACS[i] = 0; // TODO: memset?
         smalldata.w[i] = 0; // TODO: memset?
         smalldata.ts[i] = info.current_time;
     }
-    
+    int last_smalldata_ACS = 0;
     t = (int) t_from_W( SENQ_Q_LIMIT_THRESHOLD + 2000, info.send_q_limit_cubic_max, info.B, info.C);
     struct timeval new_lag;
     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
@@ -2773,9 +2773,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             int s_q_idx = send_q_eff / 1000 / SD_PARITY;
             if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
                 // TODO: write averaged data
-                smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg; // TODO: faster speed update!
-                smalldata.rtt[s_q_idx] = info.rtt2;
-                smalldata.ts[s_q_idx] = info.current_time;
+                if(last_smalldata_ACS != info.packet_recv_upload_avg) {
+                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg; // TODO: faster speed update!
+                    smalldata.rtt[s_q_idx] = info.rtt2;
+                    smalldata.ts[s_q_idx] = info.current_time;
+                    last_smalldata_ACS = info.packet_recv_upload_avg;
+                }
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
