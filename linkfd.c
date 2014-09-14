@@ -2678,7 +2678,7 @@ struct timeval cpulag;
         smalldata.ts[i] = info.current_time;
     }
     
-    int t = (int) t_from_W( SENQ_Q_LIMIT_THRESHOLD + 2000, info.send_q_limit_cubic_max, info.B, info.C);
+    t = (int) t_from_W( SENQ_Q_LIMIT_THRESHOLD + 2000, info.send_q_limit_cubic_max, info.B, info.C);
     struct timeval new_lag;
     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
     timersub(&info.current_time, &new_lag, &loss_time);
