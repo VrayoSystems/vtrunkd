@@ -129,8 +129,8 @@ struct my_ip {
 
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
-#define SLOPE_POINTS 15 // how many points ( / SD_PARITY ) to make linear fit from
-#define PESO_STAT_PKTS 100 // packets to collect for ACS2 statistics to be correct for PESO
+#define SLOPE_POINTS 40 // how many points ( / SD_PARITY ) to make linear fit from
+#define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
@@ -4591,12 +4591,14 @@ if(drop_packet_flag) {
                         // TODO: multi-channels broken here!
                         timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
                         // TODO: check for overflow here? -->
-                        int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
-                        int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-                        if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                            smalldata.ACS[s_q_idx] = ACS2;
-                            smalldata.rtt[s_q_idx] = info.rtt2;
-                            smalldata.ts[s_q_idx] = info.current_time;
+                        if(tv2ms(&tv_tmp) > 3) { // TODO: what to do if < 3ms?? 3ms is 333p/s
+                            int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
+                            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
+                            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+                                smalldata.ACS[s_q_idx] = ACS2;
+                                smalldata.rtt[s_q_idx] = info.rtt2;
+                                smalldata.ts[s_q_idx] = info.current_time;
+                            }
                         }
                         peso_lrl_ts = info.current_time;
                         peso_old_last_recv_lsn = last_recv_lsn;
