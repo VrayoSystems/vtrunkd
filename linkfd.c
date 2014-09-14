@@ -129,7 +129,7 @@ struct my_ip {
 
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
-#define SLOPE_POINTS 40 // how many points ( / SD_PARITY ) to make linear fit from
+#define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 
@@ -3153,23 +3153,25 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
         // fast convergence to underlying encap flow
         if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
-            //TODO: check if we are not at Plateau
-
-            // calculate old t
-            timersub(&(info.current_time), &loss_time, &t_tv);
-            int old_t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-            old_t = old_t / CUBIC_T_DIV;
-            old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
-
-            drop_packet_flag = 0;
-            t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
-            struct timeval new_lag;
             int slope = get_slope(&smalldata);
-            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope);
-            ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
-            timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
-            shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
-            set_W_unsync(t);
+            if(slope > 0) {
+                    drop_packet_flag = 0;
+                    // calculate old t
+                    timersub(&(info.current_time), &loss_time, &t_tv);
+                    int old_t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+                    old_t = old_t / CUBIC_T_DIV;
+                    old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
+
+                    t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
+                    struct timeval new_lag;
+                    vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope);
+                    ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
+                    timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
+                    shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
+                    set_W_unsync(t);
+            } else {
+                vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
+            }
         }
 
         sem_post(&(shm_conn_info->stats_sem));
