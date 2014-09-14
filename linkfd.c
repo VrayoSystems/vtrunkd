@@ -2132,7 +2132,7 @@ int set_smalldata_weights( struct _smalldata *sd) {
             sd->w[i] = 1.0;
         }
         if(sd->w[i] > 0.7) {
-            vtun_syslog(LOG_INFO, "ssw: Found last datapoint %f ms %d", sd->w[i], ms);
+            vtun_syslog(LOG_INFO, "ssw: Found last datapoint sq=%f ACS=%f w=%f ms %d", sd->send_q[i], sd->ACS[i], sd->w[i], ms);
             max_good_sq = i;
         }
     }
@@ -2147,7 +2147,7 @@ int get_slope(struct _smalldata *sd) {
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
 
-    vtun_syslog(LOG_INFO, "slope: s_q %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", 
+    vtun_syslog(LOG_INFO, "slope: s_q %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
                             sd->send_q[from_idx+0],  sd->send_q[from_idx+1], sd->send_q[from_idx+2], sd->send_q[from_idx+3], sd->send_q[from_idx+4], sd->send_q[from_idx+5], sd->send_q[from_idx+6], sd->send_q[from_idx+7], sd->send_q[from_idx+8], sd->send_q[from_idx+9], sd->send_q[from_idx+10], sd->send_q[from_idx+12], sd->send_q[from_idx+13], sd->send_q[from_idx+14], sd->send_q[from_idx+15]);
     vtun_syslog(LOG_INFO, "slope: ACS %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
                             sd->ACS[from_idx+0],  sd->ACS[from_idx+1], sd->ACS[from_idx+2], sd->ACS[from_idx+3], sd->ACS[from_idx+4], sd->ACS[from_idx+5], sd->ACS[from_idx+6], sd->ACS[from_idx+7], sd->ACS[from_idx+8], sd->ACS[from_idx+9], sd->ACS[from_idx+10], sd->ACS[from_idx+12], sd->ACS[from_idx+13], sd->ACS[from_idx+14], sd->ACS[from_idx+15]);
