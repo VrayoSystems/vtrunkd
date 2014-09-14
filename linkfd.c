@@ -2117,7 +2117,7 @@ int set_W_unsync(int t) {
     return 1;
 }
 
-// returns max value for send_q (index) at which weight is > 0.7
+// returns max value for send_q (NOT index) at which weight is > 0.7
 int set_smalldata_weights( struct _smalldata *sd) {
     struct timeval tv_tmp;
     int ms;
@@ -2128,10 +2128,11 @@ int set_smalldata_weights( struct _smalldata *sd) {
         sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
         if(sd->w[i] < 0.0) sd->w[i] = 0;
         if(sd->w[i] > 1.0) {
-            vtun_syslog(LOG_ERR, "ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
+            vtun_syslog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
             sd->w[i] = 1.0;
         }
         if(sd->w[i] > 0.7) {
+            vtun_syslog(LOG_INFO, "ssw: Found last datapoint %f ms %d", sd->w[i], ms);
             max_good_sq = i;
         }
     }
@@ -2146,8 +2147,17 @@ int get_slope(struct _smalldata *sd) {
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
 
+    vtun_syslog(LOG_INFO, "slope: s_q %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", 
+                            sd->send_q[from_idx+0],  sd->send_q[from_idx+1], sd->send_q[from_idx+2], sd->send_q[from_idx+3], sd->send_q[from_idx+4], sd->send_q[from_idx+5], sd->send_q[from_idx+6], sd->send_q[from_idx+7], sd->send_q[from_idx+8], sd->send_q[from_idx+9], sd->send_q[from_idx+10], sd->send_q[from_idx+12], sd->send_q[from_idx+13], sd->send_q[from_idx+14], sd->send_q[from_idx+15]);
+    vtun_syslog(LOG_INFO, "slope: ACS %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
+                            sd->ACS[from_idx+0],  sd->ACS[from_idx+1], sd->ACS[from_idx+2], sd->ACS[from_idx+3], sd->ACS[from_idx+4], sd->ACS[from_idx+5], sd->ACS[from_idx+6], sd->ACS[from_idx+7], sd->ACS[from_idx+8], sd->ACS[from_idx+9], sd->ACS[from_idx+10], sd->ACS[from_idx+12], sd->ACS[from_idx+13], sd->ACS[from_idx+14], sd->ACS[from_idx+15]);
+    vtun_syslog(LOG_INFO, "slope:   w %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
+                            sd->w[from_idx+0],  sd->w[from_idx+1], sd->w[from_idx+2], sd->w[from_idx+3], sd->w[from_idx+4], sd->w[from_idx+5], sd->w[from_idx+6], sd->w[from_idx+7], sd->w[from_idx+8], sd->w[from_idx+9], sd->w[from_idx+10], sd->w[from_idx+12], sd->w[from_idx+13], sd->w[from_idx+14], sd->w[from_idx+15]);
+
     fit_wlinear (&sd->send_q[from_idx], 1, &sd->w[from_idx], 1, &sd->ACS[from_idx], 1, len, 
                    &c0, &c1, &cov00, &cov01, &cov11, &chisq);
+
+    vtun_syslog(LOG_INFO, "slope: Linear fit c1 is %f", c1);
     return (int) (c1 * 100.0);
 }
 
