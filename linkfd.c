@@ -2119,7 +2119,7 @@ int set_W_unsync(int t) {
 }
 
 // returns max value for send_q (NOT index) at which weight is > 0.7
-int set_smalldata_weights( struct _smalldata *sd) {
+int set_smalldata_weights( struct _smalldata *sd, int *pts) {
     struct timeval tv_tmp;
     int ms;
     int max_good_sq = -1;
@@ -2128,7 +2128,9 @@ int set_smalldata_weights( struct _smalldata *sd) {
         ms = tv2ms(&tv_tmp);
         sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
         if(sd->w[i] < 0.0) sd->w[i] = 0;
+        if(sd->w[i] > 0.1) *pts++;
         if(sd->w[i] > 1.0) {
+            // TODO: check unnesessary
             vtun_syslog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
             sd->w[i] = 1.0;
         }
@@ -2142,8 +2144,9 @@ int set_smalldata_weights( struct _smalldata *sd) {
 
 int get_slope(struct _smalldata *sd) {
     int len = SLOPE_POINTS; // 15 datapoints to draw slope
-    int to_idx = set_smalldata_weights(sd);
-    if( (to_idx / SD_PARITY) < SLOPE_POINTS+1) return -999999; // could not get slope?
+    int pts = 0;
+    int to_idx = set_smalldata_weights(sd, &pts);
+    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 5) return 999999; // could not get slope?
     int from_idx = to_idx / SD_PARITY - len;
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
@@ -3160,7 +3163,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             drop_packet_flag = 0;
             t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
             struct timeval new_lag;
-            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t);
+            int slope = get_slope(&smalldata);
+            vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope);
             ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
             timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
             shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
