@@ -2128,7 +2128,7 @@ int set_smalldata_weights( struct _smalldata *sd, int *pts) {
         ms = tv2ms(&tv_tmp);
         sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
         if(sd->w[i] < 0.0) sd->w[i] = 0;
-        if(sd->w[i] > 0.1) *pts++;
+        if(sd->w[i] > 0.1) (*pts)++;
         if(sd->w[i] > 1.0) {
             // TODO: check unnesessary
             vtun_syslog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
@@ -2146,7 +2146,9 @@ int get_slope(struct _smalldata *sd) {
     int len = SLOPE_POINTS; // 15 datapoints to draw slope
     int pts = 0;
     int to_idx = set_smalldata_weights(sd, &pts);
-    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 5) return 999999; // could not get slope?
+    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 5) { // TODO: is 5 ok for slope?
+        return 999999; // could not get slope?
+    }
     int from_idx = to_idx / SD_PARITY - len;
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
@@ -2876,7 +2878,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(info.rtt == 0) {
             info.rtt = 1;
         }
-        int32_t my_wspd = info.send_q_limit_cubic / info.rtt; // TODO HERE: compute it then choose C
         
         sem_wait(&(shm_conn_info->stats_sem));
         if(info.dropping) {
@@ -2886,7 +2887,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
 
 
-        channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0));
+        channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0)); // TODO: WARNING: chan always dead at start!!!
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
             vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d)", lfd_host->host, info.head_channel);
             shm_conn_info->last_switch_time.tv_sec = 0;
