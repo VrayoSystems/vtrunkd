@@ -132,6 +132,7 @@ struct my_ip {
 #define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
+#define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
@@ -3584,7 +3585,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
             sem_post(&(shm_conn_info->stats_sem));
             // head detect code
-            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {5, 0}), >=)) {
+            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) SPEED_REDETECT_TV), >=)) {
                 sem_wait(&(shm_conn_info->stats_sem));
                 redetect_head_unsynced(chan_mask, -1);
                 sem_post(&(shm_conn_info->stats_sem));
