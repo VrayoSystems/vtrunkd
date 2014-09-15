@@ -112,7 +112,7 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_LATENCY_DROP_USEC 300000 // typ. is 204-250 upto 450 max RTO at CUBIC
+#define MAX_LATENCY_DROP_USEC 230000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_FACTOR 30 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
@@ -2166,6 +2166,7 @@ int get_slope(struct _smalldata *sd) {
                    &c0, &c1, &cov00, &cov01, &cov11, &chisq);
 
     vtun_syslog(LOG_INFO, "slope: Linear fit c1 is %f", c1);
+    if(isnan(c1)) return 999999;
     return (int) (c1 * 100.0);
 }
 
@@ -3150,7 +3151,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // fast convergence to underlying encap flow
         if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
             int slope = get_slope(&smalldata);
-            if(slope > 0) {
+            if(slope > -1000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
                     // calculate old t
                     timersub(&(info.current_time), &loss_time, &t_tv);
