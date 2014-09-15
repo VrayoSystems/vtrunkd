@@ -3151,7 +3151,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // fast convergence to underlying encap flow
         if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
             int slope = get_slope(&smalldata);
-            if(slope > -1000) { // TODO: need more fine-tuning!
+            if(slope > -100000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
                     // calculate old t
                     timersub(&(info.current_time), &loss_time, &t_tv);
