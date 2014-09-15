@@ -3012,7 +3012,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
-                           //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!?
+                           //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
@@ -4286,12 +4286,16 @@ if(drop_packet_flag) {
                                 }
                                 ms2tv(&loss_tv, info.rtt / 2);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
-                                if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) { 
-                                    //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
-                                    info.send_q_limit_cubic_max = info.max_send_q;
+                                if(info.head_channel) {
+                                    info.send_q_limit_cubic_max = info.max_send_q; // fast-converge to flow (head now always converges!)
                                 } else {
-                                    //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
-                                    info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                    if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
+                                        //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                        info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
+                                    } else {
+                                        //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
+                                        info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                    }
                                 }
                                 t = 0;
                                 info.max_send_q = 0;
