@@ -505,6 +505,7 @@ struct phisical_status {
     struct timeval max_reorder_latency;
     struct timeval max_latency_drop;
     int eff_len;
+    int send_q_limit_threshold;
 };
 
 struct conn_info {

@@ -106,7 +106,8 @@ struct my_ip {
 #define CS_THRESH 60
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
-#define SENQ_Q_LIMIT_THRESHOLD 13000 // the value with which that AG starts
+#define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
+#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 5 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
@@ -579,7 +580,7 @@ int check_delivery_time_unsynced() {
         // vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
         return 0;
     }
-    if( info.rsr < SENQ_Q_LIMIT_THRESHOLD) {
+    if( info.rsr < info.send_q_limit_threshold) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < RSR", info.rsr, (int32_t)info.send_q_limit_cubic);
         return 0;
     }
@@ -2690,7 +2691,7 @@ struct timeval cpulag;
         smalldata.ts[i] = info.current_time;
     }
     int last_smalldata_ACS = 0;
-    t = (int) t_from_W( SENQ_Q_LIMIT_THRESHOLD + 2000, info.send_q_limit_cubic_max, info.B, info.C);
+    t = (int) t_from_W( SENQ_Q_LIMIT_THRESHOLD_MIN + 2000, info.send_q_limit_cubic_max, info.B, info.C);
     struct timeval new_lag;
     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
     timersub(&info.current_time, &new_lag, &loss_time);
@@ -3008,10 +3009,16 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
+
+        // calc send_q_limit_threshold
+        info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
+        if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
+            info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL;
+        }
         
         // compute `global` flag - can we ever send new packets due to global limitations?
-        ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
-                           || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
+        ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
+                           || (send_q_limit_cubic_apply <= info.send_q_limit_threshold) 
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
