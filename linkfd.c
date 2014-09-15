@@ -123,7 +123,6 @@ struct my_ip {
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
-#define AG_GLOBAL_SPD_PRECENT 50 //% of magic_speed to reach to allow for AG
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
 
@@ -2643,7 +2642,6 @@ int lfd_linker(void)
     info.rsr = RSR_TOP;
     info.send_q_limit = RSR_TOP;
     info.send_q_limit_cubic_max = RSR_TOP;
-    int magic_speed = 0;
     int agag = 0; // AG_MODE aggressiveness value 0 to 256
     int ag_flag = R_MODE;
     int ag_flag_local_prev = R_MODE;
@@ -2661,11 +2659,8 @@ int lfd_linker(void)
         gettimeofday(&info.rtt2_tv[i], NULL);
     }
     info.rtt2 = 0;
-    info.max_sqspd = 0;
     int was_hold_mode = 0; // TODO: remove, testing only!
     int send_q_eff_mean = 0;
-    //int head_in = 0;
-    //int head_out = 0;
     int channel_dead = 0;
     int exact_rtt = 0;
     int t; // time for W
@@ -3014,13 +3009,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
         
-        // now choose ag_flag_local
-        if(shm_conn_info->stats[max_chan].max_send_q < SENQ_Q_LIMIT_THRESHOLD) {
-            magic_speed = 99999999;
-        } else {
-            magic_speed = (shm_conn_info->stats[max_chan].max_send_q / shm_conn_info->stats[max_chan].rtt_phys_avg) * 1000;
-        }
-        
         // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ((    (info.rsr <= SENQ_Q_LIMIT_THRESHOLD)  
                            || (send_q_limit_cubic_apply <= SENQ_Q_LIMIT_THRESHOLD) 
@@ -3040,7 +3028,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
         }
         if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
-        //if( (max_speed * 10) < (magic_speed * (AG_GLOBAL_SPD_PRECENT / 10)) ) ag_flag_local = R_MODE; // this is dumb; we almost certainly count the speed wrong
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         if(ag_flag_local == AG_MODE) {
@@ -3309,24 +3296,19 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
-                add_json(js_buf, &js_cur, "magic_speed", "%d", magic_speed);
-                add_json(js_buf, &js_cur, "max_sqspd", "%d", info.max_sqspd);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-                add_json(js_buf, &js_cur, "drop", "%d", drop_counter);
                 add_json(js_buf, &js_cur, "dropping", "%d", shm_conn_info->dropping);
                 add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
                 add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
-                add_json(js_buf, &js_cur, "skip", "%d", skip);
+                //add_json(js_buf, &js_cur, "skip", "%d", skip);
                 add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
                 add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
                 skip=0;
-                add_json(js_buf, &js_cur, "head_in", "%d", shm_conn_info->stats[info.process_num].head_in);
-                //add_json(js_buf, &js_cur, "head_out", "%d", head_out);
                 // bandwidth utilization extimation experiment
-                //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&info.bdp1));
-                add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
+                //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
+                /*
                 int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
                 int rbu = -1;
                 int rbu_s = -1;
@@ -3336,10 +3318,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     if(rbu != 0) {
                         rbu_s = max_ACS2 / rbu * 100;
                     } 
-                }
+                }*/
                 
-                add_json(js_buf, &js_cur, "rbu", "%d", rbu);
-                add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
+                //add_json(js_buf, &js_cur, "rbu", "%d", rbu);
+                //add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
 
                 uint32_t m_lsn = 0;
                 int lmax = 0;
@@ -3377,6 +3359,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 // now get slope
                 int slope = get_slope(&smalldata);
                 add_json(js_buf, &js_cur, "slope", "%d", slope);
+                add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
+                add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
+                add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
+                add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
                 
                 print_json(js_buf, &js_cur);
 #endif
@@ -4521,7 +4507,7 @@ if(drop_packet_flag) {
                      |    |     / __ \\  \___|    <\  ___/|  |          
                      |____|    (____  /\___  >__|_ \\___  >__|          
                                     \/     \/     \/    \/              
-                    
+                    payload packet
                      */
                     
                     gettimeofday(&info.current_time, NULL);
@@ -4544,11 +4530,6 @@ if(drop_packet_flag) {
                         info.srtt2_10 += (info.rtt2*10 - info.srtt2_10) / 7;
                         if (info.rtt2 <= 0) info.rtt2 = 1;
 
-                        if ((chan_num == my_max_send_q_chan_num)) {
-                            // calculate speed.. ?
-                            info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 50;
-                            //vtun_syslog(LOG_INFO, "max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
-                        }
                     }
 
                     if ((start_of_train != 0) && (chan_num == 1)) {
@@ -4640,7 +4621,6 @@ if(drop_packet_flag) {
                         info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                     }
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
-                    shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
                     shm_conn_info->stats[info.process_num].rtt2 = info.rtt2; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     shm_conn_info->stats[info.process_num].srtt2_10 = info.srtt2_10; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     sem_post(&(shm_conn_info->stats_sem));
