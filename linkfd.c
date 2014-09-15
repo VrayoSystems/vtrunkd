@@ -2148,7 +2148,7 @@ int get_slope(struct _smalldata *sd) {
     int len = SLOPE_POINTS; // 15 datapoints to draw slope
     int pts = 0;
     int to_idx = set_smalldata_weights(sd, &pts);
-    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 5) { // TODO: is 5 ok for slope?
+    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 15) { // TODO: is 5 ok for slope?
         return 999999; // could not get slope?
     }
     int from_idx = to_idx / SD_PARITY - len;
