@@ -1457,7 +1457,8 @@ int write_buf_check_n_flush(int logical_channel) {
     int len;
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
-    struct timeval tv_tmp;
+    int proper_rtt = 200, rtt_fix; //in ms
+    struct timeval tv_tmp, rtt_fix_tv;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
@@ -1473,11 +1474,17 @@ int write_buf_check_n_flush(int logical_channel) {
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
+        rtt_fix = proper_rtt - shm_conn_info->frames_buf[fprev].current_rtt;
+        vtun_syslog(LOG_ERR, "rtt_fix -  %d, exact_rtt %i", rtt_fix, shm_conn_info->frames_buf[fprev].current_rtt);
+        rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
+        rtt_fix_tv.tv_sec = rtt_fix / 1000;
+        rtt_fix_tv.tv_usec = (rtt_fix % 1000) * 1000;
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
+
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
+        if ((cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) {
+                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && timercmp(&rtt_fix_tv, &tv_tmp, >=)) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
@@ -1647,6 +1654,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].sender_pid = mypid;
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
+    shm_conn_info->frames_buf[newf].current_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
