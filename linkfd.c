@@ -3761,7 +3761,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         /* Detect that we need to enter retransmit_send as soon as possible 
             (some packets left unsent AND we're not holding) */
         int need_retransmit = 0;
-        if( (ag_flag_local == R_MODE) && (hold_mode == 0) ) { // WARNING: if AG_MODE? or of DROP mode?
+        if( (ag_flag == R_MODE) && (hold_mode == 0) ) { // WARNING: if AG_MODE? or of DROP mode?
             sem_wait(&(shm_conn_info->common_sem));
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
