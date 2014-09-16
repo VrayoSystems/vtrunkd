@@ -2794,6 +2794,21 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
+            // Push down envelope
+            if(send_q_eff < (int32_t)info.send_q_limit_cubic) {
+                int new_cubic = (int32_t)info.send_q_limit_cubic - ((int32_t)info.send_q_limit_cubic - send_q_eff)/30;
+                int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
+                if(!percent_delta_equal(&send_q_eff, &send_q_limit_cubic_apply, 20)) {
+                    vtun_syslog(LOG_INFO, "WARNING: External loss detected!");
+                }
+                t = (int) t_from_W( new_cubic, info.send_q_limit_cubic_max, info.B, info.C);
+                vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
+                struct timeval new_lag;
+                ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
+                timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
+                shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
+                set_W_unsync(t);
+            }
         }
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
             // now check all other chans
