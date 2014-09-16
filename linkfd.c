@@ -2804,17 +2804,18 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 struct timeval new_lag;
                 ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
                 timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
-                shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
                 set_W_unsync(t);
             }
         }
 
+        /* Temporarily disabled this due to massive loss :-\
         if(send_q_eff > info.send_q_limit_threshold && (send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
             vtun_syslog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
             ELD_send_q_max = send_q_eff;
         } else if (send_q_eff > ELD_send_q_max) {
             ELD_send_q_max = send_q_eff;
         }
+        */
 
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off! <-- remove this code
             // now check all other chans
