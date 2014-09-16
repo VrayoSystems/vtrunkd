@@ -2635,7 +2635,7 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    info.C = C_HI;
+    info.C = C_LOW;
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
