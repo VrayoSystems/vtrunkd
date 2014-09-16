@@ -581,7 +581,8 @@ int check_delivery_time_unsynced() {
         // vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
         return 0;
     }
-    if( info.rsr < info.send_q_limit_threshold) {
+    // TODO: re-think this!
+    if( info.rsr < info.send_q_limit_threshold && (shm_conn_info->max_chan != info.process_num)) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < RSR", info.rsr, (int32_t)info.send_q_limit_cubic);
         return 0;
     }
@@ -3003,11 +3004,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             set_W_unsync(t);
         }
 
-        //int32_t send_q_limit_cubic_apply = info.send_q_limit_cubic > RSR_TOP ? RSR_TOP : (int32_t)info.send_q_limit_cubic;
         int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
-        //if (send_q_limit_cubic_apply > RSR_TOP) {
-        //    send_q_limit_cubic_apply = RSR_TOP;
-        //}
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
