@@ -134,6 +134,9 @@ struct my_ip {
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
+#define DEAD_RTT 1500 // ms. RTT to consider chan dead
+#define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
+
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
 #define TRAIN_PKTS 80
@@ -1119,7 +1122,7 @@ int retransmit_send(char *out2, int n_to_send) {
         uint16_t sum;
         len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
-        if(info.rtt2_lsn[i] == 0) {
+        if( (info.rtt2_lsn[i] == 0) && ((shm_conn_info->stats[info.process_num].max_ACS2/info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
             info.rtt2_lsn[i] = info.channel[i].local_seq_num;
             info.rtt2_tv[i] = info.current_time;
             info.rtt2_send_q[i] = info.channel[i].send_q;
@@ -1395,7 +1398,7 @@ if(drop_packet_flag) {
         sum=0;
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
-        if(info.rtt2_lsn[chan_num] == 0) {
+        if( (info.rtt2_lsn[chan_num] == 0) && ((shm_conn_info->stats[info.process_num].max_ACS2/info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
             info.rtt2_lsn[chan_num] = info.channel[chan_num].local_seq_num;
             info.rtt2_tv[chan_num] = info.current_time;
             info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
@@ -2886,17 +2889,25 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             shm_conn_info->dropping = 1;
         }
 
+        if(shm_conn_info->idle) {
+            // use rtt
+            if(shm_conn_info->stats[info.process_num].exact_rtt > DEAD_RTT) {
+                channel_dead = 1;
+            } else {
+                channel_dead = 0;
+            }
+        } else {
+            // TODO: what if info.rsr is ~ 0 ??
+            channel_dead = (percent_delta_equal(send_q_eff, info.rsr, DEAD_RSR_USG) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0)));
+        }
 
-        channel_dead = (info.channel[my_max_send_q_chan_num].send_q > 3000) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0)); // TODO: WARNING: chan always dead at start!!!
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
             vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d)", lfd_host->host, info.head_channel);
             shm_conn_info->last_switch_time.tv_sec = 0;
-            // TODO: if HEAD => immediate action required!
             if(info.head_channel) {
                 vtun_syslog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
                 redetect_head_unsynced(chan_mask, info.head_channel);
             }
-            //set_max_chan(chan_mask);
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
