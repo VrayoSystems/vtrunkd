@@ -2809,7 +2809,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
         }
 
-        if((send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
+        if(send_q_eff > info.send_q_limit_threshold && (send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
             vtun_syslog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
             ELD_send_q_max = send_q_eff;
         } else if (send_q_eff > ELD_send_q_max) {
