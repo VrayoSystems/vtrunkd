@@ -2706,6 +2706,7 @@ struct timeval cpulag;
     sem_post(&(shm_conn_info->stats_sem));
     struct timeval peso_lrl_ts = info.current_time;
     int32_t peso_old_last_recv_lsn = 10;
+    int ELD_send_q_max = 0;
     
 /**
  *
@@ -2797,12 +2798,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // Push down envelope
             if(send_q_eff < (int32_t)info.send_q_limit_cubic) {
                 int new_cubic = (int32_t)info.send_q_limit_cubic - ((int32_t)info.send_q_limit_cubic - send_q_eff)/30;
-                int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
-                if(!percent_delta_equal(&send_q_eff, &send_q_limit_cubic_apply, 20)) {
-                    vtun_syslog(LOG_INFO, "WARNING: External loss detected!");
-                }
                 t = (int) t_from_W( new_cubic, info.send_q_limit_cubic_max, info.B, info.C);
-                vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
+                // No logs here: it will always be trying to converge here
+                //vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
                 struct timeval new_lag;
                 ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
                 timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
@@ -2810,7 +2808,15 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 set_W_unsync(t);
             }
         }
-        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off!
+
+        if((send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
+            vtun_syslog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
+            ELD_send_q_max = send_q_eff;
+        } else if (send_q_eff > ELD_send_q_max) {
+            ELD_send_q_max = send_q_eff;
+        }
+
+        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off! <-- remove this code
             // now check all other chans
             // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
             // shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
