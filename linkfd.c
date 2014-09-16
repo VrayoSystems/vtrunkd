@@ -2724,19 +2724,20 @@ struct timeval cpulag;
         errno = 0;
         super++;
         
-        if(send_q_eff_mean > SEND_Q_EFF_WORK) { // TODO: threshold depends on phys RTT and speed; investigate that!
+        timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
+        if( (send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=)) { // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
             }
             exact_rtt = info.rtt2; 
         } else {
+            // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt == 0!");
                 info.rtt = 1;
             }
-            //exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
-            exact_rtt = info.rtt; // rtt2 may exhibit wrong old value if no data is sent over net!
+            exact_rtt = info.rtt;
         }
 
         gettimeofday(&cpulag, NULL);
