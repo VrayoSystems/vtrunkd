@@ -1480,11 +1480,11 @@ int write_buf_check_n_flush(int logical_channel) {
         rtt_fix_tv.tv_sec = rtt_fix / 1000;
         rtt_fix_tv.tv_usec = (rtt_fix % 1000) * 1000;
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
-
+        vtun_syslog(LOG_ERR, "rtt_fix check-  %i", timercmp(&rtt_fix_tv, &tv_tmp, <=));
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if ((cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && timercmp(&rtt_fix_tv, &tv_tmp, >=)) {
+                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && timercmp(&rtt_fix_tv, &tv_tmp, <=)) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
