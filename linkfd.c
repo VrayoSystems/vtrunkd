@@ -1459,7 +1459,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int len;
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
-    int proper_rtt = 200, rtt_fix; //in ms
+    int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
@@ -1476,13 +1476,13 @@ int write_buf_check_n_flush(int logical_channel) {
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
-        rtt_fix = proper_rtt - shm_conn_info->frames_buf[fprev].current_rtt;
-        vtun_syslog(LOG_ERR, "rtt_fix -  %d, exact_rtt %i", rtt_fix, shm_conn_info->frames_buf[fprev].current_rtt);
+        rtt_fix = shm_conn_info->forced_rtt_recv - shm_conn_info->frames_buf[fprev].current_rtt;
+//        vtun_syslog(LOG_ERR, "rtt_fix:%i, exact_rtt:%i", rtt_fix, shm_conn_info->frames_buf[fprev].current_rtt);
         rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
         rtt_fix_tv.tv_sec = rtt_fix / 1000;
         rtt_fix_tv.tv_usec = (rtt_fix % 1000) * 1000;
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
-        vtun_syslog(LOG_ERR, "rtt_fix check-  %i", timercmp(&rtt_fix_tv, &tv_tmp, <=));
+//        vtun_syslog(LOG_ERR, "rtt_fix check:%i", timercmp(&rtt_fix_tv, &tv_tmp, <=));
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if ((cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
@@ -2728,7 +2728,7 @@ struct timeval cpulag;
     while( !linker_term ) {
         errno = 0;
         super++;
-        
+        gettimeofday(&info.current_time, NULL);
         if(send_q_eff_mean > SEND_Q_EFF_WORK) { // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
@@ -3788,6 +3788,22 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 need_retransmit = 1; // flood not-head to top for 'dropping time'
             }
         }
+        gettimeofday(&info.current_time);
+        sem_wait(&shm_conn_info->stats_sem);
+        if ((shm_conn_info->head_lossing) | (shm_conn_info->dropping)) {
+            if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
+                shm_conn_info->forced_rtt_start_grow = info.current_time;
+            }
+            struct timeval tmp_tv;
+            timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
+            shm_conn_info->forced_rtt = ((int) (tmp_tv.tv_sec * 1000 + tmp_tv.tv_usec / 1000)) * 10;
+        } else {
+            shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
+            shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
+            shm_conn_info->forced_rtt = 0;
+        }
+        sem_post(&shm_conn_info->stats_sem);
+
         
 
                     /*
