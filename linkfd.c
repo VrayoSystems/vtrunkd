@@ -615,7 +615,7 @@ int check_rtt_latency_drop() {
 }
 
 // TODO: this must be heavily optimized! vvv
-inline int check_force_rtt_max_wait_time(int chan_num) {
+static inline int check_force_rtt_max_wait_time(int chan_num) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     int cnt = 0;
     int max_wait = 0, rtt_fix;
