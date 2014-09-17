@@ -556,6 +556,9 @@ struct conn_info {
     int max_chan;
     int dropping;
     int head_lossing;
+    struct timeval forced_rtt_start_grow;
+    int forced_rtt;
+    int forced_rtt_recv; //in ms
     int idle;
     struct timeval drop_time;
     struct {
