@@ -1482,8 +1482,7 @@ int write_buf_check_n_flush(int logical_channel) {
         rtt_fix = shm_conn_info->forced_rtt_recv - shm_conn_info->frames_buf[fprev].current_rtt;
         vtun_syslog(LOG_ERR, "rtt_fix:%i, exact_rtt:%i", rtt_fix, shm_conn_info->frames_buf[fprev].current_rtt);
         rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
-        rtt_fix_tv.tv_sec = rtt_fix / 1000;
-        rtt_fix_tv.tv_usec = (rtt_fix % 1000) * 1000;
+        ms2tv(&rtt_fix_tv, rtt_fix);
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         vtun_syslog(LOG_ERR, "rtt_fix check:%i", timercmp(&rtt_fix_tv, &tv_tmp, <=));
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
@@ -1659,7 +1658,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].sender_pid = mypid;
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
-    shm_conn_info->frames_buf[newf].current_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
+    shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
@@ -2715,6 +2714,7 @@ struct timeval cpulag;
     struct timeval peso_lrl_ts = info.current_time;
     int32_t peso_old_last_recv_lsn = 10;
     int ELD_send_q_max = 0;
+    int need_send_FCI = 0;
     
 /**
  *
@@ -2748,6 +2748,7 @@ struct timeval cpulag;
             }
             exact_rtt = info.rtt;
         }
+        info.exact_rtt = exact_rtt;
 
         gettimeofday(&cpulag, NULL);
 
@@ -2814,6 +2815,30 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
                 set_W_unsync(t);
             }
+            // push up forced_rtt
+            
+                sem_wait(write_buf_sem);
+                if ((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) {
+                    if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
+                        shm_conn_info->forced_rtt_start_grow = info.current_time;
+                    }
+                    struct timeval tmp_tv;
+                    timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
+                    int time = tv2ms(&tv_tmp) / 20; // 15x slower time
+                    // TODO: overflow here! ^^^
+                    time = time > 500 ? 500 : time; // max 500ms
+                    if(shm_conn_info->forced_rtt != time) {
+                        shm_conn_info->forced_rtt = time;
+                        need_send_FCI = 1; // force immediate FCI send!
+                    }
+                } else {
+                    shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
+                    shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
+                    shm_conn_info->forced_rtt = 0;
+                }
+                sem_post(write_buf_sem);
+        
+
         }
 
         /* Temporarily disabled this due to massive loss :-\
@@ -3474,7 +3499,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // split LOSS event generation and bytes-in-flight (LLRS)
 
             // FCI - LLRS: TODO: remove dup code below (FCI packet formation)
-            if((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result) {
+            if((info.channel[i].packet_recv_counter > FCI_P_INTERVAL) || timer_result || need_send_FCI) {
+                need_send_FCI = 0;
                 fast_update_timer(recv_n_loss_send_timer, &info.current_time);
                 tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
                 memcpy(buf, &tmp16_n, sizeof(uint16_t)); // amt of rcvd packets
@@ -3493,11 +3519,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 tmp32_n = htonl(info.channel[i].local_seq_num);
                 memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
                 uint16_t tmp16 = ((uint16_t) (-1));
-                sem_wait(&shm_conn_info->stats_sem);
+                sem_wait(write_buf_sem);
                 if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
                     tmp16 = shm_conn_info->forced_rtt;
                 }
-                sem_post(&shm_conn_info->stats_sem);
+                sem_post(write_buf_sem);
                 tmp16_n = htons(tmp16); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
 
@@ -3560,11 +3586,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     tmp32_n = htonl(info.channel[i].packet_download);
                     memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
                     uint16_t tmp16 = ((uint16_t) (-1));
-                    sem_wait(&shm_conn_info->stats_sem);
+                    sem_wait(write_buf_sem);
                     if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
                         tmp16 = shm_conn_info->forced_rtt;
                     }
-                    sem_post(&shm_conn_info->stats_sem);
+                    sem_post(write_buf_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
 
@@ -3838,24 +3864,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 need_retransmit = 1; // flood not-head to top for 'dropping time'
             }
         }
-        gettimeofday(&info.current_time, NULL);
-        sem_wait(&shm_conn_info->stats_sem);
-        if ((shm_conn_info->head_lossing) | (shm_conn_info->dropping)) {
-            if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
-                memcpy(&shm_conn_info->forced_rtt_start_grow, &info.current_time, sizeof(struct timeval));
-            }
-            struct timeval tmp_tv;
-            timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-            int time = ((int) (tmp_tv.tv_sec * 1000 + tmp_tv.tv_usec / 1000)) * 10;
-            time = time > 500 ? 500 : time;
-            shm_conn_info->forced_rtt = time * 10;
-        } else {
-            shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
-            shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
-            shm_conn_info->forced_rtt = 0;
-        }
-        sem_post(&shm_conn_info->stats_sem);
-
+        // gettimeofday(&info.current_time, NULL); // TODO: required??
+        
         
 
                     /*
@@ -4296,9 +4306,12 @@ if(drop_packet_flag) {
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); //forced_rtt
-                            sem_wait(&shm_conn_info->stats_sem);
+                            
+                            sem_wait(write_buf_sem);
                             shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n);
-                            sem_post(&shm_conn_info->stats_sem);
+                            sem_post(write_buf_sem);
+                            vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
+                            
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;

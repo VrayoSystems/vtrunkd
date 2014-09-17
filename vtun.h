@@ -446,7 +446,7 @@ struct _smalldata {
  * Structure for storing all information about
  * physical channel
  */
-struct phisical_status {
+struct phisical_status { // A.K.A. "info"
     /** Common information */
     int process_num;    /**< Current physical channel's number */
     int pid; /**< Our pid is got on this side by getpid()  */
@@ -506,6 +506,7 @@ struct phisical_status {
     struct timeval max_latency_drop;
     int eff_len;
     int send_q_limit_threshold;
+    int exact_rtt;
 };
 
 struct conn_info {
