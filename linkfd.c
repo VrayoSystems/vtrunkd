@@ -3483,20 +3483,21 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 tmp16_n = htons(FRAME_CHANNEL_INFO);  // flag
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
-                uint16_t tmp16 = ((uint16_t) (-1));
-                sem_wait(&shm_conn_info->stats_sem);
-                if ((unsigned int)shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
-                    tmp16 = shm_conn_info->forced_rtt;
-                }
-                sem_post(&shm_conn_info->stats_sem);
-                tmp16_n = htons(tmp16); //forced_rtt here
+                memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                tmp16_n = htons((uint16_t) i); // chan_num ?? not needed in fact TODO remove
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 struct timeval tmp_tv;
                 // local_seq_num
                 tmp32_n = htonl(info.channel[i].local_seq_num);
                 memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
-                tmp32_n = htonl(info.channel[i].packet_download);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                uint16_t tmp16 = ((uint16_t) (-1));
+                sem_wait(&shm_conn_info->stats_sem);
+                if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
+                    tmp16 = shm_conn_info->forced_rtt;
+                }
+                sem_post(&shm_conn_info->stats_sem);
+                tmp16_n = htons(tmp16); //forced_rtt here
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
 
                         if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -3550,18 +3551,18 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // flag
                     tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                     memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                    tmp16_n = htons((uint16_t) i); // chan_num
+                    memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //chan_num
+                    tmp32_n = htonl(info.channel[i].local_seq_num); // local_seq_num
+                    memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
                     uint16_t tmp16 = ((uint16_t) (-1));
                     sem_wait(&shm_conn_info->stats_sem);
-                    if ((unsigned int)shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
+                    if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
                         tmp16 = shm_conn_info->forced_rtt;
                     }
                     sem_post(&shm_conn_info->stats_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
-                    memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //chan_num - no need TODO remove
-                    tmp32_n = htonl(info.channel[i].local_seq_num); // local_seq_num
-                    memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
-                    tmp32_n = htonl(info.channel[i].packet_download); // down speed per current chan (ACS?)
-                    memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                    memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
 
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
@@ -4288,14 +4289,14 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
-                            memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
+                            memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint16_t)); //forced_rtt
                             sem_wait(&shm_conn_info->stats_sem);
-                            shm_conn_info->forced_rtt_recv = (int)ntohs(tmp16_n);
+                            shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n);
                             sem_post(&shm_conn_info->stats_sem);
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
-                            if(info.max_send_q < info.channel[chan_num].send_q) {
+                            if (info.max_send_q < info.channel[chan_num].send_q) {
                                 info.max_send_q = info.channel[chan_num].send_q;
                             }
                             //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
