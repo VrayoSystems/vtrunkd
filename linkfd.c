@@ -2827,8 +2827,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     int time = tv2ms(&tv_tmp) / 20; // 15x slower time
                     // TODO: overflow here! ^^^
                     time = time > 500 ? 500 : time; // max 500ms
+                    vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
                     if(shm_conn_info->forced_rtt != time) {
                         shm_conn_info->forced_rtt = time;
+                        vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
                         need_send_FCI = 1; // force immediate FCI send!
                     }
                 } else {
