@@ -4276,9 +4276,10 @@ if(drop_packet_flag) {
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
                             uint32_t tmp32_n;
                             uint16_t tmp16_n;
-                            int chan_num;
-                            memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
-                            chan_num = (int)ntohs(tmp16_n);
+                            // int chan_num; // no need to redefine chan_num as it is known due to 
+                            //memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
+                            //chan_num = (int)ntohs(tmp16_n); // this is force-rtt
+                            chan_num = 1; 
                             gettimeofday(&info.current_time, NULL);
                             memcpy(&info.channel[chan_num].send_q_time, &info.current_time, sizeof(struct timeval));
                             memcpy(&tmp16_n, buf, sizeof(uint16_t));
