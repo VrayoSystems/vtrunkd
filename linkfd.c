@@ -2824,7 +2824,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     }
                     struct timeval tmp_tv;
                     timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                    int time = tv2ms(&tv_tmp) / 20; // 15x slower time
+                    int time = tv2ms(&tmp_tv) / 20; // 15x slower time
                     // TODO: overflow here! ^^^
                     time = time > 500 ? 500 : time; // max 500ms
                     vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
