@@ -134,8 +134,8 @@ struct my_ip {
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
-#define LIN_RTT_SLOWDOWN 40 // Grow rtt 40x slower than real-time
-#define LIN_FORCE_RTT_GROW 500 // ms
+#define LIN_RTT_SLOWDOWN 80 // Grow rtt 40x slower than real-time
+#define LIN_FORCE_RTT_GROW 300 // ms
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -2864,10 +2864,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
                     // TODO: overflow here! ^^^
                     time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
-                    vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
+                    //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
                     if(shm_conn_info->forced_rtt != time) {
                         shm_conn_info->forced_rtt = time;
-                        vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
+                        //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
                         need_send_FCI = 1; // force immediate FCI send!
                     }
                 } else {
@@ -3417,6 +3417,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 //add_json(js_buf, &js_cur, "skip", "%d", skip);
                 add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
                 add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
+                add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
+                add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
                 skip=0;
                 // bandwidth utilization extimation experiment
                 //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
@@ -4362,7 +4364,7 @@ if(drop_packet_flag) {
                                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             }
                             sem_post(write_buf_sem);
-                            vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
+                            //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
