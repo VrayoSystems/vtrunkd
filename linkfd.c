@@ -685,11 +685,8 @@ int get_write_buf_wait_data() {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
                 return 1;
-            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { //check for each packet time
-                timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &tv_tmp);
-                if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                    return 1;
-                }
+            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
+                return 1; // do NOT add any other if's here - it SHOULD drop immediately!
             }
         }
     }
