@@ -615,7 +615,7 @@ int check_rtt_latency_drop() {
 }
 
 // TODO: this must be heavily optimized! vvv
-inline int force_rtt_check_max_wait_time(int chan_num) {
+inline int check_force_rtt_max_wait_time(int chan_num) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     int cnt = 0;
     int max_wait = 0, rtt_fix;
@@ -674,7 +674,7 @@ int get_write_buf_wait_data() {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
-                if(force_rtt_check_max_wait_time(i)) {
+                if(check_force_rtt_max_wait_time(i)) {
                     forced_rtt_reached=1;
                     return 1; // only say "OK" if forced_rtt reached
                 } else {

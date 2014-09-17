@@ -80,6 +80,9 @@ static inline void lfd_free(void *buf)
      free(ptr-LINKFD_FRAME_RESERV);
 }
 
+
+inline int check_force_rtt_max_wait_time(int chan_num);
+
 int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int conn_num);
 /* Module */
 struct lfd_mod {
