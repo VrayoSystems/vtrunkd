@@ -3508,7 +3508,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -3576,7 +3576,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((4 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
                     if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -3846,7 +3846,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
             struct timeval tmp_tv;
             timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-            shm_conn_info->forced_rtt = ((int) (tmp_tv.tv_sec * 1000 + tmp_tv.tv_usec / 1000)) * 10;
+            int time = ((int) (tmp_tv.tv_sec * 1000 + tmp_tv.tv_usec / 1000)) * 10;
+            time = time > 500 ? 500 : time;
+            shm_conn_info->forced_rtt = time * 10;
         } else {
             shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
             shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
