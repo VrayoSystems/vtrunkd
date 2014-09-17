@@ -668,25 +668,21 @@ int get_write_buf_wait_data() {
         }
         
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
+            forced_rtt_reached=check_force_rtt_max_wait_time(i);
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
-                if(check_force_rtt_max_wait_time(i)) {
-                    forced_rtt_reached=1;
-                    return 1; // only say "OK" if forced_rtt reached
-                } else {
-                    forced_rtt_reached=0;
-                }
+                return forced_rtt_reached;
             } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
                 return 1;
             } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
-                return 1; // do NOT add any other if's here - it SHOULD drop immediately!
+                return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
             }
         }
     }
@@ -1519,9 +1515,11 @@ int write_buf_check_n_flush(int logical_channel) {
         }
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if ((cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
+        if (             (cond_flag && forced_rtt_reached) 
+                      || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && forced_rtt_reached) {
+                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
+           ) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
