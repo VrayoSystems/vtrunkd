@@ -112,9 +112,9 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_LATENCY_DROP_USEC 230000 // typ. is 204-250 upto 450 max RTO at CUBIC
-#define MAX_LATENCY_FACTOR 30 // max_latency_drop = max_reorder_latency * MAX_LATENCY_FACTOR
-//#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default
+#define MAX_LATENCY_DROP_USEC 180000 // typ. is 204-250 upto 450 max RTO at CUBIC
+#define MAX_LATENCY_DROP_SHIFT 100 // ms. to add to forced_rtt - or use above
+//#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
@@ -133,6 +133,9 @@ struct my_ip {
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
+
+#define LIN_RTT_SLOWDOWN 40 // Grow rtt 40x slower than real-time
+#define LIN_FORCE_RTT_GROW 500 // ms
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -166,6 +169,7 @@ int jsSQ_cur;
 uint8_t time_lag_ready;
 
 int skip=0;
+int forced_rtt_reached=1;
 
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
@@ -610,6 +614,38 @@ int check_rtt_latency_drop() {
     return 1;
 }
 
+// TODO: this must be heavily optimized! vvv
+inline int force_rtt_check_max_wait_time(int chan_num) {
+    int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
+    int cnt = 0;
+    int max_wait = 0, rtt_fix;
+    struct timeval tv_tmp, rtt_fix_tv, max_wait_tv = {0,0};
+    
+    if(shm_conn_info->forced_rtt_recv == 0) return 1;
+
+    while(i > -1) {
+        rtt_fix = shm_conn_info->forced_rtt_recv - shm_conn_info->frames_buf[i].current_rtt;
+        rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
+        ms2tv(&rtt_fix_tv, rtt_fix);
+        timersub(&info.current_time, &shm_conn_info->frames_buf[i].time_stamp, &tv_tmp);
+        if ( timercmp(&tv_tmp, &max_wait_tv, >=) ) {
+            max_wait_tv = tv_tmp;
+        }
+
+        // TODO: code with rtt in account - is much more heavier than just oldest packet
+//        if ( timercmp(&shm_conn_info->frames_buf[i].time_stamp, &max_wait_tv, >=) ) {
+//            max_wait_tv = shm_conn_info->frames_buf[i].time_stamp;
+//        }
+
+        n = shm_conn_info->frames_buf[i].rel_next;
+        i = n;
+        
+        cnt++;
+        if(cnt > 200) break; // do not look too deep?
+    }
+    ms2tv(&tv_tmp, shm_conn_info->forced_rtt_recv);
+    return timercmp(&max_wait_tv, &tv_tmp, >=);
+}
 
 int get_write_buf_wait_data() {
     // TODO WARNING: is it synchronized?
@@ -638,7 +674,12 @@ int get_write_buf_wait_data() {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
-                return 1;
+                if(force_rtt_check_max_wait_time(i)) {
+                    forced_rtt_reached=1;
+                    return 1; // only say "OK" if forced_rtt reached
+                } else {
+                    forced_rtt_reached=0;
+                }
             } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
@@ -1479,16 +1520,11 @@ int write_buf_check_n_flush(int logical_channel) {
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
-        rtt_fix = shm_conn_info->forced_rtt_recv - shm_conn_info->frames_buf[fprev].current_rtt;
-        vtun_syslog(LOG_ERR, "rtt_fix:%i, exact_rtt:%i", rtt_fix, shm_conn_info->frames_buf[fprev].current_rtt);
-        rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
-        ms2tv(&rtt_fix_tv, rtt_fix);
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
-        vtun_syslog(LOG_ERR, "rtt_fix check:%i", timercmp(&rtt_fix_tv, &tv_tmp, <=));
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if ((cond_flag || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && timercmp(&rtt_fix_tv, &tv_tmp, <=)) {
+                      || ( shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel] )) && forced_rtt_reached) {
             if (!cond_flag) {
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
@@ -2715,6 +2751,7 @@ struct timeval cpulag;
     int32_t peso_old_last_recv_lsn = 10;
     int ELD_send_q_max = 0;
     int need_send_FCI = 0;
+    info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
     
 /**
  *
@@ -2824,9 +2861,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     }
                     struct timeval tmp_tv;
                     timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                    int time = tv2ms(&tmp_tv) / 20; // 15x slower time
+                    int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
                     // TODO: overflow here! ^^^
-                    time = time > 500 ? 500 : time; // max 500ms
+                    time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
                     vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
                     if(shm_conn_info->forced_rtt != time) {
                         shm_conn_info->forced_rtt = time;
@@ -3887,6 +3924,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                      * Now do a select () from all devices and channels
                      */
         sem_wait(write_buf_sem);
+        if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
+            ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at FCI recv
+        } else {
+            info.max_latency_drop.tv_sec = 0;
+            info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
+        }
+
         FD_ZERO(&fdset_w);
         if (get_write_buf_wait_data() || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
@@ -4311,6 +4355,12 @@ if(drop_packet_flag) {
                             
                             sem_wait(write_buf_sem);
                             shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n);
+                            if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
+                                ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select
+                            } else {
+                                info.max_latency_drop.tv_sec = 0;
+                                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
+                            }
                             sem_post(write_buf_sem);
                             vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
@@ -4581,9 +4631,6 @@ if(drop_packet_flag) {
                                 info.max_reorder_latency.tv_sec = 0;
                                 info.max_reorder_latency.tv_usec = info.rtt * 1000;
                             }
-                            //info.max_latency_drop.tv_usec = info.max_reorder_latency.tv_usec * MAX_LATENCY_FACTOR;
-                            //if(info.max_latency_drop.tv_usec > MAX_LATENCY_DROP_USEC) 
-                            info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             
                             sem_post(&(shm_conn_info->stats_sem));
                         }
