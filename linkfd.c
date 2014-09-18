@@ -134,8 +134,8 @@ struct my_ip {
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
-#define LIN_RTT_SLOWDOWN 80 // Grow rtt 40x slower than real-time
-#define LIN_FORCE_RTT_GROW 300 // ms
+#define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
+#define LIN_FORCE_RTT_GROW 20 // ms
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -2851,7 +2851,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // push up forced_rtt
             
                 sem_wait(write_buf_sem);
-                if ((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) {
+                if (((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
                     if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
                         shm_conn_info->forced_rtt_start_grow = info.current_time;
                     }
