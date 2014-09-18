@@ -614,7 +614,7 @@ int check_rtt_latency_drop() {
     return 1;
 }
 
-// TODO: this must be heavily optimized! vvv
+// TODO: this MUST be heavily optimized! vvv
 static inline int check_force_rtt_max_wait_time(int chan_num) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     int cnt = 0;
@@ -1498,6 +1498,7 @@ int write_buf_check_n_flush(int logical_channel) {
     struct timeval max_latency_drop = info.max_latency_drop;
     int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
+    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
 #ifdef DEBUGG
