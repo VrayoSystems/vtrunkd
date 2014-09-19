@@ -3268,7 +3268,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
         // fast convergence to underlying encap flow
         if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
-            int slope = get_slope(&smalldata);
+            //int slope = get_slope(&smalldata);
+            int slope = 1; // disable by now
             if(slope > -100000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
                     // calculate old t
@@ -3279,7 +3280,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
                     t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
                     struct timeval new_lag;
-                    vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope);
+                    //vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope); // this log is MESS!
                     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
                     timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
                     // now, we rely only on head_dropping in detection of congestion/speed reached AND switching on AG
