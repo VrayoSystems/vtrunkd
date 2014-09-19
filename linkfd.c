@@ -1621,7 +1621,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int newf;
     uint32_t istart;
     int j=0;
-
+/*  this code moved to upper level a few lines before call
     if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
         // TODO: this fix actually not required if we don't mess packets too much -->
         //if((seq_num - MAX_REORDER_PERPATH) > shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num]) {
@@ -1630,7 +1630,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     } else {
         shm_conn_info->write_buf[conn_num].last_received_seq_shadow[info.process_num] = seq_num;
     }
-
+*/
 /*
     if(conn_num <= 0) { // this is a workaround for some bug... TODO!!
             vtun_syslog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
@@ -3638,7 +3638,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
                     shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
-                    shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
+                    //shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                     sem_post(&(shm_conn_info->write_buf_sem));
 
                     memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
@@ -4862,13 +4862,12 @@ if(drop_packet_flag) {
                         }
                     } //else { } // OK, we're in order
 
+                    sem_wait(write_buf_sem);
                     if(info.channel[chan_num].local_seq_num_beforeloss != 0) {
                         if(info.channel[chan_num].packet_loss_counter == 0) { // situation normalized, all packets received
                             info.channel[chan_num].local_seq_num_beforeloss = 0;
-                            sem_wait(&(shm_conn_info->write_buf_sem));
                             shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
-                            shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
-                            sem_post(&(shm_conn_info->write_buf_sem));
+                            //shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
                         } else {
                             // TODO: why this? -->
                             if(local_seq_tmp == (info.channel[chan_num].local_seq_num_beforeloss + 1)) { // we received last lost pkt
@@ -4879,6 +4878,9 @@ if(drop_packet_flag) {
                                 info.channel[chan_num].packet_recv_counter_afterloss++; 
                             }
                         }
+                        shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = seq_num;
+                    } else {
+                        shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
                     }
 
                     // this is normal operation -->
@@ -4895,11 +4897,13 @@ if(drop_packet_flag) {
                     if(debug_trace) {
                         vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
                     }
+                    // HOLY CRAP! remove this! --->>>
                     // introduced virtual chan_num to be able to process
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
                          if(flag_var == 0) { // this is a workaround for some bug... TODO!!
                               vtun_syslog(LOG_ERR,"BUG! flag_var == 0 received on chan 0! sqn %"PRIu32", len %d. DROPPING",seq_num, len);
+                              sem_post(write_buf_sem);
                               continue;
                          } 
                          chan_num_virt = flag_var - FLAGS_RESERVED;
@@ -4912,7 +4916,6 @@ if(drop_packet_flag) {
 #endif
                     uint16_t my_miss_packets = 0;
                     info.channel[chan_num].last_recv_time = info.current_time;
-                    sem_wait(write_buf_sem);
                     succ_flag = 0;
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
