@@ -507,6 +507,9 @@ struct phisical_status { // A.K.A. "info"
     int eff_len;
     int send_q_limit_threshold;
     int exact_rtt;
+    int prev_flushed; // PBL/PSL flag
+    int flush_sequential; // PSL
+    int write_sequential; // PBL
 };
 
 struct conn_info {
