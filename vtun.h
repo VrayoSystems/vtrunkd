@@ -564,7 +564,7 @@ struct conn_info {
     int forced_rtt;
     int forced_rtt_recv; //in ms
     int idle;
-    struct timeval drop_time;
+    struct timeval drop_time; // time that we DROPPED by fact!
     struct {
 #define EFF_LEN_BUFF 15
         int warming_up;

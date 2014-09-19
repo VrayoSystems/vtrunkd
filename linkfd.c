@@ -2991,7 +2991,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
         
         sem_wait(&(shm_conn_info->stats_sem));
-        if(info.dropping) {
+        if(info.dropping) { // will ONLY drop if PESO in play. Never as of now...
             info.dropping = 0;
             shm_conn_info->drop_time = info.current_time;
             shm_conn_info->dropping = 1;
@@ -3280,10 +3280,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope);
                     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
                     timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
-                    shm_conn_info->drop_time = info.current_time; // fix what we've broken with previous (set ->dropping to 1)
+                    // now, we rely only on head_dropping in detection of congestion/speed reached AND switching on AG
                     set_W_unsync(t);
             } else {
                 vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
+                // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
             }
         }
 
@@ -3429,7 +3430,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
                 add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
                 add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-                add_json(js_buf, &js_cur, "dropping", "%d", shm_conn_info->dropping);
+                add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
                 add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
                 add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
                 add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
@@ -3547,10 +3548,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
 
         int timer_result=0;
-        if(shm_conn_info->dropping) {
+        if(shm_conn_info->dropping || shm_conn_info->head_lossing) {
             timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
         } else {
-            // idle timer?
+            // idle timer? // TODO: don't we need to send FCI if not sending on top speed??
+            // TODO: this may or even WILL result in jitter and speed degrade if congestion is e.g. not on the path
+            // TODO: out-of path congestion detection!
             timersub(&info.current_time, &(recv_n_loss_send_timer->start_time), &(recv_n_loss_send_timer->tmp));
             timer_result = timercmp(&(recv_n_loss_send_timer->tmp), &((struct timeval) {60, 0}), >=); // send each 60 seconds?
         }
