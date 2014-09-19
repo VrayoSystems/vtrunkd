@@ -135,7 +135,7 @@ struct my_ip {
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
-#define LIN_FORCE_RTT_GROW 20 // ms
+#define LIN_FORCE_RTT_GROW 20 // ms // TODO: need to find optimal value for required performance region
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -589,8 +589,8 @@ int check_delivery_time_unsynced() {
         return 0;
     }
     // TODO: re-think this!
-    if( info.rsr < info.send_q_limit_threshold && (shm_conn_info->max_chan != info.process_num)) {
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < RSR", info.rsr, (int32_t)info.send_q_limit_cubic);
+    if( ( (info.rsr < info.send_q_limit_threshold) || (info.send_q_limit_cubic < info.send_q_limit_threshold)) && (shm_conn_info->max_chan != info.process_num)) {
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[shm_conn_info->ax_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
@@ -2163,6 +2163,17 @@ int set_W_unsync(int t) {
     return 1;
 }
 
+int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
+    int new_cubic = (int32_t)info.send_q_limit_cubic - ((int32_t)info.send_q_limit_cubic - send_q) / slowness;
+    int t = (int) t_from_W( new_cubic, info.send_q_limit_cubic_max, info.B, info.C);
+    // No logs here: it will always be trying to converge here
+    //vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
+    struct timeval new_lag;
+    ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
+    timersub(&info.current_time, &new_lag, loss_time); // set new loss time back in time
+    set_W_unsync(t);
+}
+
 // returns max value for send_q (NOT index) at which weight is > 0.7
 int set_smalldata_weights( struct _smalldata *sd, int *pts) {
     struct timeval tv_tmp;
@@ -2821,6 +2832,9 @@ if(drop_packet_flag) {
 vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
 } 
 #endif
+        
+        
+        // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
@@ -2837,19 +2851,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
-            // Push down envelope
-            if(send_q_eff < (int32_t)info.send_q_limit_cubic) {
-                int new_cubic = (int32_t)info.send_q_limit_cubic - ((int32_t)info.send_q_limit_cubic - send_q_eff)/30;
-                t = (int) t_from_W( new_cubic, info.send_q_limit_cubic_max, info.B, info.C);
-                // No logs here: it will always be trying to converge here
-                //vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
-                struct timeval new_lag;
-                ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
-                timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
-                set_W_unsync(t);
-            }
-            // push up forced_rtt
             
+            // push up forced_rtt
                 sem_wait(write_buf_sem);
                 if (((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
                     if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
@@ -3269,6 +3272,13 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
             }
         }
+
+        // Push down envelope
+        if(info.head_channel && (send_q_eff < (int32_t)info.send_q_limit_cubic)) {
+            //set_W_to(send_q_eff, 30, &loss_time);
+            set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
+        }
+        
 
         sem_post(&(shm_conn_info->stats_sem));
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
