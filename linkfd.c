@@ -1031,7 +1031,7 @@ int retransmit_send(char *out2, int n_to_send) {
     }
     struct timeval tv = {0,0};
 
-    int len = 0, send_counter = 0, mypid;
+    int len = 0, send_counter = 0, mypid, get_unconditional = 0;
     uint32_t top_seq_num, seq_num_tmp = 1, remote_lws = SEQ_START_VAL;
     sem_wait(&(shm_conn_info->resend_buf_sem));
     if (check_fast_resend()){ // fast_resend technique is used for info.channel_amount > 1
@@ -1062,6 +1062,7 @@ int retransmit_send(char *out2, int n_to_send) {
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             if( (!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing)) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
+                get_unconditional = 1;
             } else {
                 if(check_delivery_time()) {
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
@@ -1111,7 +1112,9 @@ int retransmit_send(char *out2, int n_to_send) {
                 }
             }
         } else {
-            len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            // this is required to not read new packets if being pushed to top and all packets exhausted ->>>
+            if(get_unconditional) len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            else                  len = get_resend_frame              (i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
                 last_sent_packet_num[i].seq_num--;
                 if (check_delivery_time()) {
