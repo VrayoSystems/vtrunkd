@@ -2685,7 +2685,7 @@ int lfd_linker(void)
     set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
 
     struct timeval t_tv;
-    struct timeval loss_time, loss_immune, loss_tv = { 0, 0 };
+    struct timeval loss_time, loss_immune, loss_tv = { 0, 0 }, real_loss_time = {0,0};
     gettimeofday(&loss_time, NULL);
     gettimeofday(&loss_immune, NULL);
     
@@ -3385,7 +3385,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
                 
                 if(info.head_channel) {
-                    timersub(&(info.current_time), &loss_time, &tv_tmp_tmp_tmp);
+                    timersub(&(info.current_time), &real_loss_time, &tv_tmp_tmp_tmp);
                     if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
                         shm_conn_info->head_lossing = 0;
                     } else {
@@ -4417,6 +4417,7 @@ if(drop_packet_flag) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
+                                real_loss_time = info.current_time; // received loss event time
                                 if(info.head_channel) {
                                     sem_wait(&(shm_conn_info->stats_sem));
                                     if(shm_conn_info->idle) {
