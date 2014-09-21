@@ -144,6 +144,8 @@ struct my_ip {
 //#define NOCONTROL
 //#define NO_ACK
 
+#define RCVBUF_SIZE 312992
+
 // #define TIMEWARP
 
 #ifdef TIMEWARP
@@ -2474,6 +2476,11 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "send buffer size = %d\n", sendbuff);
             }
 
+            sendbuff = RCVBUF_SIZE;
+            if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
+                vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
+            }
+
 //            prio_opt = 1;
 //            setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
             for (; ; ++port_tmp <= lfd_host->end_port) {
@@ -4252,6 +4259,12 @@ if(drop_packet_flag) {
                                     }
                                 }
 #endif
+                                sendbuff = RCVBUF_SIZE;
+                                if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
+                                    vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
+                                }
+
+
                                 rmaddr.sin_port = htons(info.channel[i].rport);
                                 connect(info.channel[i].descriptor, (struct sockaddr *)&rmaddr, sizeof(rmaddr));
                                 // send PING request
