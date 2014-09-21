@@ -117,7 +117,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 2990000 // now infinity...
-#define DROPPING_LOSSING_DETECT_SECONDS 4 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
+#define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 #define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
@@ -133,7 +133,7 @@ struct my_ip {
 #define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
-#define LIN_FORCE_RTT_GROW 20 // ms // TODO: need to find optimal value for required performance region
+#define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -3058,6 +3058,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
+            info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
         } else {
             if (shm_conn_info->stats[max_chan].ACK_speed < 1000) {
                 shm_conn_info->stats[max_chan].ACK_speed = 1000;
@@ -3070,6 +3071,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
             int rsr_top = shm_conn_info->stats[max_chan].W_cubic;
+            info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
             if(rsr_top > 500000) {
                 info.send_q_limit = ( (rsr_top / 1000) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
@@ -3096,7 +3098,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if (info.send_q_limit > RSR_TOP) {
                 info.send_q_limit = RSR_TOP;
             }
-            
+
+            if(info.send_q_limit < info.send_q_limit_threshold) {
+                info.send_q_limit = info.send_q_limit_threshold - 1;
+            }
+               
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
@@ -3134,11 +3140,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
 
         // calc send_q_limit_threshold
-        info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
         if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
             info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL;
         }
-        
         // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
                            || (send_q_limit_cubic_apply <= info.send_q_limit_threshold) 
