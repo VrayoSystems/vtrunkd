@@ -144,7 +144,7 @@ struct my_ip {
 //#define NOCONTROL
 //#define NO_ACK
 
-#define RCVBUF_SIZE 312992
+#define RCVBUF_SIZE 1048576
 
 // #define TIMEWARP
 
