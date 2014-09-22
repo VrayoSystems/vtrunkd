@@ -2150,19 +2150,25 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
         } else { // means max_chan = -1; find first alive chan
-            // TODO: this does not mean all dead, but rather means that we have found correct HEAD!
-            int OK= 0;
+            // Two possibilities here: 1. we detected correct channel 2. there is only one channel alive
+            int alive_cnt = 0;
+            int alive_chan = -1;
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d", i, exclude);
-                    shm_conn_info->max_chan = i;
-                    fixed = 1;
-                    OK=1;
-                    break;
+                    alive_chan = i;
+                    alive_cnt++;
                 }
             }
-            if(!OK) {
+            if(alive_cnt == 1) {
+                vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d", alive_chan, exclude);
+                shm_conn_info->max_chan = alive_chan;
+            }
+            if(alive_cnt == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
+            }
+            if(alive_cnt > 1) {
+                // all is OK
+                vtun_syslog(LOG_INFO, "Head detect - current max chan is correct: %d", max_chan);
             }
         }
     }
