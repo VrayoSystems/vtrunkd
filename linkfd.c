@@ -2202,7 +2202,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
             }
             if(alive_cnt > 1) {
                 // all is OK
-                vtun_syslog(LOG_INFO, "Head detect - current max chan is correct: %d", max_chan);
+                vtun_syslog(LOG_INFO, "Head detect - current max chan is correct: max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
             }
         }
     }
@@ -3067,7 +3067,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             shm_conn_info->last_switch_time.tv_sec = 0;
             if(info.head_channel) {
                 vtun_syslog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
-                redetect_head_unsynced(chan_mask, info.head_channel);
+                redetect_head_unsynced(chan_mask, info.process_num);
             }
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
@@ -3220,7 +3220,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                         vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
                         if(info.head_channel) {
                             vtun_syslog(LOG_ERR, "         ^^^ HEAD channel!");
-                            redetect_head_unsynced(chan_mask, info.head_channel);
+                            redetect_head_unsynced(chan_mask, info.process_num);
                             // TODO: immediate action required!
                         }
                     }
