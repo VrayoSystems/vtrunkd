@@ -130,7 +130,7 @@ struct my_ip {
 #define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
-#define SPEED_REDETECT_TV {1,0} // timeval (interval) for chan speed redetect
+#define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
 #define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
@@ -2185,10 +2185,11 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
             shm_conn_info->last_switch_time = info.current_time;
         } else { // means max_chan = -1; find first alive chan
             // Two possibilities here: 1. we detected correct channel 2. there is only one channel alive
+            // 3. it may come that chan is excluded and only one chan is there
             int alive_cnt = 0;
             int alive_chan = -1;
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != exclude)) { // excluded = dead
                     alive_chan = i;
                     alive_cnt++;
                 }
