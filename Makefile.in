@@ -18,6 +18,8 @@
 #
 #   Makefile.in,v 1.6.2.4.2.1 2006/11/16 04:03:44 mtbishop Exp
 #  
+
+VERSION=\"$(shell git describe --abbrev=4 --dirty --always)\"
 CC = @CC@
 CFLAGS = @CFLAGS@ @CPPFLAGS@ -W
 LDFLAGS = @LIBS@ -lutil -lrt -lresolv -lm
@@ -46,7 +48,7 @@ LOCK_DIR = ${VAR_DIR}/lock/vtrunkd
 
 DEFS = -DVTUN_CONFIG_FILE=\"$(CFG_FILE)\" -DVTUN_PID_FILE=\"$(PID_FILE)\" \
        -DVTUN_STAT_DIR=\"$(STAT_DIR)\" -DVTUN_LOCK_DIR=\"$(LOCK_DIR)\" \
-       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)_$$(git rev-parse HEAD)\"
+       -DBUILD_DATE=\"build_$$(date +%y%m%d%H%M%S)\" -DVERSION_NUMBER=$(VERSION)
 
 OBJS = main.o cfg_file.tab.o cfg_file.lex.o server.o client.o lib.o \
        frame_llist.o llist.o auth.o tunnel.o lock.o netlib.o  \
