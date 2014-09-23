@@ -2865,7 +2865,6 @@ struct timeval cpulag;
         gettimeofday(&cpulag, NULL);
 
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
-        //if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC && tv_tmp_tmp_tmp.tv_usec < (SELECT_SLEEP_USEC-5000) && info.packet_recv_upload_avg > 10000) {
         if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
             vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
@@ -3103,7 +3102,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         
         int32_t rtt_shift;
         // RSR section here
-//      if (((shm_conn_info->stats[info.process_num].max_send_q * 1000) / shm_conn_info->stats[info.process_num].rtt_phys_avg) == max_speed) {
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
@@ -3362,7 +3360,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         #endif
         if(hold_mode == 1) was_hold_mode = 1; // TODO: remove! testing only!
         
-        if (fast_check_timer(packet_speed_timer, &info.current_time)) {
+        if (0 && fast_check_timer(packet_speed_timer, &info.current_time)) { // TODO: Disabled?! Incorrect operation - see code at JSON 0.5s
             gettimeofday(&info.current_time, NULL );
             uint32_t tv, max_packets=0;
             tv = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
@@ -3456,9 +3454,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
                     if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
                 }
-                // now put max_ACS2 to SHM:
-
                 
+                // now put max_ACS2 and PCS2 to SHM:
+                shm_conn_info->stats[info.process_num].max_PCS2 = info.channel[1].down_packets * 2 * info.eff_len;
+                info.channel[1].down_packets = 0; // WARNING! chan amt=1 hard-coded here!
                 shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
                 miss_packets_max = shm_conn_info->miss_packets_max;
                 sem_post(&(shm_conn_info->stats_sem));
@@ -3784,6 +3783,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
+
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
             if( (send_q_eff_mean < SEND_Q_IDLE) && !(shm_conn_info->idle)) {
