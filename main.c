@@ -309,7 +309,7 @@ void reread_config(int sig)
 
 void usage(void)
 {
-     printf("vtrunkd ver %s %s\n", VERSION_NUMBER, BUILD_DATE); // new versioning
+     printf("vtrunkd version %s\n", VERSION_NUMBER); // new versioning
      printf("Usage: \n");
      printf("  Server:\n");
      printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
