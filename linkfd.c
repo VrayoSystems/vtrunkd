@@ -3386,9 +3386,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                     fast_update_timer(packet_speed_timer, &info.current_time);
                 }
             }
-            sem_wait(&(shm_conn_info->stats_sem));
-            shm_conn_info->stats[info.process_num].max_PCS2 = max_packets;
-            sem_post(&(shm_conn_info->stats_sem));
         }
         sem_wait(&(shm_conn_info->stats_sem));
         shm_conn_info->stats[info.process_num].hold = hold_mode;
