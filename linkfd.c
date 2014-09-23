@@ -2830,7 +2830,7 @@ struct timeval cpulag;
     int ELD_send_q_max = 0;
     int need_send_FCI = 0;
     info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
-    
+    int PCS = 0;
 /**
  *
  *
@@ -3363,7 +3363,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         #endif
         if(hold_mode == 1) was_hold_mode = 1; // TODO: remove! testing only!
         
-        if (0 && fast_check_timer(packet_speed_timer, &info.current_time)) { // TODO: Disabled?! Incorrect operation - see code at JSON 0.5s
+        if (fast_check_timer(packet_speed_timer, &info.current_time)) { // TODO: Disabled?! Incorrect operation - see code at JSON 0.5s
             gettimeofday(&info.current_time, NULL );
             uint32_t tv, max_packets=0;
             tv = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
@@ -3459,8 +3459,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
                 
                 // now put max_ACS2 and PCS2 to SHM:
-                shm_conn_info->stats[info.process_num].max_PCS2 = info.channel[1].down_packets * 2 * info.eff_len;
-                info.channel[1].down_packets = 0; // WARNING! chan amt=1 hard-coded here!
+                shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
+                PCS = 0; // WARNING! chan amt=1 hard-coded here!
                 shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
                 miss_packets_max = shm_conn_info->miss_packets_max;
                 sem_post(&(shm_conn_info->stats_sem));
@@ -4766,6 +4766,7 @@ if(drop_packet_flag) {
                     
                     gettimeofday(&info.current_time, NULL);
                     info.channel[chan_num].down_packets++; // accumulate number of packets
+                    PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
