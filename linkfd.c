@@ -2469,6 +2469,7 @@ int lfd_linker(void)
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
 		read_n(service_channel, buf, sizeof(uint16_t)+sizeof(uint16_t));
         info.channel_amount = ntohs(*((uint16_t *) buf)); // include info channel
+        info.channel_amount = 2; // WARNING! TODO! HARDCODED 2 hardcoded chan_amt
         if (info.channel_amount > MAX_TCP_LOGICAL_CHANNELS) {
             vtun_syslog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
             info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
@@ -2645,6 +2646,7 @@ int lfd_linker(void)
         }
     } else {
         /** Send to server information about channel amount and get and send pid */
+        info.channel_amount = 2; // WARNING TODO chan_amt hardcoded here
     	*((uint16_t *) buf) = htons(info.channel_amount);
     	sem_wait(&(shm_conn_info->stats_sem));
     	*((uint16_t *) (buf + sizeof(uint16_t))) = htons(shm_conn_info->stats[info.process_num].pid);
