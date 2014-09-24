@@ -118,7 +118,7 @@ struct my_ip {
 #define MAX_REORDER_PERPATH 4
 #define RSR_TOP 2990000 // now infinity...
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
-#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
+//#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
 #define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
@@ -3035,7 +3035,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         }
 #endif
         max_chan=-1;
-        int32_t max_speed=0;
+        //int32_t max_speed=0;
         int32_t min_speed=(INT32_MAX - 1);
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -3132,7 +3132,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
             
             
-            rtt_shift = (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg) // dt in ms..
+            rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
             
@@ -3169,12 +3169,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 info.rsr += rsr_shift;
                 //vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
                 //           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
-                gettimeofday(&info.cycle_last, NULL);
+                info.cycle_last = info.current_time;
             }
             
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
-        uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv;
+        // uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv; // yes? it is transferred??
         
         if(!info.head_channel) {
             timersub(&(info.current_time), &loss_time, &t_tv);
@@ -3191,7 +3191,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
 
         // calc send_q_limit_threshold
         if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
-            info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL;
+            info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL-1;
         }
         // compute `global` flag - can we ever send new packets due to global limitations?
         ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
@@ -3206,12 +3206,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
         // TODO: use max_ACS thru all chans
-        if(shm_conn_info->stats[max_chan].exact_rtt > shm_conn_info->stats[info.process_num].exact_rtt) {
-            rtt_shift = shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[info.process_num].exact_rtt;
-        } else {
-            rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
-        }
-        if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE;
+        //if(shm_conn_info->stats[max_chan].exact_rtt > shm_conn_info->stats[info.process_num].exact_rtt) {
+        //    rtt_shift = shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[info.process_num].exact_rtt;
+        //} else {
+        //    rtt_shift = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
+        //}
+        // if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE; // unneeded check due to check_rtt_latency_drop() above
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
         if(ag_flag_local == AG_MODE) {
