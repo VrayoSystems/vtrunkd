@@ -2195,7 +2195,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
                 }
             }
             if(alive_cnt == 1) {
-                vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d", alive_chan, exclude);
+                vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d ACS2=%d,PCS2=%d (idle? %d) (sqe %d) (rsr %d) ", alive_chan, exclude, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->idle, send_q_eff, info.rsr );
                 shm_conn_info->max_chan = alive_chan;
             }
             if(alive_cnt == 0) {
@@ -3245,6 +3245,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
         } else {
             agag = 0;
+            if(ag_flag == AG_MODE) {
+                vtun_syslog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+            }
             ag_flag = R_MODE;
             ag_flag_local_prev = ag_flag_local;
         }
@@ -3423,7 +3426,6 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
-            PCS = 0; // WARNING! chan amt=1 hard-coded here!
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
@@ -3454,6 +3456,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
             add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
+            add_json(js_buf, &js_cur, "PCS", "%d", PCS);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
@@ -3466,6 +3469,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
             skip=0;
+            PCS = 0; // WARNING! chan amt=1 hard-coded here!
             // bandwidth utilization extimation experiment
             //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
             /*
