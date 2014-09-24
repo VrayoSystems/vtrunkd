@@ -3425,6 +3425,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
+            shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
             sem_post(&(shm_conn_info->stats_sem));
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -3536,7 +3537,7 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             info.max_send_q_max = 0;
             info.max_send_q_min = 120000;
         }
-        if (info.check_shm) {
+        if (info.check_shm) { // impossible to work (remove!?)
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
@@ -4568,7 +4569,7 @@ if(drop_packet_flag) {
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = // TODO: remove! never used
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
-                                shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
+                                //shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
                                 info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                             }
                             shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
@@ -4833,7 +4834,7 @@ if(drop_packet_flag) {
 
                     sem_wait(&(shm_conn_info->stats_sem));
                     if (my_max_send_q_chan_num == chan_num) {
-                        shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
+                        //shm_conn_info->stats[info.process_num].ACK_speed = info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
                         info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
                     }
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
