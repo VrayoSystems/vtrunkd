@@ -2723,17 +2723,9 @@ int lfd_linker(void)
     struct timer_obj *s_q_lim_drop_timer = create_timer();
     fast_update_timer(s_q_lim_drop_timer, &info.current_time);
 
-    struct timer_obj *cubic_log_timer = create_timer();
-    struct timeval cubic_log_time = { 0, 1000 };
-    set_timer(cubic_log_timer, &cubic_log_time);
-
     struct timer_obj *packet_speed_timer = create_timer();
     struct timeval packet_speed_timer_time = { 0, 500000 };
     set_timer(packet_speed_timer, &packet_speed_timer_time);
-
-    struct timer_obj *hold_timer = create_timer();
-    struct timeval hold_timer_time = { 999999, 0 };
-    set_timer(hold_timer, &hold_timer_time);
 
     struct timer_obj *head_channel_switch_timer = create_timer();
     struct timeval head_channel_switch_timer_time = { 0, 0 };
@@ -3371,206 +3363,178 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             if (tv != 0) {
                 for (i = 1; i < info.channel_amount; i++) {
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 100000) / tv)*10;
-                    if (info.channel[i].down_packets > 0)
+                    //if (info.channel[i].down_packets > 0)
                         //vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
                     if (max_packets<info.channel[i].down_packets) max_packets=info.channel[i].down_packets;
                     info.channel[i].down_packets = 0;
                 }
-                    if (packet_speed_timer_time.tv_usec < 700) packet_speed_timer_time.tv_usec += 20;
-                if (max_packets<10){
+                
+                if (packet_speed_timer_time.tv_usec < 800000) packet_speed_timer_time.tv_usec += 20000;
+                if (max_packets<50) {
                     set_timer(packet_speed_timer, &packet_speed_timer_time);
-                } else if (max_packets>200){
-                    if (packet_speed_timer_time.tv_usec > 400) packet_speed_timer_time.tv_usec -= 20;
+                } else if (max_packets>300) {
+                    if (packet_speed_timer_time.tv_usec > 400000) packet_speed_timer_time.tv_usec -= 20000;
                     set_timer(packet_speed_timer, &packet_speed_timer_time);
                 } else {
                     fast_update_timer(packet_speed_timer, &info.current_time);
                 }
             }
         }
+        
         sem_wait(&(shm_conn_info->stats_sem));
         shm_conn_info->stats[info.process_num].hold = hold_mode;
         sem_post(&(shm_conn_info->stats_sem));
-        uint32_t hold_time = 0;
-        if (hold_mode_previous != hold_mode) {
-            if (hold_mode == 0) {
-                hold_time = get_difference_timer(packet_speed_timer, &info.current_time)->tv_sec * 1000
-                        + get_difference_timer(packet_speed_timer, &info.current_time)->tv_usec / 1000;
-            } else {
-                fast_update_timer(hold_timer, &info.current_time);
+        
+        // JSON LOGS HERE
+        timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
+        if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
+
+            //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
+            //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
+            //}
+            if(buf != save_buf) {
+                vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
             }
-        }
-        if (check_timer(cubic_log_timer)) {
-            fast_update_timer(cubic_log_timer, &info.current_time);
-        } else if ((info.channel[my_max_send_q_chan_num].packet_loss != 0) || (drop_packet_flag != 0) || (hold_mode_previous != hold_mode)) {
-            // noop
-        }
-        //vtun_syslog(LOG_INFO, "hold %d", hold_mode);
-        timersub(&info.current_time, &get_info_time_last, &tv_tmp_tmp_tmp);
-        int timercmp_result;
-        timercmp_result = timercmp(&tv_tmp_tmp_tmp, &get_info_time, >=);
-        int ag_switch_flag = 0;
-        
-        if ((dirty_seq_num % 6) == 0) {
-            dirty_seq_num++;
-            ag_switch_flag = 1;
-        }
-        
-        if (timercmp_result || ag_switch_flag) {
-//            info.mode = ag_switcher();
-            get_info_time_last.tv_sec = info.current_time.tv_sec;
-            get_info_time_last.tv_usec = info.current_time.tv_usec;
-            // JSON LOGS HERE
-            timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
-            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
-
-                //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
-                //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
-                //}
-                if(buf != save_buf) {
-                    vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
-                }
-                sem_wait(&(shm_conn_info->stats_sem));
-                                
-                timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
-                if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
-                    shm_conn_info->dropping = 0;
+            sem_wait(&(shm_conn_info->stats_sem));
+                            
+            timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
+            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
+                shm_conn_info->dropping = 0;
+            } else {
+                shm_conn_info->dropping = 1;
+            }
+            
+            if(info.head_channel) {
+                timersub(&(info.current_time), &real_loss_time, &tv_tmp_tmp_tmp);
+                if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
+                    shm_conn_info->head_lossing = 0;
                 } else {
-                    shm_conn_info->dropping = 1;
+                    shm_conn_info->head_lossing = 1;
                 }
-                
-                if(info.head_channel) {
-                    timersub(&(info.current_time), &real_loss_time, &tv_tmp_tmp_tmp);
-                    if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
-                        shm_conn_info->head_lossing = 0;
-                    } else {
-                        shm_conn_info->head_lossing = 1;
-                    }
-                }
+            }
 
-                // calc ACS2 and DDS detect
-                int max_ACS2=0;
-                for(int i=0; i<info.channel_amount; i++) {
-                    info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len;
-                    info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
-                    if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
-                }
-                
-                // now put max_ACS2 and PCS2 to SHM:
-                shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
-                PCS = 0; // WARNING! chan amt=1 hard-coded here!
-                shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
-                miss_packets_max = shm_conn_info->miss_packets_max;
-                sem_post(&(shm_conn_info->stats_sem));
-                sem_wait(&(shm_conn_info->AG_flags_sem));
-                uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
-                sem_post(&(shm_conn_info->AG_flags_sem));
-                
+            // calc ACS2 and DDS detect
+            int max_ACS2=0;
+            for(int i=0; i<info.channel_amount; i++) {
+                info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len;
+                info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
+                if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
+            }
+            
+            // now put max_ACS2 and PCS2 to SHM:
+            shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
+            PCS = 0; // WARNING! chan amt=1 hard-coded here!
+            shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
+            miss_packets_max = shm_conn_info->miss_packets_max;
+            sem_post(&(shm_conn_info->stats_sem));
+            sem_wait(&(shm_conn_info->AG_flags_sem));
+            uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
+            sem_post(&(shm_conn_info->AG_flags_sem));
+            
 #if !defined(DEBUGG) && defined(JSON)
-                start_json(js_buf, &js_cur);
-                add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
-                add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
-                add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
-                add_json(js_buf, &js_cur, "super", "%d", super);
-                super = 0;
-                add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
-                was_hold_mode = 0; // TODO: remove
-                //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
-                add_json(js_buf, &js_cur, "agag", "%d", agag);
-                add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
-                add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
-                add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
-                add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
-                add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
-                add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
-                add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
-                add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
-                add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
-                add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
-                add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
-                add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-                add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
-                add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
-                add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
-                add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
-                add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
-                //add_json(js_buf, &js_cur, "skip", "%d", skip);
-                add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
-                add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
-                add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
-                add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
-                skip=0;
-                // bandwidth utilization extimation experiment
-                //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
-                /*
-                int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
-                int rbu = -1;
-                int rbu_s = -1;
+            start_json(js_buf, &js_cur);
+            add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
+            add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
+            add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
+            add_json(js_buf, &js_cur, "super", "%d", super);
+            super = 0;
+            add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
+            was_hold_mode = 0; // TODO: remove
+            //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
+            add_json(js_buf, &js_cur, "agag", "%d", agag);
+            add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
+            add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
+            add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
+            add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
+            add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
+            add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
+            add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
+            add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
+            add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
+            add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
+            add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
+            add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
+            add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
+            add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+            add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
+            add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
+            //add_json(js_buf, &js_cur, "skip", "%d", skip);
+            add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
+            add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
+            add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
+            add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            skip=0;
+            // bandwidth utilization extimation experiment
+            //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
+            /*
+            int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
+            int rbu = -1;
+            int rbu_s = -1;
 
-                if(send_q_eff_mean != 0) {
-                    rbu = exact_rtt * (max_ACS2/10) / send_q_eff_mean;
-                    if(rbu != 0) {
-                        rbu_s = max_ACS2 / rbu * 100;
-                    } 
-                }*/
-                
-                //add_json(js_buf, &js_cur, "rbu", "%d", rbu);
-                //add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
+            if(send_q_eff_mean != 0) {
+                rbu = exact_rtt * (max_ACS2/10) / send_q_eff_mean;
+                if(rbu != 0) {
+                    rbu_s = max_ACS2 / rbu * 100;
+                } 
+            }*/
+            
+            //add_json(js_buf, &js_cur, "rbu", "%d", rbu);
+            //add_json(js_buf, &js_cur, "rbu_s", "%d", rbu_s);
 
-                uint32_t m_lsn = 0;
-                int lmax = 0;
-                for(int i=0; i<info.channel_amount; i++) {
-                    if(info.channel[i].packet_loss_counter < lmax) {
-                        lmax = info.channel[i].packet_loss_counter;
-                    }
-                    if(m_lsn < info.channel[i].local_seq_num) {
-                        m_lsn = info.channel[i].local_seq_num; 
-                    }
+            uint32_t m_lsn = 0;
+            int lmax = 0;
+            for(int i=0; i<info.channel_amount; i++) {
+                if(info.channel[i].packet_loss_counter < lmax) {
+                    lmax = info.channel[i].packet_loss_counter;
                 }
-                //add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
-                add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
-                
-                lmax = 0;
-                for(int i=0; i<info.channel_amount; i++) {
-                    if(info.channel[i].packet_loss < lmax) {
-                        lmax = info.channel[i].packet_loss;
-                    }
-                }                
-                add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
-                int Ch = 0;
-                int Cs = 0;
-                sem_wait(&(shm_conn_info->stats_sem));
-                max_chan = shm_conn_info->max_chan;
-                if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
-                    Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                    Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
+                if(m_lsn < info.channel[i].local_seq_num) {
+                    m_lsn = info.channel[i].local_seq_num; 
                 }
-                sem_post(&(shm_conn_info->stats_sem));
-                
-                add_json(js_buf, &js_cur, "Ch", "%d", Ch);
-                add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+            }
+            //add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
+            add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
+            
+            lmax = 0;
+            for(int i=0; i<info.channel_amount; i++) {
+                if(info.channel[i].packet_loss < lmax) {
+                    lmax = info.channel[i].packet_loss;
+                }
+            }                
+            add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
+            int Ch = 0;
+            int Cs = 0;
+            sem_wait(&(shm_conn_info->stats_sem));
+            max_chan = shm_conn_info->max_chan;
+            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
+                Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
+            }
+            sem_post(&(shm_conn_info->stats_sem));
+            
+            add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+            add_json(js_buf, &js_cur, "Cs", "%d", Cs);
 
-                // now get slope
-                int slope = get_slope(&smalldata);
-                add_json(js_buf, &js_cur, "slope", "%d", slope);
-                add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
-                add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
-                add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
-                add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
-                
-                print_json(js_buf, &js_cur);
+            // now get slope
+            int slope = get_slope(&smalldata);
+            add_json(js_buf, &js_cur, "slope", "%d", slope);
+            add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
+            add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
+            add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
+            add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
+            
+            print_json(js_buf, &js_cur);
 #endif
 
-                #ifdef SEND_Q_LOG
-                // now array
-                print_json_arr(jsSQ_buf, &jsSQ_cur);
-                start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
-                #endif
-                
-                json_timer.tv_sec = info.current_time.tv_sec;
-                json_timer.tv_usec = info.current_time.tv_usec;
-                info.max_send_q_max = 0;
-                info.max_send_q_min = 120000;
-            }
+            #ifdef SEND_Q_LOG
+            // now array
+            print_json_arr(jsSQ_buf, &jsSQ_cur);
+            start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
+            #endif
+            
+            json_timer = info.current_time;
+            info.max_send_q_max = 0;
+            info.max_send_q_min = 120000;
         }
         if (info.check_shm) {
             sem_wait(&(shm_conn_info->AG_flags_sem));
