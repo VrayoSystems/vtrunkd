@@ -2840,6 +2840,8 @@ struct timeval cpulag;
         errno = 0;
         super++;
         
+        // EXACT_RTT >>>
+        // Section to set exact_rtt
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
         if( (send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=)) { // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
@@ -2856,26 +2858,25 @@ struct timeval cpulag;
             exact_rtt = info.rtt;
         }
         info.exact_rtt = exact_rtt;
+        // <<< END EXACT_RTT
+        
 
+        // CPU LAG >>>
         gettimeofday(&cpulag, NULL);
-
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
         if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
             vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
+        // <<< END CPU_LAG
 
+
+        // SEND_Q_EFF CALC >>>
         uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
-// if ( my_max_send_q_prev!=my_max_send_q){
-//                vtun_syslog(LOG_ERR,"new my_max_send_q %u", my_max_send_q);
-//                my_max_send_q_prev=my_max_send_q;
-//        }
-
         int64_t bytes_pass = 0;
 
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
         //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-        
         int64_t upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         if(upload_eff < 10) upload_eff = 100000; // 1000kpkts default start speed
         
@@ -2890,12 +2891,13 @@ struct timeval cpulag;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass : 0;
 #ifdef DEBUGG
-if(drop_packet_flag) {
-vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
-} 
+        if(drop_packet_flag) {
+        vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
+        } 
 #endif
+        // <<< END SEND_Q_EFF CALC
         
-        
+
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
@@ -2940,16 +2942,22 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         
 
         }
+        // << END AVERAGE (MEAN) SEND_Q_EFF calculation
 
+        
         /* Temporarily disabled this due to massive loss :-\
+        // EXTERNAL LOSS DETECT >>> 
         if(send_q_eff > info.send_q_limit_threshold && (send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
             vtun_syslog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
             ELD_send_q_max = send_q_eff;
         } else if (send_q_eff > ELD_send_q_max) {
             ELD_send_q_max = send_q_eff;
         }
+        // <<< END EXTERNAL LOSS DETECT
         */
 
+
+        // PACKET TRAIN AKA BDP >>>
         if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off! <-- remove this code
             // now check all other chans
             // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
@@ -2987,14 +2995,18 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 sem_post(&(shm_conn_info->common_sem));
             }
         }
-        #ifdef SEND_Q_LOG
+        // <<< END PACKET TRAIN AKA BDP
+
+
+#ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
-        #endif
+#endif
 
-        // calculate on-line RTT:
+
+        // calculate on-line RTT: >>>
         if(ping_rcvd == 0) {
             timersub(&info.current_time, &ping_req_tv[0], &tv_tmp);
             int cur_rtt = tv2ms(&tv_tmp);
@@ -3008,35 +3020,14 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             // TODO: in case of DDS initiate second ping immediately!!??
             sem_post(&(shm_conn_info->stats_sem));
         }
+        // <<< END calculate on-line RTT
 
-
-#ifdef TIMEWARP      
-        if(my_max_send_q < send_q_min) {
-            send_q_min = my_max_send_q;
-            
-            print_tw(timewarp, &tw_cur, "send_q_min %d", send_q_min);
-            flush_tw(timewarp, &tw_cur);
-
-        }
-        if(send_q_eff < send_q_eff_min) {
-            send_q_eff_min = send_q_eff;
-
-            print_tw(timewarp, &tw_cur, "send_q_eff_min %d", send_q_eff_min);
-            flush_tw(timewarp, &tw_cur);
-            
-        }
-#endif
+        
+        // DEAD DETECT and COPY HEAD from SHM >>>
         max_chan=-1;
-        //int32_t max_speed=0;
-        int32_t min_speed=(INT32_MAX - 1);
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
-        
-
-        if(info.rtt == 0) {
-            info.rtt = 1;
-        }
         
         sem_wait(&(shm_conn_info->stats_sem));
         if(info.dropping) { // will ONLY drop if PESO in play. Never as of now...
@@ -3089,14 +3080,12 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             info.head_channel = 0;
         }
 #endif
+        // <<< DEAD DETECT and COPY HEAD from SHM
+        
 
-        
-        if( tv2ms(&t_tv) > (uint32_t)(info.rtt*4) ) { // DDS detect:
-            shm_conn_info->stats[info.process_num].ACK_speed = 0;
-        }
-        
+
+        // RSR section here >>>
         int32_t rtt_shift;
-        // RSR section here
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
@@ -3185,7 +3174,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
             info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL-1;
         }
-        // compute `global` flag - can we ever send new packets due to global limitations?
+        // <<< END RSR section here
+
+
+        // AG DECISION >>>
         ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
                            || (send_q_limit_cubic_apply <= info.send_q_limit_threshold) 
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
@@ -3253,20 +3245,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             ag_flag = R_MODE;
             ag_flag_local_prev = ag_flag_local;
         }
+        // <<< END AG DECISION
 
-        //vtun_syslog(LOG_INFO, "K %f = cbrt((((double) %d) * %f ) / %f)", K, info.send_q_limit_cubic_max, info.B, info.C);
-        //vtun_syslog(LOG_INFO, "W_cubic= %d = ( info.C %f * pow(((double) (t= %d )) - K = %f, 3) + info.send_q_limit_cubic_max= %d )", info.send_q_limit_cubic, info.C, t, K, info.send_q_limit_cubic_max);
-        /*if (info.send_q_limit_cubic > 90000) {
-            vtun_syslog(LOG_ERR, "overflow_test W_max %"PRIu32" B %f C %f K %f t %d W was %"PRIu32" now %"PRIu32" ", info.send_q_limit_cubic_max, info.B, info.C, K,
-                    t, limit_last, info.send_q_limit_cubic);
-            vtun_syslog(LOG_INFO, "overflow_test send_q_limit_cubic %"PRIu32" send_q_limit %"PRIu32"  max_chan %d", info.send_q_limit_cubic, info.send_q_limit,
-                    max_chan);
-        }*/
-        
-        
 
+        // HOLD/DROP setup >>>
         int hold_mode_previous = hold_mode;
-        
         if(ag_flag_local == AG_MODE) {
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
@@ -3319,8 +3302,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
         } else {
             shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
         }
-
-        // fast convergence to underlying encap flow
+        // << END HOLD/DROP setup
+        
+        
+        // fast convergence to underlying encap flow >>> 
         if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
             //int slope = get_slope(&smalldata);
             int slope = 1; // disable by now
@@ -3350,16 +3335,20 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             //set_W_to(send_q_eff, 30, &loss_time);
             set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
         }
+        // <<< END fast convergence to underlying encap flow
         
 
-        sem_post(&(shm_conn_info->stats_sem));
-        //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
-        #ifdef NOCONTROL
+#ifdef NOCONTROL
         hold_mode = 0;
         drop_packet_flag = 0;
-        #endif
-        if(hold_mode == 1) was_hold_mode = 1; // TODO: remove! testing only!
+#endif
         
+        shm_conn_info->stats[info.process_num].hold = hold_mode;
+        sem_post(&(shm_conn_info->stats_sem));
+        //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
+        if(hold_mode == 1) was_hold_mode = 1; // for JSON ONLY!
+        
+        /*
         if (fast_check_timer(packet_speed_timer, &info.current_time)) { // TODO: Disabled?! Incorrect operation - see code at JSON 0.5s
             gettimeofday(&info.current_time, NULL );
             uint32_t tv, max_packets=0;
@@ -3385,11 +3374,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 }
             }
         }
+        */
         
-        sem_wait(&(shm_conn_info->stats_sem));
-        shm_conn_info->stats[info.process_num].hold = hold_mode;
-        sem_post(&(shm_conn_info->stats_sem));
-        
+       
         // JSON LOGS HERE
         timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
@@ -3543,6 +3530,10 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             info.max_send_q_max = 0;
             info.max_send_q_min = 120000;
         }
+        // <<< END JSON LOGS
+        
+        
+        
         if (info.check_shm) { // impossible to work (remove!?)
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -3576,6 +3567,8 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
             }
         }
 
+
+        // SEND FCI >>>
         int timer_result=0;
         if(shm_conn_info->dropping || shm_conn_info->head_lossing) {
             timer_result = fast_check_timer(recv_n_loss_send_timer, &info.current_time);
@@ -3736,7 +3729,11 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                 info.channel[i].up_len += len_ret;
             }
         } // for each chan_num loop end ([i])
-          // do an expensive thing
+        // <<< END SEND FCI
+
+        
+        
+        // do an expensive thing
           timersub(&info.current_time, &last_timing, &tv_tmp);
           /**
            *
@@ -3943,6 +3940,9 @@ vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.c
                last_timing.tv_usec = info.current_time.tv_usec;
           }
         }
+        // <<< END TICK
+        
+
 
         /* Detect that we need to enter retransmit_send as soon as possible 
             (some packets left unsent AND we're not holding) */
