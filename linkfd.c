@@ -1707,6 +1707,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
     // now check if we can find it in write buf current .. inline!
+    // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
     acnt = 0;
     while( i > -1 ) {
         if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
@@ -1868,195 +1869,6 @@ int sem_wait_tw(sem_t *sem) {
     return 0;
 }
 
-/**
-                                   .__  __         .__                  
-_____     ____       ________  _  _|__|/  |_  ____ |  |__   ___________ 
-\__  \   / ___\     /  ___/\ \/ \/ /  \   __\/ ___\|  |  \_/ __ \_  __ \
- / __ \_/ /_/  >    \___ \  \     /|  ||  | \  \___|   Y  \  ___/|  | \/
-(____  /\___  /____/____  >  \/\_/ |__||__|  \___  >___|  /\___  >__|   
-     \//_____/_____/    \/                       \/     \/     \/       
- * Modes switcher and socket status collector
- * @return - 0 for R_MODE and 1 for AG_MODE
- */
-
-int ag_switcher() {
-#ifdef TRACE
-    vtun_syslog(LOG_INFO, "Process %i is calling ag_switcher()", info.process_num);
-#endif
-    for (int i = 0; i < info.channel_amount; i++) {
-        chan_info[i].rport = info.channel[i].rport;
-        chan_info[i].lport = info.channel[i].lport;
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Process %i logic channel - %i lport - %i rport %i", info.process_num, i, chan_info[i].lport, info.channel[i].rport);
-#endif
-    }
-    int max_speed_chan = 0;
-    uint32_t max_speed = 0;
-    sem_wait(&(shm_conn_info->stats_sem));
-    for (int i = 1; i < info.channel_amount; i++) {
-        if (max_speed < shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed) {
-            max_speed = shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed;
-            max_speed_chan = i;
-        }
-    }
-    shm_conn_info->stats[info.process_num].max_upload_speed = max_speed;
-    sem_post(&(shm_conn_info->stats_sem));
-    if (max_speed == 0) {
-        max_speed_chan = my_max_speed_chan;
-    } else {
-        my_max_speed_chan = max_speed_chan;
-    }
-
-    struct timeval ag_curtime, time_sub_tmp;
-    gettimeofday(&ag_curtime, NULL );
-
-    uint32_t my_max_send_q = info.channel[my_max_send_q_chan_num].send_q;
-
-    uint32_t bytes_pass = 0;
-
-    timersub(&ag_curtime, &info.channel[my_max_send_q_chan_num].send_q_time, &time_sub_tmp);
-    //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
-    //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
-    bytes_pass = time_sub_tmp.tv_sec * info.eff_len * info.channel[my_max_send_q_chan_num].packet_recv_upload
-            + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].packet_recv_upload) / 1000;
-
-    /*int32_t*/ send_q_eff = my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass;
-#ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "net_model chan %i max_send_q %"PRIu32" put %"PRIu32" pass %"PRIu32"", my_max_send_q_chan_num, my_max_send_q,
-            info.channel[my_max_send_q_chan_num].bytes_put, bytes_pass);
-#endif
-
-    int speed_success = 0;
-
-    /* ACK_coming_speed recalculation */
-    int skip_time_usec = info.rtt / 10 * 1000;
-    skip_time_usec = skip_time_usec > 999000 ? 999000 : skip_time_usec;
-    skip_time_usec = skip_time_usec < 5000 ? 5000 : skip_time_usec;
-    for (int i = 0; i < info.channel_amount; i++) {
-        int ACK_coming_speed = speed_algo_ack_speed(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, info.channel[i].send_q_old,
-                info.channel[i].send_q, info.channel[i].up_packets * 1000, skip_time_usec);
-        if ((ACK_coming_speed >= 0) || (ACK_coming_speed == SPEED_ALGO_OVERFLOW) || (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW)) {
-            if (ACK_coming_speed >= 0) {
-                info.channel[i].ACK_speed_avg *= 100;
-                ACK_coming_speed *= 100;
-                info.channel[i].ACK_speed_avg += (ACK_coming_speed - info.channel[i].ACK_speed_avg) / 40;
-                info.channel[i].ACK_speed_avg /= 100;
-#ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "ACK_speed_avg %u logical channel %i", info.channel[i].ACK_speed_avg, i);
-#endif
-            } else if (ACK_coming_speed == SPEED_ALGO_OVERFLOW) {
-                vtun_syslog(LOG_ERR, "WARNING - sent_bytes value is overflow, zeroing ACK_coming_speed");
-                info.channel[i].ACK_speed_avg *= 100;
-                info.channel[i].ACK_speed_avg -= info.channel[i].ACK_speed_avg / 40;
-                info.channel[i].ACK_speed_avg /= 100;
-            } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
-#ifdef DEBUGG
-                vtun_syslog(LOG_ERR, "WARNING - Speed was slow much time logical channel %i", i);
-#endif
-                info.channel[i].ACK_speed_avg = 0;
-            }
-            memcpy(&(info.channel[i].get_tcp_info_time_old), &info.channel[i].send_q_time, sizeof(info.channel[i].send_q_time));
-            info.channel[i].send_q_old = info.channel[i].send_q;
-            info.channel[i].up_len = 0;
-            info.channel[i].up_packets = 0;
-            info.channel[i].ACK_speed_avg = info.channel[i].ACK_speed_avg == 0 ? 1 : info.channel[i].ACK_speed_avg;
-            info.channel[i].magic_rtt =
-                    info.channel[i].ACK_speed_avg == 0 ? info.channel[i].send_q / 1 : info.channel[i].send_q / info.channel[i].ACK_speed_avg;
-            if (i != 0) {
-                speed_success++;
-            }
-        }
-#ifdef DEBUGG
-        else if (ACK_coming_speed == SPEED_ALGO_SLOW_SPEED) {
-            vtun_syslog(LOG_WARNING, "WARNING - speed very slow, need to wait more bytes");
-        } else if (ACK_coming_speed == SPEED_ALGO_HIGH_SPEED) {
-            vtun_syslog(LOG_WARNING, "WARNING - speed very high, need to wait more time");
-        } else if (ACK_coming_speed == SPEED_ALGO_EPIC_SLOW) {
-            vtun_syslog(LOG_WARNING, "WARNING - speed very slow much time!!!");
-        }
-#endif
-    }
-
-    /*if (speed_success) {
-        ACK_coming_speed_avg = info.channel[my_max_send_q_chan_num].ACK_speed_avg;
-        magic_rtt_avg = info.channel[my_max_send_q_chan_num].magic_rtt;
-        
-        */
-    sem_wait(&(shm_conn_info->AG_flags_sem));
-    uint32_t chan_mask = shm_conn_info->channels_mask;
-    sem_post(&(shm_conn_info->AG_flags_sem));
-    sem_wait(&(shm_conn_info->stats_sem));
-    miss_packets_max = shm_conn_info->miss_packets_max;
-        
-    int send_q_limit_grow;
-    int high_speed_chan = 31;
-    for (int i = 0; i < 32; i++) {
-        /* look for first alive channel*/
-        if (chan_mask & (1 << i)) {
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "First alive channel %i",i);
-#endif
-            high_speed_chan = i;
-            break;
-        }
-    }
-    /* find high speed channel */
-    for (int i = 0; i < 32; i++) {
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Checking channel %i",i);
-#endif
-        /* check alive channel*/
-        if (chan_mask & (1 << i)) {
-            high_speed_chan = shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[high_speed_chan].ACK_speed ? i : high_speed_chan;
-#ifdef TRACE
-        vtun_syslog(LOG_INFO, "Channel %i alive",i);
-#endif
-        }
-    }
-    /*ag switching enable*/
-
-    int ACK_speed_high_speed = shm_conn_info->stats[high_speed_chan].ACK_speed == 0 ? 1 : shm_conn_info->stats[high_speed_chan].ACK_speed;
-    int EBL = (90) * 1300;
-    if (high_speed_chan == info.process_num) {
-        send_q_limit_grow = (EBL - send_q_limit) / 2;
-    } else {
-        // TODO: use WEIGHT_SCALE config variable instead of '100'. Current scale is 2 (100).
-        send_q_limit_grow = (((((int) (shm_conn_info->stats[high_speed_chan].max_send_q_avg)) * shm_conn_info->stats[info.process_num].ACK_speed)
-                / ACK_speed_high_speed) - send_q_limit) / 2;
-        vtun_syslog(LOG_INFO, "maxest send_q %d my speed %"PRId32" hi speed %d", shm_conn_info->stats[high_speed_chan].max_send_q_avg, shm_conn_info->stats[info.process_num].ACK_speed, ACK_speed_high_speed);
-
-    }
-    sem_post(&(shm_conn_info->stats_sem));
-
-    vtun_syslog(LOG_INFO, "send_q lim grow %d last send_q_lim %"PRId32"",send_q_limit_grow, send_q_limit);
-
-    send_q_limit_grow = send_q_limit_grow > 20000 ? 20000 : send_q_limit_grow;
-    send_q_limit += send_q_limit_grow;
-    send_q_limit = send_q_limit < 20 ? 20 : send_q_limit;
-    vtun_syslog(LOG_INFO, "send_q lim new %"PRId32"", send_q_limit);
-
-
-
-    int hold_mode_previous = hold_mode;
-    vtun_syslog(LOG_INFO, "send_q eff %"PRIu32" lim %"PRId32"", send_q_eff, send_q_limit);
-    if (((int) send_q_eff) < send_q_limit) {
-        //hold_mode = 0;
-    } else {
-        //hold_mode = 1;
-        //force_hold_mode = 0;
-    }
-    vtun_syslog(LOG_INFO, "hold_mode %d", hold_mode);
-
-    max_reorder_byte = lfd_host->MAX_REORDER * chan_info[my_max_send_q_chan_num].mss;
-    info.max_send_q_calc = (chan_info[my_max_send_q_chan_num].mss * chan_info[my_max_send_q_chan_num].cwnd) / 1000;
-#if defined(DEBUGG) && defined(JSON)
-// 
-#endif
-    if (send_q_limit > SEND_Q_LIMIT_MINIMAL) {
-        return AG_MODE;
-    }
-    return R_MODE;
-}
 
 int set_max_chan(uint32_t chan_mask) {
     //must sync on stats_sem
@@ -3512,8 +3324,8 @@ struct timeval cpulag;
             add_json(js_buf, &js_cur, "Cs", "%d", Cs);
 
             // now get slope
-            int slope = get_slope(&smalldata);
-            add_json(js_buf, &js_cur, "slope", "%d", slope);
+            //int slope = get_slope(&smalldata);
+            //add_json(js_buf, &js_cur, "slope", "%d", slope);
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
