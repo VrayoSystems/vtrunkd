@@ -492,6 +492,7 @@ static void sig_usr1(int sig)
  * buf[] - номера пакетов
  */
 int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
+    return 0; // disabled!
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     uint32_t isq,nsq, k;
     int idx=0;
