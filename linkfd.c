@@ -2012,8 +2012,21 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
                 vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d ACS2=%d,PCS2=%d (idle? %d) (sqe %d) (rsr %d) ", alive_chan, exclude, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->idle, send_q_eff, info.rsr );
                 shm_conn_info->max_chan = alive_chan;
             }
-            if(alive_cnt == 0) {
-                vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
+            if(alive_cnt == 0) { // no chan is alive, do without excluded
+                int alive_cnt = 0;
+                int alive_chan = -1;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) {
+                        alive_chan = i;
+                        alive_cnt++;
+                    }
+                }
+                if(alive_cnt == 1) {
+                    vtun_syslog(LOG_INFO, "Head no change - first and only channel dead: %d, excluded: %d", alive_chan, exclude);
+                    shm_conn_info->max_chan = alive_chan;
+                } else {
+                    vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
+                }
             }
             if(alive_cnt > 1) {
                 // all is OK
