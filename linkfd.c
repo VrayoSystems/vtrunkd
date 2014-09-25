@@ -1709,20 +1709,21 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     // now check if we can find it in write buf current .. inline!
     // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
     acnt = 0;
-    while( i > -1 ) {
-        if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
+    if(seq_num <= shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num) {
+        while( i > -1 ) {
+            if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
+                vtun_syslog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
 #endif
-            //return -3;
-            return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+                //return -3;
+                return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+            }
+            i = shm_conn_info->frames_buf[i].rel_next;
+#ifdef DEBUGG
+            if(assert_cnt(5)) break;
+#endif
         }
-        i = shm_conn_info->frames_buf[i].rel_next;
-#ifdef DEBUGG
-        if(assert_cnt(5)) break;
-#endif
     }
-
     i = shm_conn_info->write_buf[conn_num].frames.rel_head;
 
     if(frame_llist_pull(   &shm_conn_info->wb_free_frames,
