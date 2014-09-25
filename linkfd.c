@@ -141,6 +141,7 @@ struct my_ip {
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
 #define TRAIN_PKTS 80
+#define WRITE_OUT_MAX 30 // write no more than 30 packets at once
 //#define NOCONTROL
 //#define NO_ACK
 
@@ -4991,8 +4992,11 @@ if(drop_packet_flag) {
                     }
 
                     if (FD_ISSET(info.tun_device, &fdset_w)) {
+                        int write_out_max = buf_len / alive_physical_channels;
+                        if(write_out_max > WRITE_OUT_MAX) write_out_max = WRITE_OUT_MAX;
+                        if(write_out_max < 2) write_out_max = 2;
                         sem_wait(write_buf_sem);
-                        for (int i = 0; i < (buf_len / alive_physical_channels); i++) {
+                        for (int i = 0; i < write_out_max; i++) {
                             if (!write_buf_check_n_flush(chan_num_virt)) {
                                 break;
                             }
