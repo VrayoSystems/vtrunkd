@@ -134,8 +134,6 @@ fi
 
 if test "$SYSLOG" = "yes"; then
           CFLAGS="$CFLAGS -DSYSLOG=1"
-else
-	  CFLAGS="$CFLAGS -DSYSLOG=0"
 fi
 
 if test "$DEBUGG" = "yes"; then
