@@ -22,6 +22,7 @@
  */ 
 
 #include "config.h"
+#include "version.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -309,7 +310,7 @@ void reread_config(int sig)
 
 void usage(void)
 {
-     printf("vtrunkd version %s\n", VERSION_NUMBER); // new versioning
+     printf("vtrunkd version %s\n", VERSION); // new versioning
      printf("Usage: \n");
      printf("  Server:\n");
      printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
@@ -321,5 +322,5 @@ void usage(void)
 }
 
 void version() {
-    printf("vtrunkd ver %s %s\n", VTUN_VER, BUILD_DATE);
+    printf("vtrunkd ver %s\n", VERSION);
 }
