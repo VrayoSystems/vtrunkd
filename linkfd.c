@@ -243,6 +243,14 @@ struct {
     int v_max;
 } v_mma;
 
+struct {
+    int WT;
+    int RT;
+    int D;
+    int CL;
+    int DL;
+} ag_stat;
+
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval socket_timeout = { 10, 0 };
@@ -2126,6 +2134,7 @@ int get_slope(struct _smalldata *sd) {
 
 int lfd_linker(void)
 {
+    memset((void *)&ag_stat, 0, sizeof(ag_stat));
     
     #ifdef TIMEWARP
         timewarp = malloc(TW_MAX); // 10mb time-warp
@@ -3014,6 +3023,12 @@ struct timeval cpulag;
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
+        // logging part
+        if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
+        if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1;
+        if(channel_dead) ag_stat.D = 1;
+        if(!check_rtt_latency_drop()) ag_stat.CL = 1;
+        if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         //ag_flag_local = R_MODE;
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
@@ -3285,6 +3300,14 @@ struct timeval cpulag;
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+
+
+            add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
+            add_json(js_buf, &js_cur, "WT", "%d", ag_stat.WT);
+            add_json(js_buf, &js_cur, "D", "%d", ag_stat.D);
+            add_json(js_buf, &js_cur, "CL", "%d", ag_stat.CL);
+            add_json(js_buf, &js_cur, "DL", "%d", ag_stat.DL);
+            memset((void *)&ag_stat, 0, sizeof(ag_stat));
             skip=0;
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             // bandwidth utilization extimation experiment
