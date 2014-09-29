@@ -30,7 +30,7 @@ AC_ARG_ENABLE(mark,
 )
 
 dnl enable low memory opt
-AC_ARG_ENABLE(lowmem,
+AC_ARG_ENABLE(low-mem,
    --enable-low-mem         Compile for low ram device,
    LOW_MEM=$enableval,
    LOW_MEM=no

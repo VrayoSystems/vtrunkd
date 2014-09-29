@@ -82,6 +82,7 @@
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
 #include "timer.h"
+#include "packet_code.h"
 #include <stdarg.h>
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -199,6 +200,7 @@ int32_t send_q_eff = 0;
 int max_chan=-1;
 uint32_t start_of_train = 0, end_of_train = 0;
 struct timeval flood_start_time = { 0, 0 };
+char *buf2;
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
@@ -424,6 +426,8 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
     for(int i=0; i < llist_amt; i++) {
         result = frame_llist_getSize_asserted(framebuf_size, &wb[i].frames, flist, &size);
         if (result < 0) return result;
+        size_total += size;
+        result = frame_llist_getSize_asserted(framebuf_size, &shm_conn_info->wb_just_write_frames[i], flist, &size);
         size_total += size;
     }
     
@@ -895,33 +899,55 @@ int get_last_packet(int chan_num, uint32_t *seq_num, char **out, int *sender_pid
 }
 
 int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, uint32_t *local_seq_num, uint16_t *mini_sum, uint32_t *last_recv_lsn, uint32_t *packet_recv_spd) {
-    *seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
-    *flag_var = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
-    *local_seq_num = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
-    *mini_sum = ntohs(*((uint16_t *)(&out[len - sizeof(uint16_t)- sizeof(uint32_t) - sizeof(uint32_t)])));
-    
-    *last_recv_lsn = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
-    *packet_recv_spd = ntohl(*((uint32_t *)(&out[len - sizeof(uint32_t)])));
-    return len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
+    uint32_t local_seq_num_n, last_recv_lsn_n, packet_recv_spd_n;
+    if (*flag_var == 0) {
+        *seq_num = ntohl(
+                *((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t)
+                        - sizeof(uint32_t)])));
+        *flag_var = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+        *local_seq_num = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+        *mini_sum = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+
+        *last_recv_lsn = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
+        *packet_recv_spd = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t)])));
+        return len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
+    } else if (*flag_var == FRAME_REDUNDANCY_CODE) {
+        memcpy(&local_seq_num_n, out + len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t)), sizeof(uint32_t));
+        memcpy(&last_recv_lsn_n, out + len - (sizeof(uint32_t) + sizeof(uint32_t)), sizeof(uint32_t));
+        memcpy(&packet_recv_spd_n, out + len - sizeof(uint32_t), sizeof(uint32_t));
+        *local_seq_num = ntohl(local_seq_num_n);
+        *last_recv_lsn = ntohl(last_recv_lsn_n);
+        *packet_recv_spd = ntohl(packet_recv_spd_n);
+        return len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
+    }
 }
 
 /**
  * Function for add flag and seq_num to packet
  */
 int pack_packet(int chan_num, char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, int flag) {
-    uint32_t seq_num_n = htonl(seq_num);
     uint16_t flag_n = htons(flag);
     uint32_t local_seq_num_n = htonl(local_seq_num);
     uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num + info.channel[chan_num].local_seq_num_recv));
     uint32_t last_recv_lsn = htonl(info.channel[chan_num].local_seq_num_recv);
     uint32_t packet_recv_spd = htonl(info.channel[chan_num].packet_download);
-    memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
-    memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
-    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
-    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
-    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t), &last_recv_lsn, sizeof(uint32_t));
-    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t) + sizeof(uint32_t), &packet_recv_spd, sizeof(uint32_t));
-    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint32_t);
+    if (flag == 0) {
+        uint32_t seq_num_n = htonl(seq_num);
+        memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
+        memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
+        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
+        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
+        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t), &last_recv_lsn, sizeof(uint32_t));
+        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t) + sizeof(uint32_t), &packet_recv_spd,
+                sizeof(uint32_t));
+        return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint32_t);
+    } else if (flag == FRAME_REDUNDANCY_CODE) {
+        memcpy(buf + len, &local_seq_num_n, sizeof(uint32_t));
+        memcpy(buf + len + sizeof(uint32_t), &last_recv_lsn, sizeof(uint32_t));
+        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint32_t), &packet_recv_spd, sizeof(uint32_t));
+//        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t), &mini_sum, sizeof(uint16_t));
+        return len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
+    }
 }
 
 /**
@@ -963,7 +989,7 @@ void seqn_add_tail(int conn_num, char *buf, int len, uint32_t seq_num, uint16_t 
  * @return -1 - error if buffer full and packet's quantity if success
  */
 int add_fast_resend_frame(int conn_num, char *buf, int len, uint32_t seq_num) {
-    if (shm_conn_info->fast_resend_buf_idx >= MAX_TCP_PHYSICAL_CHANNELS) {
+    if (shm_conn_info->fast_resend_buf_idx >= FAST_RESEND_BUF_SIZE) {
         return -1; // fast_resend_buf is full
     }
     int i = shm_conn_info->fast_resend_buf_idx; // get next free index
@@ -974,7 +1000,7 @@ int add_fast_resend_frame(int conn_num, char *buf, int len, uint32_t seq_num) {
     shm_conn_info->fast_resend_buf[i].chan_num = conn_num;
     shm_conn_info->fast_resend_buf[i].len = len;
 
-    memcpy((shm_conn_info->fast_resend_buf[i].out + LINKFD_FRAME_RESERV), buf, len);
+    memcpy(shm_conn_info->fast_resend_buf[i].out, buf, len & VTUN_FSIZE_MASK);
     return shm_conn_info->fast_resend_buf_idx;
 }
 
@@ -990,11 +1016,28 @@ int get_fast_resend_frame(int *conn_num, char *buf, int *len, uint32_t *seq_num)
         return -1; // buffer is blank
     }
     int i = --(shm_conn_info->fast_resend_buf_idx);
-    memcpy(buf, shm_conn_info->fast_resend_buf[i].out + LINKFD_FRAME_RESERV, shm_conn_info->fast_resend_buf[i].len);
+    memcpy(buf, shm_conn_info->fast_resend_buf[i].out, shm_conn_info->fast_resend_buf[i].len & VTUN_FSIZE_MASK);
     *conn_num = shm_conn_info->fast_resend_buf[i].chan_num;
     *seq_num = shm_conn_info->fast_resend_buf[i].seq_num;
     *len = shm_conn_info->fast_resend_buf[i].len;
     return i+1;
+}
+
+void print_head_of_packet(char *buf, char* str, uint32_t seq_num, int len) {
+    char packet_string[500];
+    memset(packet_string, '\0', 500);
+    sprintf(packet_string, "len %i seq_num %"PRIu32": ", len, seq_num);
+    char* str_point = packet_string + strlen(packet_string);
+    int i = 0;
+    for (; ((i < 60) && (i < len)); i++) {
+        sprintf(str_point, "%02X-", (uint8_t) buf[i]);
+        str_point += sizeof(buf[i]) + 2;
+    }
+    *(str_point - 1) = '\0';
+    if (i <= len)
+        vtun_syslog(LOG_INFO, "%s %s", str, packet_string);
+    else
+        vtun_syslog(LOG_INFO, "%s %s...", str, packet_string);
 }
 
 /**
@@ -1157,7 +1200,7 @@ int retransmit_send(char *out2, int n_to_send) {
         // TODO: optimize here
         uint32_t tmp_seq_counter;
         uint32_t local_seq_num_p;
-        uint16_t tmp_flag;
+        uint16_t tmp_flag = 0;
         uint16_t sum;
         len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
@@ -1390,17 +1433,81 @@ if(drop_packet_flag) {
         sem_wait(&(shm_conn_info->common_sem));
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-        sem_post(&(shm_conn_info->common_sem));
-        // TODO: is it correct to first get the packet and then check if we can write it to net?
-        // LSN is incorrect here! will reqrite it later
-        //len = pack_packet(buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num++, channel_mode);
 
+        // packet code section
+        int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
+        int packet_code_ready = 0;
+        if (tmp_seq_counter == SEQ_START_VAL + 1) {
+            struct timeval redund_code_timer_time = REDUNDANT_CODE_TIMER_TIME;
+            for (int i = 0; i < SELECTION_NUM; i++) {
+                sum_init(&shm_conn_info->packet_code[i][chan_num], tmp_seq_counter + i, tmp_seq_counter + REDUNDANCY_CODE_LAG - SELECTION_NUM + i, i,
+                        1500);
+                set_timer(&shm_conn_info->packet_code[i][chan_num].timer, &redund_code_timer_time);
+            }
+            add_packet_code(buf, &shm_conn_info->packet_code[current_selection][chan_num], len);
+            shm_conn_info->packet_code[current_selection][chan_num].current_seq = tmp_seq_counter;
+        } else if (shm_conn_info->packet_code[current_selection][chan_num].stop_seq > tmp_seq_counter) {
+            add_packet_code(buf, &shm_conn_info->packet_code[current_selection][chan_num], len);
+        } else if (shm_conn_info->packet_code[current_selection][chan_num].stop_seq == tmp_seq_counter) {
+            add_packet_code(buf, &shm_conn_info->packet_code[current_selection][chan_num], len);
+            packet_code_ready = 1;
+        }
+        shm_conn_info->packet_code[current_selection][chan_num].current_seq = tmp_seq_counter;
+//        print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "redund code\0", 0, shm_conn_info->packet_code[chan_num].len_sum);
+        vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
+        if (packet_code_ready) {
+//            print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "send redund code", tmp_seq_counter + 1 - REDUNDANCY_CODE_LAG, shm_conn_info->packet_code[chan_num].len_sum);
 
+            vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE");
+            int len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection, FRAME_REDUNDANCY_CODE);
+            update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer);
+            sem_post(&(shm_conn_info->common_sem));
+            len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[chan_num].local_seq_num, FRAME_REDUNDANCY_CODE);
+            info.channel[chan_num].local_seq_num++;
+            if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
+                info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
+            }
+            //try send or store packet in fast resend buf
+            FD_ZERO(&fdset_tun);
+            FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
+            tv.tv_sec = 0;
+            tv.tv_usec = 0;
+            select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
+        #ifdef DEBUGG
+            vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
+        #endif
+            if (select_ret == 1) {
+            //    add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
+                udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
+            } else {
+                sem_wait(&(shm_conn_info->resend_buf_sem));
+                int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
+                sem_post(&(shm_conn_info->resend_buf_sem));
+                if (idx == -1) {
+                    vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+                }
+//               return NET_WRITE_BUSY_NOTIFY;
+            }
+            // int idx = add_fast_resend_frame(chan_num, shm_conn_info->packet_code[chan_num].sum, shm_conn_info->packet_code[chan_num].len_sum | VTUN_BAD_FRAME, 1);
+
+            //            sem_post(&(shm_conn_info->resend_buf_sem));
+            /*            if (idx == -1) {
+             vtun_syslog(LOG_ERR, "ERROR add packet_code fast_resend_buf is full");
+             }
+             */
+//            vtun_syslog(LOG_INFO, "after send FRAME_REDUNDANCY_CODE to fast resend chan %d send flag %i seq start %"PRIu32" stop %"PRIu32" counter %"PRIu32" len %i ", chan_num, packet_code_ready,shm_conn_info->packet_code[chan_num].start_seq, shm_conn_info->packet_code[chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[chan_num].len_sum);
+        } else {
+            sem_post(&(shm_conn_info->common_sem));
+        }
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
 #endif
+    }
+    else {
+        vtun_syslog(LOG_INFO, "we have fast resend frame sending...");
+
     }
 #ifdef DEBUGG
     else {
@@ -1434,6 +1541,7 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "READY - descriptor %i channel %d");
 #endif
+    if (tmp_seq_counter){
     sem_wait(&(shm_conn_info->resend_buf_sem));
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1453,6 +1561,7 @@ if(drop_packet_flag) {
         local_seq_num_p=0;
         tmp_flag=0;
         sum=0;
+
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
         if( (info.rtt2_lsn[chan_num] == 0) && ((shm_conn_info->stats[info.process_num].max_ACS2/info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
@@ -1461,7 +1570,7 @@ if(drop_packet_flag) {
             info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
         }
     //}
-
+    }
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
@@ -1489,6 +1598,7 @@ if(drop_packet_flag) {
         shm_conn_info->eff_len.sum = 1;
     sem_post(&shm_conn_info->common_sem);
     gettimeofday(&send2, NULL );
+    if (tmp_seq_counter){
 
     info.channel[chan_num].local_seq_num++;
     if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
@@ -1509,8 +1619,8 @@ if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ select_send"); }
     info.byte_efficient += len_ret;
 
     last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
-
-    return len;
+    }
+    return len & VTUN_FSIZE_MASK;
 }
 
 int write_buf_check_n_flush(int logical_channel) {
@@ -1626,10 +1736,60 @@ int write_buf_check_n_flush(int logical_channel) {
 
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
-            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
+//            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
+//            return 1;
+            frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &fold);
+            frame_llist_append(&shm_conn_info->wb_just_write_frames[logical_channel], fold, shm_conn_info->frames_buf);
+            if (shm_conn_info->wb_just_write_frames[logical_channel].length > PACKET_CODE_BUFFER_SIZE) {
+                int frame_index;
+                frame_llist_pull(&shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &frame_index);
+                frame_llist_append(&shm_conn_info->wb_free_frames, frame_index, shm_conn_info->frames_buf);
+            }
+       //     vtun_syslog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
+            for (int i = shm_conn_info->wb_just_write_frames[logical_channel].rel_head;; i = shm_conn_info->frames_buf[i].rel_next) {
+
+                //print_head_of_packet(shm_conn_info->frames_buf[i].out, "wb_just_write_frames", shm_conn_info->frames_buf[i].seq_num, shm_conn_info->frames_buf[i].len);
+
+                if (shm_conn_info->frames_buf[i].rel_next == -1)
+                    break;
+            }
+
+
+//            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
             return 1;
         } else {
-            return 0;
+//            return 0;
+            int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0],
+                    &shm_conn_info->wb_just_write_frames[logical_channel], &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf,
+                    shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+//            vtun_syslog(LOG_ERR, "calculated packet stored in %i", packet_index);
+            if (packet_index != -1) {
+                //    vtun_syslog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                //  else
+//                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calculated packet",
+//                        shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
+//                        shm_conn_info->packet_code_recived[logical_channel][packet_index].len_sum);
+//            }
+
+            //    return 0;
+//            if (packet_index >= 0) {
+//                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calced packet",shm_conn_info->write_buf[logical_channel].last_written_seq + 1, 70);
+                if (dev_write(info.tun_device, shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, REDUNDANCY_CODE_SIZE) < 0) {
+                    vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
+                    if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
+                        vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                    } else {
+                        vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                        return;
+                    }
+
+                }
+                shm_conn_info->write_buf[logical_channel].last_written_seq++;
+                del_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0], packet_index);
+                return 1;
+            } else {
+                return 0;
+            }
         }
     } else {
         return 0;
@@ -2262,6 +2422,11 @@ int lfd_linker(void)
         vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
+    if( !(buf2 = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
+        vtun_syslog(LOG_ERR,"Can't allocate buffer 2 for the linker");
+        return 0;
+    }
+
     char *save_out_buf = out_buf;
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
     memset(last_last_written_seq, 0, sizeof(uint32_t) * MAX_TCP_LOGICAL_CHANNELS);
@@ -3792,6 +3957,46 @@ struct timeval cpulag;
         
         
 
+        //check redundancy code packet's timer
+        gettimeofday(&info.current_time, NULL );
+        for (int i = 1; i <= info.channel_amount; i++) {
+            for (int selection = 0; selection < SELECTION_NUM; selection++) {
+                int flag = 0, len_sum;
+                sem_wait(&(shm_conn_info->common_sem));
+                if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
+                        && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
+                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %"PRIu32" stop %"PRIu32" len %i ", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].len_sum);
+                    shm_conn_info->packet_code[selection][i].stop_seq = shm_conn_info->packet_code[selection][i].current_seq;
+                    len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[selection][i],
+                            shm_conn_info->packet_code[selection][i].stop_seq, selection, FRAME_REDUNDANCY_CODE);
+                    fast_update_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time);
+                    flag = 1;
+
+                }
+                vtun_syslog(LOG_INFO, "REDUNDANT_CODE_TIMER_TIME selection %i start %"PRIu32" stop %"PRIu32" sec %u usec %u sum len %i chan_num %i",selection,shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].timer.tmp.tv_sec, shm_conn_info->packet_code[selection][i].timer.tmp.tv_usec, shm_conn_info->packet_code[selection][i].len_sum,i);
+
+                sem_post(&(shm_conn_info->common_sem));
+                if (flag) {
+                    len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[i].local_seq_num, FRAME_REDUNDANCY_CODE);
+                    info.channel[i].local_seq_num++;
+                    if (info.channel[i].local_seq_num == (UINT32_MAX - 1)) {
+                        info.channel[i].local_seq_num = 0;
+                    }
+                    vtun_syslog(LOG_ERR, "add redund code to fast_resend");
+                    sem_wait(&(shm_conn_info->resend_buf_sem));
+                    int idx = add_fast_resend_frame(i, buf2, len_sum | VTUN_BAD_FRAME, 0);
+                    sem_post(&(shm_conn_info->resend_buf_sem));
+                    if (idx == -1) {
+                        vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+                    }
+
+                }
+                if (flag) {
+                    need_retransmit = 1;
+                }
+                flag = 0;
+            }
+        }
                     /*
                      *
                         _____         .__                   
@@ -4019,6 +4224,75 @@ if(drop_packet_flag) {
                         flag_var = ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))));
                         if(flag_var == FRAME_MODE_NORM) {
                             vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
+                            continue;
+                        } else if (flag_var == FRAME_REDUNDANCY_CODE) {
+                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,*((uint32_t *)(buf)));
+                         //   print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
+                            uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
+                            uint16_t mini_sum;
+                       //     len -= 3 * sizeof(uint32_t);
+                            len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
+                            sem_wait(write_buf_sem);
+                            add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
+                            sem_post(write_buf_sem);
+                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE local seq num %"PRIu32"", local_seq_num);
+                            // rtt calculation
+                            if ((info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
+                                timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
+                                info.rtt2 = tv2ms(&tv_tmp);
+                                if (info.rtt2 <= 0)
+                                    info.rtt2 = 1;
+                                info.rtt2_lsn[chan_num] = 0;
+                                if (chan_num == my_max_send_q_chan_num) {
+                                    // calculate speed.. ?
+                                    info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 8;
+                                    vtun_syslog(LOG_INFO, "FRAME_RED_CODE max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
+                                }
+                            }
+
+                            // calculate send_q and speed
+                            // send_q
+                            info.channel[chan_num].send_q_time = info.current_time;
+                            info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
+                            info.channel[chan_num].send_q =
+                                    info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
+                                            1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
+                            if (info.max_send_q < info.channel[chan_num].send_q) {
+                                info.max_send_q = info.channel[chan_num].send_q;
+                            }
+                  //          vtun_syslog(LOG_INFO, "FRAME_RED_CODE PKT send_q %d", info.channel[chan_num].send_q);
+                            // the following is to calculate my_max_send_q_chan_num only
+                            uint32_t my_max_send_q = 0;
+                            for (int i = 1; i < info.channel_amount; i++) {
+                                if (my_max_send_q < info.channel[i].send_q) {
+                                    my_max_send_q = info.channel[i].send_q;
+                                    my_max_send_q_chan_num = i;
+                                }
+                            }
+
+                            // ACS
+                            info.channel[chan_num].packet_recv_upload = packet_recv_spd; // each packet data
+                            info.channel[chan_num].packet_recv_upload_avg =
+                                    info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
+                                            (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
+                                                    + info.channel[chan_num].packet_recv_upload_avg :
+                                            info.channel[chan_num].packet_recv_upload_avg
+                                                    - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
+
+                            sem_wait(&(shm_conn_info->stats_sem));
+                            if (my_max_send_q_chan_num == chan_num) {
+                                shm_conn_info->stats[info.process_num].ACK_speed =
+                                        info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
+                                info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
+                            }
+                            shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
+                            shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
+                            sem_post(&(shm_conn_info->stats_sem));
+
+                            // for (int i = 0; i < BULK_BUFFER_PACKET_CODE; i++) {
+                               // vtun_syslog(LOG_INFO, "red code array %i start %"PRIu32" stop %"PRIu32" ",i,shm_conn_info->packet_code_recived[chan_num][i].start_seq,shm_conn_info->packet_code_recived[chan_num][i].stop_seq);
+                               // print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][i].sum, "recv redund code",shm_conn_info->packet_code_recived[chan_num][i].start_seq, shm_conn_info->packet_code_recived[chan_num][i].len_sum);
+                           // }
                             continue;
                         } else if (flag_var == FRAME_MODE_RXMIT) {
                             // okay
@@ -4571,8 +4845,10 @@ if(drop_packet_flag) {
                     uint16_t mini_sum;
                     uint32_t last_recv_lsn;
                     uint32_t packet_recv_spd;
+                    flag_var = 0;
                     len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum, &last_recv_lsn, &packet_recv_spd);
-                    
+                    vtun_syslog(LOG_INFO, "PKT local seq num %"PRIu32" seq_num %"PRIu32"", local_seq_tmp, seq_num);
+
                     // rtt calculation
                     if( (info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
@@ -4648,6 +4924,7 @@ if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 }
 #endif
+              //      vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
@@ -4787,6 +5064,9 @@ if(drop_packet_flag) {
 #endif
                     uint16_t my_miss_packets = 0;
                     info.channel[chan_num].last_recv_time = info.current_time;
+
+//                    print_head_of_packet(out, "recv packet",seq_num, len);
+
                     succ_flag = 0;
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
@@ -5070,6 +5350,10 @@ if(drop_packet_flag) {
     }
 
     free_timer(recv_n_loss_send_timer);
+    free_timer(send_q_limit_change_timer);
+    free_timer(s_q_lim_drop_timer);
+    free_timer(packet_speed_timer);
+    free_timer(head_channel_switch_timer);
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask
@@ -5100,7 +5384,6 @@ if(drop_packet_flag) {
 
     /* Notify other end about our close */
     proto_write(service_channel, buf, VTUN_CONN_CLOSE);
-    
     for (i = 0; i < info.channel_amount; i++) {
         close(info.channel[i].descriptor);
     }
@@ -5210,6 +5493,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     info.srv = ss;
     info.pid = getpid();
     info.process_num = physical_channel_num;
+    sem_wait(&(shm_conn_info->stats_sem));
+    shm_conn_info->session_name_checksum[info.process_num] = calcsum(lfd_host->host);
+    shm_conn_info->wait_flag[info.process_num] = 0;
+    sem_post(&(shm_conn_info->stats_sem));
+    vtun_syslog(LOG_INFO, "checksum %s %"PRIu32"",lfd_host->host,shm_conn_info->session_name_checksum[info.process_num]);
     info.mode = R_MODE;
     if (info.srv) {
         info.channel_amount = 0; // first time for server, later server is getting it from client through net

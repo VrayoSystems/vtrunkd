@@ -582,6 +582,7 @@ int tunnel(struct vtun_host *host, int srv)
                          shm_conn_info[connid].write_buf[i].last_written_seq = SEQ_START_VAL;
                          shm_conn_info[connid].resend_buf[i].last_written_seq = SEQ_START_VAL; // not needed...
                          frame_llist_init(&shm_conn_info[connid].write_buf[i].frames);
+                         frame_llist_init(&shm_conn_info[connid].wb_just_write_frames[i]);
                          frame_llist_init(&shm_conn_info[connid].resend_buf[i].frames);
                     }
                     
