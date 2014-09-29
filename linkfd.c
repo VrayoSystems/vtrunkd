@@ -581,17 +581,17 @@ int check_drop_period_unsync() {
 }
 
 /* Check if the packet sent right now will be delivered in time */
-int check_delivery_time() {
+int check_delivery_time(int mld_divider) {
     // RTT-only for now..
     //    struct timeval max_latency_drop = MAX_LATENCY_DROP;
     sem_wait(&(shm_conn_info->stats_sem));
-    int ret = check_delivery_time_unsynced();
+    int ret = check_delivery_time_unsynced(mld_divider);
     sem_post(&(shm_conn_info->stats_sem));
     return ret;
 }
 
 // this method is crutial as it controls AG/R_MODE operation while in R_MODE
-int check_delivery_time_unsynced() {
+int check_delivery_time_unsynced(int mld_divider) {
     struct timeval max_latency_drop = info.max_latency_drop;
     // check for dead channel
     if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
@@ -604,7 +604,7 @@ int check_delivery_time_unsynced() {
         return 0;
     }
     //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[shm_conn_info->ax_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
-    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop))) ) {
+    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
         // no way to deliver in time
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)));
         return 0;
@@ -1076,7 +1076,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
             } else {
-                if(check_delivery_time()) {
+                if(check_delivery_time(2)) { // TODO: head always passes!
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
@@ -1110,7 +1110,7 @@ int retransmit_send(char *out2, int n_to_send) {
             // on head channel, do not allow to skip even if we see outdated packets?
             len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
-                if (check_delivery_time()) {
+                if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
                     continue; // ok to send new packet
@@ -1129,7 +1129,7 @@ int retransmit_send(char *out2, int n_to_send) {
             else                  len = get_resend_frame              (i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
                 last_sent_packet_num[i].seq_num--;
-                if (check_delivery_time()) {
+                if (check_delivery_time(2)) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     // TODO: disable AG in case of this event!
                     vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
@@ -1194,7 +1194,7 @@ int retransmit_send(char *out2, int n_to_send) {
     }
     
     if (send_counter == 0) {
-        if (check_delivery_time()) { // TODO: REMOVE THIS EXTRA CHECK (debug only; should never happen due to previous checks)
+        if (check_delivery_time(1)) { // TODO: REMOVE THIS EXTRA CHECK (debug only; should never happen due to previous checks)
             return LASTPACKETMY_NOTIFY;
         } else {
             vtun_syslog(LOG_ERR, "WARNING STILL can not deliver new packet in time; skipping read from tun");
@@ -4446,56 +4446,7 @@ if(drop_packet_flag) {
                         vtun_syslog(LOG_ERR, "Cannot resend frame %"PRIu32"; chan %d coz remomed api", ntohl(*((uint32_t *)buf)), chan_num);
                         continue;
 
-                        sem_wait(resend_buf_sem);
-                        len=get_resend_frame(chan_num, ntohl(*((uint32_t *)buf)), &out2, &sender_pid);
-                        sem_post(resend_buf_sem);
-                        
-                        // drop the SQL
-                        //send_q_limit = START_SQL;
-
-                                                if(len <= 0) {
-                            statb.rxmits_notfound++;
-                            vtun_syslog(LOG_ERR, "Cannot resend frame: not found %"PRIu32"; rxm_notf %d chan %d", ntohl(*((uint32_t *)buf)), statb.rxmits_notfound, chan_num);
-                            // this usually means that this link is slow to get resend request; the data is writen ok and wiped out
-                            // so actually it is not a warning...
-                            // - OR - resend buffer is too small; check configuration
-                            continue;
-                        }
-
-                        if( ((lfd_host->flags & VTUN_PROT_MASK) == VTUN_TCP) && (sender_pid == info.pid)) {
-                            vtun_syslog(LOG_INFO, "Will not resend my own data! It is on the way! frame len %d seq_num %"PRIu32" chan %d", len, ntohl(*((uint32_t *)buf)), chan_num);
-                            continue;
-                        }
-                        vtun_syslog(LOG_ERR, "Resending bad frame len %d eq lu %d id %"PRIu32" chan %d", len, sizeof(uint32_t), ntohl(*((uint32_t *)buf)), chan_num);
-
-                        lfd_host->stat.byte_out += len;
-                        statb.rxmits++;
-
-                        
-                        // now set which channel it belongs to...
-                        // TODO: this in fact rewrites CHANNEL_MODE making MODE_RETRANSMIT completely useless
-                        //*( (uint16_t *) (out2 - sizeof(flag_var))) = chan_num + FLAGS_RESERVED;
-                        // this does not work; done in get_resend_frame
-
-                        gettimeofday(&send1, NULL);
-                        int len_ret = proto_write(info.channel[0].descriptor, out2, len);
-                        if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "ERROR: cannot resend frame: write to chan %d", 0);
-                            linker_term = TERM_NONFATAL;
-                        }
-                        gettimeofday(&send2, NULL);
-                        shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
-                        info.channel[0].up_len += len_ret;
-                        info.byte_resend += len_ret;
-#ifdef DEBUGG
-                        if((long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)) > 100) vtun_syslog(LOG_INFO, "BRESEND DELAY: %"PRIu32" ms", (long int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec)));
-#endif
-                        delay_acc += (int)((send2.tv_sec-send1.tv_sec)*1000000+(send2.tv_usec-send1.tv_usec));
-                        delay_cnt++;
-
-                        //vtun_syslog(LOG_INFO, "sending SIGUSR2 to %d", sender_pid);
-                        continue;
-                    }
+                    } // bad frame end
                     if( fl==VTUN_ECHO_REQ ) {
                         /* Send ECHO reply */
                         if(!select_net_write(chan_num)) {
