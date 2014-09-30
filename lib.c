@@ -51,13 +51,6 @@ char	*title_start;	/* start of the proc title space */
 char	*title_end;     /* end of the proc title space */
 int	title_size;
 
-#define SYSLOG_DUPS 2
-char *syslog_buf[SYSLOG_DUPS];
-int syslog_buf_counter = 0;
-int syslog_dup_counter = 0;
-int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
-int init = 0;
-
 void init_title(int argc,char *argv[], char *envp[], char *name)
 {
 	int i;
@@ -116,6 +109,13 @@ void set_title(const char *fmt, ...)
 	strcat(title_start, buf);
 }
 #endif  /* HAVE_SETPROC_TITLE */
+
+#define SYSLOG_DUPS 2
+char *syslog_buf[SYSLOG_DUPS];
+int syslog_buf_counter = 0;
+int syslog_dup_counter = 0;
+int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
+int init = 0;
 
 /* 
  * Print padded messages.
