@@ -69,6 +69,7 @@ static inline void io_cancel(void)
 
 /* signal safe syslog function */
 void vtun_syslog_init();
+void vtun_syslog_free();
 void vtun_syslog (int priority, char *format, ...);
 int add_json(char *buf, int *pos, const char *name, const char *format, ...);
 int start_json(char *buf, int *pos);

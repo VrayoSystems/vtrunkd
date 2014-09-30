@@ -52,10 +52,11 @@ char	*title_end;     /* end of the proc title space */
 int	title_size;
 
 #define SYSLOG_DUPS 2
-char *syslog_buf[SYSLOG_DUPS] = NULL;
+char *syslog_buf[SYSLOG_DUPS];
 int syslog_buf_counter = 0;
 int syslog_dup_counter = 0;
 int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
+int init = 0;
 
 void init_title(int argc,char *argv[], char *envp[], char *name)
 {
@@ -396,6 +397,14 @@ void vtun_syslog_init() {
         syslog_buf[i] = malloc(JS_MAX);
         memset(syslog_buf[i], 0, JS_MAX);
     }
+    init = 1;
+}
+
+void vtun_syslog_free() {
+    for (int i = 0; i < SYSLOG_DUPS; i++) {
+        free(syslog_buf[i]);
+    }
+    init = 0;
 }
 
 void vtun_syslog(int priority, char *format, ...) {
@@ -409,60 +418,71 @@ void vtun_syslog(int priority, char *format, ...) {
 
         va_start(ap, format);
         vsnprintf(buf, sizeof(buf) - 1, format, ap);
-
-        if (syslog_dup_type == 0) {
-            if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
-                syslog_dup_counter++;
-                syslog_dup_type = 1;
-            } else {
-                int counter = syslog_dup_counter - 1;
-                if (counter < 0) {
-                    counter = SYSLOG_DUPS - 1;
+        if (init) {
+            if (syslog_dup_type == 0) {
+                if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
+                    syslog_dup_counter++;
+                    syslog_dup_type = 1;
+                } else {
+                    int counter = syslog_dup_counter - 1;
+                    if (counter < 0) {
+                        counter = SYSLOG_DUPS - 1;
+                    }
+                    if (!strcmp(syslog_buf[counter], buf)) {
+                        syslog_dup_counter++;
+                        syslog_dup_type = 2;
+                    } else {
+                        if (++syslog_buf_counter == SYSLOG_DUPS) {
+                            syslog_buf_counter = 0;
+                        }
+                        int string_len = strlen(buf);
+                        if (string_len > JS_MAX) {
+                            string_len = JS_MAX - 2;
+                        }
+                        memcpy(syslog_buf[syslog_buf_counter], buf, string_len+1);
+                        print = 1;
+                    }
                 }
-                if (!strcmp(syslog_buf[counter], buf)) {
+            } else if (syslog_dup_type == 1) {
+                if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
+                    syslog_dup_counter++;
+                } else {
+                    if (++syslog_buf_counter == SYSLOG_DUPS) {
+                        syslog_buf_counter = 0;
+                    }
+                    int string_len = strlen(buf);
+                    if (string_len > JS_MAX) {
+                        string_len = JS_MAX - 2;
+                    }
+                    memcpy(syslog_buf[syslog_buf_counter], buf, string_len+1);
+                    print = 1;
+                }
+            } else if (syslog_dup_type == 2) {
+                if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
                     syslog_dup_counter++;
                     syslog_dup_type = 2;
+                    if (++syslog_buf_counter == SYSLOG_DUPS) {
+                        syslog_buf_counter = 0;
+                    }
+                } else {
+                    if (++syslog_buf_counter == SYSLOG_DUPS) {
+                        syslog_buf_counter = 0;
+                    }
+                    int string_len = strlen(buf);
+                    if (string_len > JS_MAX) {
+                        string_len = JS_MAX - 2;
+                    }
+                    memcpy(syslog_buf[syslog_buf_counter], buf, string_len+1);
+                    print = 1;
                 }
             }
+        } else {
             print = 1;
-        } else if (syslog_dup_type == 1) {
-            if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
-                syslog_dup_counter++;
-            } else {
-                if (++syslog_buf_counter == SYSLOG_DUPS) {
-                    syslog_buf_counter = 0;
-                }
-                int string_len = strlen(buf);
-                if (string_len > JS_MAX) {
-                    string_len = JS_MAX - 1;
-                }
-                memcpy(syslog_buf[syslog_buf_counter], buf, string_len);
-                print = 1;
-
-            }
-        } else if (syslog_dup_type == 2) {
-            int counter = syslog_dup_counter - 1;
-            if (counter < 0) {
-                counter = SYSLOG_DUPS - 1;
-            }
-            if (!strcmp(syslog_buf[counter], buf)) {
-                syslog_dup_counter++;
-                syslog_dup_type = 2;
-            } else {
-                if (++syslog_buf_counter == SYSLOG_DUPS) {
-                    syslog_buf_counter = 0;
-                }
-                int string_len = strlen(buf);
-                if (string_len > JS_MAX) {
-                    string_len = JS_MAX - 1;
-                }
-                memcpy(syslog_buf[syslog_buf_counter], buf, string_len);
-                print = 1;
-            }
         }
+
         if (print) {
             if (syslog_dup_counter) {
-                syslog(priority, "Last %d message(s) repeat %d times", syslog_dup_type, syslog_dup_counter);
+                syslog(priority, "Last %d message(s) repeat %d times", syslog_dup_type, syslog_dup_counter/syslog_dup_type);
                 syslog_dup_counter = 0;
                 syslog_dup_type = 0;
             }
