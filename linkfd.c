@@ -1895,7 +1895,7 @@ int set_max_chan(uint32_t chan_mask) {
     shm_conn_info->max_chan = max_chan;
 }
 
-int redetect_head_unsynced(int32_t chan_mask, int exclude) {
+int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is only used to change head!
     int fixed = 0;
     int Ch = 0;
     int Cs = 0;
@@ -1906,6 +1906,22 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
     int min_rtt = 99999;
     int max_ACS = 0;
     int max_ACS_chan = -1;
+    int max_chan = shm_conn_info->max_chan;
+
+    if( exclude == max_chan) { // the only case right now
+        // choose first (random) head, excluding 'excluded', then do following redetect
+        int new_head = -1;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != exclude)) {
+                new_head = i;
+                break;
+            }
+        }
+        if(new_head != -1) { // means we've found one alive and not excluded
+            shm_conn_info->max_chan = new_head;
+            max_chan = new_head;
+        }
+    }
 
     if(shm_conn_info->idle) {
         // use RTT-only choosing of head while idle!
@@ -1927,7 +1943,6 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) {
         // this code works only if not idling!
         // This is ALL-mode algorithm, almost useless
         if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
-                max_chan = shm_conn_info->max_chan;
                 int min_Ch = 1000000;
                 int min_Ch_chan = 1000000;
                 int min_Cs = 1000000;
