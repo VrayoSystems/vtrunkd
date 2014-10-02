@@ -3070,11 +3070,13 @@ struct timeval cpulag;
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
                     if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) ) {
-                        vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
                         if(info.head_channel) {
-                            vtun_syslog(LOG_ERR, "         ^^^ HEAD channel!");
+                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
                             redetect_head_unsynced(chan_mask, info.process_num);
                             // TODO: immediate action required!
+                        } else {
+                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
+
                         }
                     }
                 }
