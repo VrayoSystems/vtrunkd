@@ -5493,11 +5493,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     info.srv = ss;
     info.pid = getpid();
     info.process_num = physical_channel_num;
-    sem_wait(&(shm_conn_info->stats_sem));
-    shm_conn_info->session_name_checksum[info.process_num] = calcsum(lfd_host->host);
-    shm_conn_info->wait_flag[info.process_num] = 0;
-    sem_post(&(shm_conn_info->stats_sem));
-    vtun_syslog(LOG_INFO, "checksum %s %"PRIu32"",lfd_host->host,shm_conn_info->session_name_checksum[info.process_num]);
     info.mode = R_MODE;
     if (info.srv) {
         info.channel_amount = 0; // first time for server, later server is getting it from client through net
