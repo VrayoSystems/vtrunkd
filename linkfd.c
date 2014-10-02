@@ -593,21 +593,24 @@ int check_delivery_time(int mld_divider) {
 
 // this method is crutial as it controls AG/R_MODE operation while in R_MODE
 int check_delivery_time_unsynced(int mld_divider) {
+    return check_delivery_time_path_unsynced(info.process_num, mld_divider);
+}
+
+int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     struct timeval max_latency_drop = info.max_latency_drop;
     // check for dead channel
-    if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+    if(shm_conn_info->stats[pnum].channel_dead && (shm_conn_info->max_chan != pnum)) {
         // vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
         return 0;
     }
     // TODO: re-think this!
-    if( ( (info.rsr < info.send_q_limit_threshold) || (info.send_q_limit_cubic < info.send_q_limit_threshold)) && (shm_conn_info->max_chan != info.process_num)) {
+    if( ( (info.rsr < info.send_q_limit_threshold) || (info.send_q_limit_cubic < info.send_q_limit_threshold)) && (shm_conn_info->max_chan != pnum)) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
-    //if( (shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[shm_conn_info->ax_chan].rtt_phys_avg) > ((int32_t)(tv2ms(&max_latency_drop) / 2)) ) {
-    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
+    if( (shm_conn_info->stats[pnum].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)));
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -3076,8 +3079,10 @@ struct timeval cpulag;
         if(ag_flag_local == AG_MODE) {
             // check our protup against all other chans
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) ) {
+                if ((chan_mask & (1 << i)) 
+                    && (!shm_conn_info->stats[i].channel_dead)
+                    && ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec)) 
+                    && ((shm_conn_info->stats[i].ag_flag_local) || (check_delivery_time_path_unsynced(i, 2)))) { // warning! CLD may
                         if(info.head_channel) {
                             vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
                             redetect_head_unsynced(chan_mask, info.process_num);
@@ -3086,7 +3091,6 @@ struct timeval cpulag;
                             vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
 
                         }
-                    }
                 }
             }
         }
