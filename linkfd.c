@@ -4578,16 +4578,15 @@ if(drop_packet_flag) {
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                         //info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
-                        info.srtt2_10 += (tv2ms(&tv_tmp)*10 - info.srtt2_10) / 8;
+                        info.srtt2_10 += ((int)tv2ms(&tv_tmp)*10 - info.srtt2_10) / 8;
                         info.rtt2 = info.srtt2_10 / 10; // check this!
                         if (info.rtt2 <= 0) info.rtt2 = 1;
-                        int r_delta = tv2ms(&tv_tmp) - info.srtt2_10 / 10;
+                        int r_delta = (int)tv2ms(&tv_tmp) - info.srtt2_10 / 10;
                         if(r_delta > 0) {
                             info.srtt2var = (3 * info.srtt2var  +  r_delta)/4;
                         } else {
                             info.srtt2var = (3 * info.srtt2var  -  r_delta)/4;
                         }
-
                     }
 
                     if ((start_of_train != 0) && (chan_num == 1)) {
