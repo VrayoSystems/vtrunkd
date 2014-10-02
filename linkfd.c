@@ -131,6 +131,7 @@ struct my_ip {
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
+#define SPEED_REDETECT_IMMUNE_SEC 5 // (interval seconds) before next auto-redetection can occur after PROTUP - added to above timer!
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
 #define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
@@ -1907,6 +1908,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     int max_ACS = 0;
     int max_ACS_chan = -1;
     int max_chan = shm_conn_info->max_chan;
+    int immune_sec = 0;
 
     if( exclude == max_chan) { // the only case right now
         // choose first (random) head, excluding 'excluded', then do following redetect
@@ -1920,6 +1922,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         if(new_head != -1) { // means we've found one alive and not excluded
             shm_conn_info->max_chan = new_head;
             max_chan = new_head;
+            // set redetect time to future
+            immune_sec = SPEED_REDETECT_IMMUNE_SEC;
         }
     }
 
@@ -1939,6 +1943,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         shm_conn_info->max_chan = min_rtt_chan;
         fixed = 1;
         shm_conn_info->last_switch_time = info.current_time; // nothing bad in this..
+        shm_conn_info->last_switch_time.tv_sec += immune_sec;
     } else {
         // this code works only if not idling!
         // This is ALL-mode algorithm, almost useless
@@ -2009,11 +2014,13 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
             shm_conn_info->max_chan = max_chan_H;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
+            shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else if (max_chan_H == -1 && max_chan_CS != -1) {
             vtun_syslog(LOG_INFO, "Head change CS");
             shm_conn_info->max_chan = max_chan_CS;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
+            shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else if (max_chan_H != -1 && max_chan_CS != -1) {
             if(max_chan_H != max_chan_CS) {
                 vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
@@ -2021,6 +2028,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
             shm_conn_info->max_chan = max_chan_H;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
+            shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else { // means max_chan = -1; find first alive chan
             // Two possibilities here: 1. we detected correct channel 2. there is only one channel alive
             // 3. it may come that chan is excluded and only one chan is there
