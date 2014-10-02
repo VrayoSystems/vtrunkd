@@ -1434,6 +1434,8 @@ if(drop_packet_flag) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
 
+        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+
         // packet code section
         int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
         int packet_code_ready = 0;
@@ -3977,7 +3979,7 @@ struct timeval cpulag;
 
                 sem_post(&(shm_conn_info->common_sem));
                 if (flag) {
-                    len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[i].local_seq_num, FRAME_REDUNDANCY_CODE);
+                    len_sum = pack_packet(i, buf2, len_sum, 0, info.channel[i].local_seq_num, FRAME_REDUNDANCY_CODE);
                     info.channel[i].local_seq_num++;
                     if (info.channel[i].local_seq_num == (UINT32_MAX - 1)) {
                         info.channel[i].local_seq_num = 0;
