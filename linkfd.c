@@ -4982,7 +4982,6 @@ if(drop_packet_flag) {
             } else if (len == BREAK_ERROR) {
                 vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
-                break;
             } else if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
