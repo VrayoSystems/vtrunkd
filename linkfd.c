@@ -3709,9 +3709,9 @@ struct timeval cpulag;
                 //todo send time_lag for all process(PHYSICAL CHANNELS)
                 uint32_t time_lag_remote;
                 uint16_t pid_remote;
-                if(send_q_eff_mean > 1000) { // TODO: invent a more neat way to start sending buf_len (>0? changed?)
+                if(send_q_eff_mean > 1000) { // TODO: invent a more neat way to start sending buf_len (>0? changed?)// TODO removeL this was due to bug two lines below. Now fixed
                     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                        if(buf_len_sent == my_miss_packets_max) continue;
+                        if(buf_len_sent[i] == my_miss_packets_max) continue;
                         buf_len_sent[i] = my_miss_packets_max;
                         sem_wait(&(shm_conn_info->stats_sem));
                         /* If pid is null --> link didn't up --> continue*/
@@ -3842,7 +3842,7 @@ struct timeval cpulag;
             sem_wait(&(shm_conn_info->common_sem));
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
-                    need_retransmit = 1;
+                    need_retransmit = 1; // TODO: may result in infinite looping if !CDT
                     break;
                 }
             }
