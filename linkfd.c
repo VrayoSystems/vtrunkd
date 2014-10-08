@@ -125,6 +125,8 @@ struct my_ip {
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
 
+#define SKIP_SENDING_CLD_DIV 2
+
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
 #define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
@@ -1080,7 +1082,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
             } else {
-                if(check_delivery_time(2)) { // TODO: head always passes!
+                if(check_delivery_time(SKIP_SENDING_CLD_DIV)) { // TODO: head always passes! 
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
@@ -3842,12 +3844,16 @@ struct timeval cpulag;
             sem_wait(&(shm_conn_info->common_sem));
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
-                    need_retransmit = 1; // TODO: may result in infinite looping if !CDT
+                    if( !((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                        // noop?
+                    } else {
+                        need_retransmit = 1; 
+                    }
                     break;
                 }
             }
             sem_post(&(shm_conn_info->common_sem));
-            if( (shm_conn_info->dropping || shm_conn_info->head_lossing) && (!info.head_channel) ) { // semi-atomic, no need to sync, TODO: can optimize with above
+            if((!need_retransmit) && ((shm_conn_info->dropping || shm_conn_info->head_lossing) && (!info.head_channel))  ) { // semi-atomic, no need to sync, TODO: can optimize with above
                 need_retransmit = 1; // flood not-head to top for 'dropping time'
             }
         }
