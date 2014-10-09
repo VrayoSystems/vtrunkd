@@ -30,20 +30,22 @@
 
 
 
-void frame_llist_init(struct frame_llist *l)
-{
-	l->rel_head = l->rel_tail = -1;
+void frame_llist_init(struct frame_llist *l) {
+    l->rel_head = l->rel_tail = -1;
+    l->length = 0;
 } 
 
 void frame_llist_fill(struct frame_llist *l, struct frame_seq flist[], int len)
 {
-	int i;
-	l->rel_head = 0;
-	for(i=0;i<(len-1);i++) {
-		flist[i].rel_next = i+1;
-	}
-	flist[len-1].rel_next = -1;
-	l->rel_tail = len-1;
+    int i;
+    l->rel_head = 0;
+    l->length = 0;
+    for (i = 0; i < (len - 1); i++) {
+        flist[i].rel_next = i + 1;
+        l->length++;
+    }
+    flist[len - 1].rel_next = -1;
+    l->rel_tail = len - 1;
 } 
 
 
@@ -58,13 +60,13 @@ int frame_llist_pull(struct frame_llist *lfree, struct frame_seq flist[], int *f
 	if(lfree->rel_head == -1) { // no more chunks available
 		return -1; 
 	}
-	
+    lfree->length--;
 	*f = lfree->rel_head;
 	lfree->rel_head = flist[lfree->rel_head].rel_next;
-	if(lfree->rel_head == -1) lfree->rel_tail = -1;
-        flist[(*f)].rel_next = -1; // make sure to set it!
-	
-	return 0;
+    if (lfree->rel_head == -1)
+        lfree->rel_tail = -1;
+    flist[(*f)].rel_next = -1; // make sure to set it!
+    return 0;
 }
 
 void frame_llist_append(struct frame_llist *l, int f, struct frame_seq buf[]) {
@@ -74,7 +76,8 @@ void frame_llist_append(struct frame_llist *l, int f, struct frame_seq buf[]) {
     } else {
           l->rel_tail = l->rel_head = f;
     }
-    buf[f].rel_next=-1;
+    buf[f].rel_next = -1;
+    l->length++;
 }
 
 

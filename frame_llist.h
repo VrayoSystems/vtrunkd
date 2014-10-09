@@ -25,6 +25,8 @@
 #ifndef _VTUN_FRAME_LLIST_H
 #define _VTUN_FRAME_LLIST_H
 
+#include <sys/time.h>
+
 #define VTUN_FRAME_SIZE2 1500
 
 struct frame_seq {
@@ -42,8 +44,8 @@ struct frame_seq {
 struct frame_llist{
 	int rel_head;
 	int rel_tail;
+    int length;
 };
-
 
 void frame_llist_fill(struct frame_llist *l, struct frame_seq flist[], int len);
 void frame_llist_init(struct frame_llist *l);

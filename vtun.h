@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <time.h>
 #include "speed_algo.h"
+#include "packet_code.h"
 
 /* Default VTUN port */
 #define VTUN_PORT 5000
@@ -131,6 +132,7 @@
 #define MAX_TCP_PHYSICAL_CHANNELS 7
 // 10 seconds to start accepting tcp channels; otherwise timeout
 #define CHAN_START_ACCEPT_TIMEOUT 10
+#define FAST_RESEND_BUF_SIZE (MAX_TCP_PHYSICAL_CHANNELS*3)
 
 #define TCP_MAX_REORDER 3 // general knowledge
 /* End of configurable part */
@@ -278,6 +280,7 @@ struct vtun_host {
 #define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
 #define FRAME_DEAD_CHANNEL 6
 #define FRAME_CHANNEL_INFO 7
+#define FRAME_REDUNDANCY_CODE 8
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
@@ -431,7 +434,6 @@ struct logical_status {
     uint32_t bytes_put;
 };
 
-
 struct _smalldata {
     double *ACS;
     double *rtt;
@@ -520,9 +522,10 @@ struct conn_info {
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
-    struct frame_seq fast_resend_buf[MAX_TCP_PHYSICAL_CHANNELS];
+    struct frame_seq fast_resend_buf[FAST_RESEND_BUF_SIZE];
     int fast_resend_buf_idx; // how many packets in fast_resend_buf
     struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
+    struct frame_llist wb_just_write_frames[MAX_TCP_LOGICAL_CHANNELS];
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem; //for write buf, seq_counter
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
@@ -573,6 +576,10 @@ struct conn_info {
         int len_num[EFF_LEN_BUFF];
         int sum;
     } eff_len; /**< Session hash for remote machine sync by @see common_sem*/
+    struct packet_sum packet_code[SELECTION_NUM][MAX_TCP_LOGICAL_CHANNELS];// sync by common_sem
+    struct packet_sum packet_code_recived[MAX_TCP_LOGICAL_CHANNELS][BULK_BUFFER_PACKET_CODE];// sync by common_sem
+    int packet_code_bulk_counter;
+    struct packet_sum test_packet_code[MAX_TCP_LOGICAL_CHANNELS];
 };
 
 struct resent_chk {
