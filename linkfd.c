@@ -149,6 +149,8 @@ struct my_ip {
 //#define NO_ACK
 
 #define RCVBUF_SIZE 1048576
+#define WHO_LOST 1
+#define WHO_LAGGING 2
 
 // #define TIMEWARP
 
@@ -425,6 +427,41 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
     return 0;
 }
 
+int update_prev_flushed(int logical_channel, int fprev) {
+    if(info.prev_flushed) {
+        info.flush_sequential += 
+            shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+    } else {
+        // TODO: write avg stats here?
+        info.flush_sequential = 
+            shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+    }
+    info.prev_flushed = 1;
+}
+
+// return who is lagging. 
+// NOTE: Need to ensure that we have a missing packet at LWS+1 prior to calling this!
+int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mask) {
+    // we let that next seq_num to LWS is lost
+    int lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
+    int lagging = 0;
+    // find possible processes
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i))
+            && (!shm_conn_info->stats[i].channel_dead)) {
+            if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
+                strcpy(pname, shm_conn_info->stats[i].name); 
+                lagging++;
+            }
+            if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
+                strcpy(pname, shm_conn_info->stats[i].name); 
+                lagging++;
+            }
+
+        }
+    }
+    return lagging;
+}
 
 int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf wb[], struct frame_llist *lfree, struct frame_seq flist[]) {
     int free_cnt = 0;
@@ -673,7 +710,7 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) ) {
+                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) ) { // TODO: use channel_dead instead!!
                     // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                     continue;
                 }
@@ -1575,23 +1612,22 @@ int write_buf_check_n_flush(int logical_channel) {
                       || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
+                char lag_pname[SESSION_NAME_SIZE];
+                int r_amt = 0;
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN tflush_counter %"PRIu32" %d",  shm_conn_info->tflush_counter, incomplete_seq_len);
+                    update_prev_flushed(logical_channel, fprev);
+                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms",  shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
+                    update_prev_flushed(logical_channel, fprev);
+                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
                 } else if (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) {
-                    if(info.prev_flushed) {
-                        info.flush_sequential += 
-                            shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-                    } else {
-                        // TODO: write avg stats here?
-                        info.flush_sequential = 
-                            shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-                    }
-                    info.prev_flushed = 1;
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d; tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                    update_prev_flushed(logical_channel, fprev);
+                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
                 }
             }
             
@@ -2324,6 +2360,7 @@ int lfd_linker(void)
     }
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
+    strcpy(shm_conn_info->stats[info.process_num].name, lfd_host->host);
     sem_post(&(shm_conn_info->stats_sem));    
 #ifdef CLIENTONLY
     info.srv = 0;
@@ -3550,6 +3587,7 @@ struct timeval cpulag;
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
                     shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                    shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - 1;
                     //shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                     sem_post(&(shm_conn_info->write_buf_sem));
 
