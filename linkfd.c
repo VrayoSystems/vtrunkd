@@ -444,17 +444,23 @@ int update_prev_flushed(int logical_channel, int fprev) {
 int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mask) {
     // we let that next seq_num to LWS is lost
     int lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
+    int lrq = 0;
     int lagging = 0;
     // find possible processes
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-        if ((chan_mask & (1 << i))
-            && (!shm_conn_info->stats[i].channel_dead)) {
+        if (chan_mask & (1 << i)) {
             if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
-                strcpy(pname, shm_conn_info->stats[i].name); 
+                if(shm_conn_info->write_buf[logical_channel].last_received_seq[i] > lrq) { // we find the most recent one that fulfills the conditions
+                    strcpy(pname, shm_conn_info->stats[i].name); 
+                    lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i];
+                }
                 lagging++;
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
-                strcpy(pname, shm_conn_info->stats[i].name); 
+                if(shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] > lrq) {
+                    strcpy(pname, shm_conn_info->stats[i].name); 
+                    lrq = shm_conn_info->write_buf[logical_channel].possible_seq_lost[i];
+                }
                 lagging++;
             }
 
@@ -1612,7 +1618,7 @@ int write_buf_check_n_flush(int logical_channel) {
                       || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
-                char lag_pname[SESSION_NAME_SIZE];
+                char lag_pname[SESSION_NAME_SIZE] = "E\0";
                 int r_amt = 0;
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
