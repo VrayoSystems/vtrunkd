@@ -448,24 +448,35 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     int lagging = 0;
     // find possible processes
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-        if (chan_mask & (1 << i)) {
+        if (chan_mask & (1 << i) && (!shm_conn_info->stats[i].channel_dead) && !check_rtt_latency_drop_chan(i)) {
             if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
                 if(shm_conn_info->write_buf[logical_channel].last_received_seq[i] > lrq) { // we find the most recent one that fulfills the conditions
                     strcpy(pname, shm_conn_info->stats[i].name); 
                     lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i];
                 }
-                lagging++;
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
                 if(shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] > lrq) {
                     strcpy(pname, shm_conn_info->stats[i].name); 
                     lrq = shm_conn_info->write_buf[logical_channel].possible_seq_lost[i];
                 }
+            }
+
+        }
+    }
+    // now count only
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if (chan_mask & (1 << i)) {
+            if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
+                lagging++;
+            }
+            if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
                 lagging++;
             }
 
         }
     }
+
     return lagging;
 }
 
