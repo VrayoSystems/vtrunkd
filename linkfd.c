@@ -662,16 +662,21 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     return 1;
 }
 
-int check_rtt_latency_drop() {
+int check_rtt_latency_drop() { // TODO: remove this dumb method (refactor some code)
+    return check_rtt_latency_drop_chan(info.process_num);
+}
+
+int check_rtt_latency_drop_chan(int chan_num) {
     struct timeval max_latency_drop = info.max_latency_drop;
-    if(shm_conn_info->stats[info.process_num].channel_dead && (shm_conn_info->max_chan != info.process_num)) {
+    if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
+    if( (shm_conn_info->stats[chan_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
         return 0;
     }
     return 1;
 }
+
 
 // TODO: this MUST be heavily optimized! vvv
 static inline int check_force_rtt_max_wait_time(int chan_num) {
@@ -707,7 +712,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
 }
 
 int get_write_buf_wait_data() {
-    // TODO WARNING: is it synchronized?
+    // TODO WARNING: is it synchronized? stats_sem!
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
@@ -716,7 +721,7 @@ int get_write_buf_wait_data() {
         info.least_rx_seq[i] = UINT32_MAX;
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) ) { // TODO: use channel_dead instead!!
+                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
                     // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                     continue;
                 }
@@ -3376,7 +3381,7 @@ struct timeval cpulag;
             add_json(js_buf, &js_cur, "PCS", "%d", PCS);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
-            add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop());
+            add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
             add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
             add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
