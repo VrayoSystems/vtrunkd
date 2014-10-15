@@ -56,6 +56,8 @@
 
 #include "compat.h"
 
+char process_string[100] = { 0 };
+
 static volatile sig_atomic_t server_term;
 static void sig_term(int sig)
 {
@@ -93,8 +95,12 @@ void connection(int sock)
 	sa.sa_flags=SA_NOCLDWAIT;;
         sigaction(SIGHUP,&sa,NULL);
 
-	vtun_syslog(LOG_INFO,"Session %s[%s:%d] opened (build %s)", host->host, ip, 
-					ntohs(cl_addr.sin_port), BUILD_DATE);
+        closelog();
+        sprintf(process_string, "vtrunkd %s", host->host);
+        vtun_syslog(LOG_ERR, "Change title with: %s", process_string);
+        openlog(process_string, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+        vtun_syslog(LOG_INFO, "Session %s[%s:%d] opened (build %s)", host->host, ip, ntohs(cl_addr.sin_port), BUILD_DATE);
+
         host->rmt_fd = sock; 
 	
         host->sopt.laddr = strdup(inet_ntoa(my_addr.sin_addr));

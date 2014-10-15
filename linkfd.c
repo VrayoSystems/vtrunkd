@@ -5254,11 +5254,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     weight_cnt = 0;
     acnt = 0; // assert variable
 
-    closelog();
-    char process_string[100];
-    sprintf(process_string, "vtrunkd %s", host->host);
-    vtun_syslog(LOG_ERR, "Change title with: %s", process_string);
-    openlog(process_string, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
     vtun_syslog_init();
     // these are for retransmit mode... to be removed
     retransmit_count = 0;
