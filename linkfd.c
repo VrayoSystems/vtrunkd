@@ -2454,7 +2454,13 @@ int lfd_linker(void)
             for (; ; ++port_tmp <= lfd_host->end_port) {
                 // try to bind to portnum my_num+smth:
                 memset(&my_addr, 0, sizeof(my_addr));
-                my_addr.sin_addr.s_addr = INADDR_ANY;
+                laddrlen = sizeof(localaddr);
+                if (getsockname(service_channel, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
+                    vtun_syslog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                    close(prio_s);
+                    return 0;
+                }
+                memcpy(&my_addr.sin_addr.s_addr, &localaddr.sin_addr.s_addr, sizeof(localaddr.sin_addr.s_addr));
                 my_addr.sin_port = htons(port_tmp);
                 memset(&rmaddr, 0, sizeof(rmaddr));
                 my_addr.sin_family = AF_INET;
