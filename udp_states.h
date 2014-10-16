@@ -2,11 +2,13 @@
  * udp_states.h
  *
  *  Created on: 15.10.2014
- *      Author: andrey
+ *      Author: Andrey Kuznetsov
  */
 
 #ifndef UDP_STATES_H_
 #define UDP_STATES_H_
+
+#include <asm/types.h>
 
 struct udp_stats {
     __u32 rdata[8];

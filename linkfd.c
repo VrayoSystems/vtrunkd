@@ -73,6 +73,7 @@
 #include <netinet/tcp.h>
 #endif
 
+#include "udp_states.h"
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
@@ -2642,6 +2643,8 @@ int lfd_linker(void)
     gettimeofday(&json_timer, NULL);
     info.check_shm = 0; // zeroing check_shm
 
+    struct udp_stats udp_struct[1];
+
     struct timer_obj *recv_n_loss_send_timer = create_timer();
     struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
@@ -3706,6 +3709,13 @@ struct timeval cpulag;
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            udp_struct->lport = info.channel[1].lport;
+            udp_struct->rport = info.channel[1].rport;
+            if (get_udp_stats(udp_struct, 1)) {
+                vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
+                        udp_struct->rx_q);
+            }
+
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
