@@ -728,10 +728,13 @@ int get_write_buf_wait_data() {
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
     uint32_t chan_mask = shm_conn_info->channels_mask;
+    int any_lrx;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
+
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
+                any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
                 if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
                     // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                     continue;
@@ -741,7 +744,9 @@ int get_write_buf_wait_data() {
                 }
             }
         }
-        
+        if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
+            info.least_rx_seq[i] = any_lrx;
+        }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i);
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
