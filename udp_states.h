@@ -15,7 +15,9 @@ struct udp_stats {
     int lport;
     int rx_q;
     int tx_q;
-    int drops;
+    int drops, state, refcnt, wq, rq;
+    unsigned uid, ino;
+    unsigned long long sk;
 };
 
 int get_udp_stats(struct udp_stats* udp_struct, int conn_amount);
