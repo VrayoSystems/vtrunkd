@@ -120,7 +120,7 @@ struct my_ip {
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
-#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
+//#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed! // cpu lag
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
@@ -2278,7 +2278,7 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
-    struct timeval old_time = {0, 0};
+    //struct timeval old_time = {0, 0};
     struct timeval ping_req_tv[MAX_TCP_LOGICAL_CHANNELS];
     for(int i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         gettimeofday(&ping_req_tv[i], NULL);
@@ -2721,8 +2721,8 @@ int lfd_linker(void)
     int t; // time for W
     //int head_rel = 0;
     struct timeval drop_time = info.current_time;
-struct timeval cpulag;
-    gettimeofday(&cpulag, NULL);
+    //struct timeval cpulag;
+    //gettimeofday(&cpulag, NULL);
     int super = 0;
     uint32_t my_max_send_q_prev=0;
     int buf_len_sent[MAX_TCP_PHYSICAL_CHANNELS];
@@ -2806,11 +2806,11 @@ struct timeval cpulag;
         
 
         // CPU LAG >>>
-        gettimeofday(&cpulag, NULL);
-        timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
-        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
-            vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
-        }
+        //gettimeofday(&cpulag, NULL);
+        //timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
+        //if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
+        //    vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+        //}
         // <<< END CPU_LAG
 
 
@@ -3996,7 +3996,7 @@ if(drop_packet_flag) {
 }
 #endif
 
-        gettimeofday(&old_time, NULL);
+        //gettimeofday(&old_time, NULL); // cpu-lag..
 
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
