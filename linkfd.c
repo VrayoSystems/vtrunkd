@@ -127,6 +127,11 @@ struct my_ip {
 
 #define SKIP_SENDING_CLD_DIV 2
 
+// PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
+// this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
+#define PLOSS_PSL 2 // this is '1or2'
+#define PLOSS_CHECK_PKTS 30 // how many packets to check for sequential loss to detect PLOSS TODO: find correct value. speed dependent??
+
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
 #define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
@@ -624,6 +629,50 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
     return idx;
 }
 
+/*
+ * count amount of packets lost sequentially and evenly
+ *
+ * return -1 if packets loss is uneven (like 0 1 1 0 0 1 1 1) or in any other case we will need to wait
+ * or return amount of packets lost
+ * TODO: can be optimized by using stored buf_len counter and not running this until buf_len reaches PLOSS_CHECK_PKTS
+ *
+ */
+int count_sequential_loss_unsync(int chan_num) {
+    int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
+    int isq, nsq;
+    int beg_lost = 0;
+    int packets_checked = 0;
+
+    // count lost at beginning
+    beg_lost = shm_conn_info->frames_buf[i].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq-1;
+
+    if(beg_lost > PLOSS_PSL) return beg_lost; // optimization: no need to calculate further as we already lost too much
+    
+    if(beg_lost == 0) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED! beg_lost == 0: should never happen; invoke with packet loss only!");
+    }
+    // now count losses over N packets
+    while((i > -1) && (packets_checked < PLOSS_CHECK_PKTS)) {
+        n = shm_conn_info->frames_buf[i].rel_next;
+        if( n > -1 ) {
+            isq = shm_conn_info->frames_buf[i].seq_num;
+            nsq = shm_conn_info->frames_buf[n].seq_num;
+            if(nsq > (isq+1)) {
+                return -1; // means loss not sequential; need to wait further
+            }
+        }
+        i = n;
+        packets_checked++;
+    }
+
+    if( packets_checked < PLOSS_CHECK_PKTS ) { // we assume that we've been invoked with at least one packet missing
+        return -1; // this means packets lost AND checked is not enough to make decision yet
+        // need to wait further..
+    }
+
+    return beg_lost; // now all checks done, return what we've got
+}
+
 /* check if we are allowed to drop packet again  */
 int check_drop_period_unsync() {
     struct timeval tv_tm, tv_rtt;
@@ -723,15 +772,25 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
 }
 
 int get_write_buf_wait_data() {
-    // TODO WARNING: is it synchronized? stats_sem!
+    // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
     uint32_t chan_mask = shm_conn_info->channels_mask;
-    int any_lrx;
+    int any_lrx, seq_loss = 0;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
-
+        if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
+            // means we're waiting for packet. Now check if it is lost!
+            // TODO: optimize here by checking buf_len >= PLOSS_CHECK_PKTS before doing this check!
+            seq_loss = count_sequential_loss_unsync(i); 
+            if(seq_loss > 0 && seq_loss < PLOSS_PSL) {
+                // means we detected PLOSS event
+                seq_loss = 1; // re-use variable
+            } else {
+                seq_loss = 0;
+            }
+        }
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
                 any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
