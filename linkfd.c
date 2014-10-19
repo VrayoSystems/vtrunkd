@@ -780,26 +780,39 @@ int get_write_buf_wait_data() {
     int any_lrx, seq_loss = 0;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
+        seq_loss = 0;
         if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
             // means we're waiting for packet. Now check if it is lost!
             // TODO: optimize here by checking buf_len >= PLOSS_CHECK_PKTS before doing this check!
             seq_loss = count_sequential_loss_unsync(i); 
             if(seq_loss > 0 && seq_loss < PLOSS_PSL) {
                 // means we detected PLOSS event
-                seq_loss = 1; // re-use variable
+                //seq_loss = 1; // re-use variable
+                // TODO rewrite this if
             } else {
                 seq_loss = 0;
             }
         }
+        
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
                 any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
-                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
-                    // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
-                    continue;
-                }
-                if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
+                if(seq_loss && (shm_conn_info->write_buf[i].possible_seq_lost[p] > (shm_conn_info->write_buf[i].last_written_seq + seq_loss)) 
+                && (shm_conn_info->write_buf[i].possible_seq_lost[p] < (shm_conn_info->write_buf[i].last_written_seq + PLOSS_CHECK_PKTS))) {
+                    // means we received a local loss with this global seq
+                    // and write buf says it is likely a loss
+                    // TODO: we have a slight chance of doing this by mistake
+                    //.    think how to deal with..
+                    // TODO TODO: NOT JUST BIGGER SEQ NUM BUT SOME RANGE TO DETECT WITHIN
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                } else {
+                    if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
+                        // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
+                        continue;
+                    }
+                    if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
+                        info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                    }
                 }
             }
         }
