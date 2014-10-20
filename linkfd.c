@@ -228,9 +228,9 @@ struct channel_info *chan_info = NULL;
 struct phisical_status info; /**< We store here all process closed information */
 
 struct {
-    int bytes_sent_norm;
+    int packet_sent_ag;
     int bytes_rcvd_norm;
-    int bytes_sent_rx;
+    int packet_sent_rmit;
     int bytes_rcvd_rx;
     int pkts_dropped;
     int rxmit_req; // outdated: use max_latency_hit + max_reorder_hit
@@ -1301,7 +1301,6 @@ int retransmit_send(char *out2, int n_to_send) {
             vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
         }
 
-        statb.bytes_sent_rx += len;        
         
         // TODO: add select() here!
         // TODO: optimize here
@@ -1326,6 +1325,7 @@ int retransmit_send(char *out2, int n_to_send) {
         info.channel[i].local_seq_num++;
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+        statb.packet_sent_rmit += 1000;
         info.channel[i].up_len += len_ret;
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
@@ -1588,7 +1588,6 @@ if(drop_packet_flag) {
     seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
     sem_post(&(shm_conn_info->resend_buf_sem));
 
-    statb.bytes_sent_norm += len;
 
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
@@ -1652,6 +1651,7 @@ if(drop_packet_flag) {
 #endif
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+    statb.packet_sent_ag += 1000;
     info.channel[chan_num].up_len += len_ret;
     info.channel[chan_num].up_packets++;
     info.channel[chan_num].bytes_put++;
@@ -3405,6 +3405,7 @@ int lfd_linker(void)
         // JSON LOGS HERE
         timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
+            int json_ms = tv2ms(&tv_tmp_tmp_tmp);
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -3413,7 +3414,9 @@ int lfd_linker(void)
                 vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
             }
             sem_wait(&(shm_conn_info->stats_sem));
-                            
+            shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
+            shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
+
             timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
                 shm_conn_info->dropping = 0;
@@ -3477,8 +3480,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
             add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
-            add_json(js_buf, &js_cur, "bsa", "%d", statb.bytes_sent_norm);
-            add_json(js_buf, &js_cur, "bsr", "%d", statb.bytes_sent_rx);
+            add_json(js_buf, &js_cur, "psa", "%d", statb.packet_sent_ag / json_ms); // packet speed in ag
+            add_json(js_buf, &js_cur, "psr", "%d", statb.packet_sent_rmit / json_ms); // packet waste speed
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
             add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
@@ -5238,6 +5241,7 @@ if(drop_packet_flag) {
     }
 
     free_timer(recv_n_loss_send_timer);
+    free_timer(packet_speed_timer);
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask

@@ -382,6 +382,8 @@ struct conn_stats {
     int head_in;
     int head_use;
     struct timeval bdp1;
+    int packet_speed_ag;
+    int packet_speed_rmit;
 };
 /**
  * Structure for garbage statistic and information
