@@ -44,7 +44,6 @@ int get_udp_stats(struct udp_stats* udp_struct, int conn_amount) {
 
 int add_line(char* line, struct udp_stats* udp_struct, int conn_amount) {
     int lport = 0, rport = 0;
-    unsigned int ldata[8], rdata[8];
     char *loc, *rem, *data;
     char opt[256];
     int n, ret = 0;
@@ -64,16 +63,16 @@ int add_line(char* line, struct udp_stats* udp_struct, int conn_amount) {
     p[5] = 0;
     data = p + 6;
 
-    sscanf(loc, "%x:%x", (unsigned int *) ldata, (unsigned*) &lport);
-    sscanf(rem, "%x:%x", (unsigned int *) rdata, (unsigned*) &rport);
+    sscanf(loc, "%*x:%x", (unsigned*) &lport);
+    sscanf(rem, "%*x:%x", (unsigned*) &rport);
 
     for (int i = 0; i < conn_amount; i++) {
         if ((lport == udp_struct[i].lport) && (rport == udp_struct[i].rport)) {
-            opt[0] = 0;
-            n = sscanf(data, "%x %x:%x %*x:%*x %*x %d %*d %u %d %llx %[^\n]\n", &udp_struct[i].state, &udp_struct[i].tx_q, &udp_struct[i].rx_q,
-                    &udp_struct[i].uid, &udp_struct[i].ino, &udp_struct[i].refcnt, &udp_struct[i].sk, opt);
+            udp_struct[i].drops = 0;
+            n = sscanf(data, "%x %x:%x %*x:%*x %*x %d %*d %u %d %llx %d", &udp_struct[i].state, &udp_struct[i].tx_q, &udp_struct[i].rx_q,
+                    &udp_struct[i].uid, &udp_struct[i].ino, &udp_struct[i].refcnt, &udp_struct[i].sk, &udp_struct[i].drops);
             if (n < 9)
-                opt[0] = 0;
+                udp_struct[i].drops = 0;
             ret = 1;
             break;
         }

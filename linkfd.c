@@ -3712,8 +3712,8 @@ struct timeval cpulag;
             udp_struct->lport = info.channel[1].lport;
             udp_struct->rport = info.channel[1].rport;
             if (get_udp_stats(udp_struct, 1)) {
-                vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
-                        udp_struct->rx_q);
+                vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
+                        udp_struct->rx_q, udp_struct->drops);
             }
 
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
