@@ -121,12 +121,17 @@ struct my_ip {
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
-#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed!
+//#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed! // cpu lag
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
 
 #define SKIP_SENDING_CLD_DIV 2
+
+// PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
+// this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
+#define PLOSS_PSL 2 // this is '1or2'
+#define PLOSS_CHECK_PKTS 30 // how many packets to check for sequential loss to detect PLOSS TODO: find correct value. speed dependent??
 
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
@@ -625,6 +630,50 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
     return idx;
 }
 
+/*
+ * count amount of packets lost sequentially and evenly
+ *
+ * return -1 if packets loss is uneven (like 0 1 1 0 0 1 1 1) or in any other case we will need to wait
+ * or return amount of packets lost
+ * TODO: can be optimized by using stored buf_len counter and not running this until buf_len reaches PLOSS_CHECK_PKTS
+ *
+ */
+int count_sequential_loss_unsync(int chan_num) {
+    int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
+    int isq, nsq;
+    int beg_lost = 0;
+    int packets_checked = 0;
+
+    // count lost at beginning
+    beg_lost = shm_conn_info->frames_buf[i].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq-1;
+
+    if(beg_lost > PLOSS_PSL) return beg_lost; // optimization: no need to calculate further as we already lost too much
+    
+    if(beg_lost == 0) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED! beg_lost == 0: should never happen; invoke with packet loss only!");
+    }
+    // now count losses over N packets
+    while((i > -1) && (packets_checked < PLOSS_CHECK_PKTS)) {
+        n = shm_conn_info->frames_buf[i].rel_next;
+        if( n > -1 ) {
+            isq = shm_conn_info->frames_buf[i].seq_num;
+            nsq = shm_conn_info->frames_buf[n].seq_num;
+            if(nsq > (isq+1)) {
+                return -1; // means loss not sequential; need to wait further
+            }
+        }
+        i = n;
+        packets_checked++;
+    }
+
+    if( packets_checked < PLOSS_CHECK_PKTS ) { // we assume that we've been invoked with at least one packet missing
+        return -1; // this means packets lost AND checked is not enough to make decision yet
+        // need to wait further..
+    }
+
+    return beg_lost; // now all checks done, return what we've got
+}
+
 /* check if we are allowed to drop packet again  */
 int check_drop_period_unsync() {
     struct timeval tv_tm, tv_rtt;
@@ -667,7 +716,7 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     }
     if( (shm_conn_info->stats[pnum].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider));
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -724,25 +773,53 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
 }
 
 int get_write_buf_wait_data() {
-    // TODO WARNING: is it synchronized? stats_sem!
+    // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
     uint32_t chan_mask = shm_conn_info->channels_mask;
+    int any_lrx, seq_loss = 0;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
-        for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
-            if (chan_mask & (1 << p)) {
-                if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
-                    // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
-                    continue;
-                }
-                if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
-                    info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
-                }
+        seq_loss = 0;
+        if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
+            // means we're waiting for packet. Now check if it is lost!
+            // TODO: optimize here by checking buf_len >= PLOSS_CHECK_PKTS before doing this check!
+            seq_loss = count_sequential_loss_unsync(i); 
+            if(seq_loss > 0 && seq_loss < PLOSS_PSL) {
+                // means we detected PLOSS event
+                //seq_loss = 1; // re-use variable
+                // TODO rewrite this if
+            } else {
+                seq_loss = 0;
             }
         }
         
+        for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+            if (chan_mask & (1 << p)) {
+                any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
+                if(seq_loss && (shm_conn_info->write_buf[i].possible_seq_lost[p] > (shm_conn_info->write_buf[i].last_written_seq + seq_loss)) 
+                && (shm_conn_info->write_buf[i].possible_seq_lost[p] < (shm_conn_info->write_buf[i].last_written_seq + PLOSS_CHECK_PKTS))) {
+                    // means we received a local loss with this global seq
+                    // and write buf says it is likely a loss
+                    // TODO: we have a slight chance of doing this by mistake
+                    //.    think how to deal with..
+                    // TODO TODO: NOT JUST BIGGER SEQ NUM BUT SOME RANGE TO DETECT WITHIN
+                    info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                } else {
+                    if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
+                        // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
+                        continue;
+                    }
+                    if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
+                        info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                    }
+                }
+            }
+        }
+        if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
+            info.least_rx_seq[i] = any_lrx;
+        }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i);
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
@@ -2274,7 +2351,7 @@ int lfd_linker(void)
 
     struct timeval send1; // calculate send delay
     struct timeval send2;
-    struct timeval old_time = {0, 0};
+    //struct timeval old_time = {0, 0};
     struct timeval ping_req_tv[MAX_TCP_LOGICAL_CHANNELS];
     for(int i=0; i<MAX_TCP_LOGICAL_CHANNELS; i++) {
         gettimeofday(&ping_req_tv[i], NULL);
@@ -2719,8 +2796,8 @@ int lfd_linker(void)
     int t; // time for W
     //int head_rel = 0;
     struct timeval drop_time = info.current_time;
-struct timeval cpulag;
-    gettimeofday(&cpulag, NULL);
+    //struct timeval cpulag;
+    //gettimeofday(&cpulag, NULL);
     int super = 0;
     uint32_t my_max_send_q_prev=0;
     int buf_len_sent[MAX_TCP_PHYSICAL_CHANNELS];
@@ -2804,11 +2881,11 @@ struct timeval cpulag;
         
 
         // CPU LAG >>>
-        gettimeofday(&cpulag, NULL);
-        timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
-        if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
-            vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
-        }
+        //gettimeofday(&cpulag, NULL);
+        //timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
+        //if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
+        //    vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+        //}
         // <<< END CPU_LAG
 
 
@@ -4001,7 +4078,7 @@ if(drop_packet_flag) {
 }
 #endif
 
-        gettimeofday(&old_time, NULL);
+        //gettimeofday(&old_time, NULL); // cpu-lag..
 
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???

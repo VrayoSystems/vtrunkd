@@ -29,6 +29,12 @@ AC_ARG_ENABLE(mark,
    MARK=yes
 )
 
+AC_ARG_ENABLE(syslog,
+   --disable-syslog          Disable syslog output,
+   SYSLOG=$enableval,
+   SYSLOG=yes
+)
+
 dnl enable low memory opt
 AC_ARG_ENABLE(lowmem,
    --enable-low-mem         Compile for low ram device,
@@ -124,6 +130,10 @@ AC_SEARCH_LIBS(setproctitle, util bsd, AC_DEFINE(HAVE_SETPROC_TITLE) )
 
 if test "$MARK" = "no"; then
 	  CFLAGS="$CFLAGS -DW_O_SO_MARK=1"
+fi
+
+if test "$SYSLOG" = "yes"; then
+          CFLAGS="$CFLAGS -DSYSLOG=1"
 fi
 
 if test "$DEBUGG" = "yes"; then
