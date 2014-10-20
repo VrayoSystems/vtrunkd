@@ -191,6 +191,7 @@ char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
 #define START_SQL 5000
+struct udp_stats udp_struct[1];
 
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
@@ -1714,20 +1715,32 @@ int write_buf_check_n_flush(int logical_channel) {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
                 int r_amt = 0;
+                int log_printed = 0;
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
+                    log_printed = 1;
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+                    log_printed = 1;
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
                 } else if (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) {
+                    log_printed = 1;
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                }
+                if (log_printed) {
+                    udp_struct->lport = info.channel[1].lport;
+                    udp_struct->rport = info.channel[1].rport;
+                    if (get_udp_stats(udp_struct, 1)) {
+                        vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport,
+                                udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
+                    }
                 }
             }
             
@@ -2720,7 +2733,6 @@ int lfd_linker(void)
     gettimeofday(&json_timer, NULL);
     info.check_shm = 0; // zeroing check_shm
 
-    struct udp_stats udp_struct[1];
 
     struct timer_obj *recv_n_loss_send_timer = create_timer();
     struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
