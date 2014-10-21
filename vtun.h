@@ -518,6 +518,11 @@ struct phisical_status { // A.K.A. "info"
     int ploss_event_flag; /** flag to detect PLOSS at tflush */
 };
 
+/** @struct conn_info
+ *  @brief Common shm struct.
+ *
+ *  Description
+ */
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
