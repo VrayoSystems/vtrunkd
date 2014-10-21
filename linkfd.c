@@ -775,6 +775,26 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
     return timercmp(&max_wait_tv, &tv_tmp, >=);
 }
 
+int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
+    // calculate if ag-send speed is greater than one of the channels self speed. 
+    // Return 0 if greater, 1 otherwise (allowed to drop)
+    int ag_speed_total = 0;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+            ag_speed_total += shm_conn_info->stats[i].packet_speed_ag;
+        }
+    }
+    // now dubl 2
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+            if( (ag_speed_total < shm_conn_info->stats[i].ACK_speed) && !percent_delta_equal(ag_speed_total, shm_conn_info->stats[i].ACK_speed, 10) ) {
+                return 1; // allow to drop AG flag as we can send everything thru one chan
+            }
+        }
+    }
+    return 0;
+}
+
 int get_write_buf_wait_data(uint32_t chan_mask) {
     // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
@@ -1747,12 +1767,14 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s", tmp);
                 }
+                /*
                 udp_struct->lport = info.channel[1].lport;
                 udp_struct->rport = info.channel[1].rport;
                 if (get_udp_stats(udp_struct, 1)) {
                     vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport,
                             udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
                 }
+                */
             }
             
             if(info.prev_flushed) {
@@ -3451,9 +3473,9 @@ int lfd_linker(void)
 
             timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
-                shm_conn_info->dropping = 0;
+                if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->dropping = 0;
             } else {
-                shm_conn_info->dropping = 1;
+                if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->dropping = 1;
             }
             
             if(info.head_channel) {
