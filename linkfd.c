@@ -1722,24 +1722,30 @@ int write_buf_check_n_flush(int logical_channel) {
                 int r_amt = 0;
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                udp_struct->lport = info.channel[1].lport;
+                udp_struct->rport = info.channel[1].rport;
+                char tmp[2000] = { 0 };
+                if (get_udp_stats(udp_struct, 1)) {
+                    sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
+                }
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len);
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, tmp);
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), tmp);
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp);
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp);
                 } else {
-                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!!");
+                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s", tmp);
                 }
                 udp_struct->lport = info.channel[1].lport;
                 udp_struct->rport = info.channel[1].rport;
