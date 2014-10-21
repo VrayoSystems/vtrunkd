@@ -73,6 +73,7 @@
 #include <netinet/tcp.h>
 #endif
 
+#include "udp_states.h"
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
@@ -190,6 +191,7 @@ char *out_buf;
 uint16_t dirty_seq_num;
 int sendbuff;
 #define START_SQL 5000
+struct udp_stats udp_struct[1];
 
 int drop_packet_flag = 0, drop_counter=0;
 int skip_write_flag = 0;
@@ -1735,7 +1737,12 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!!");
                 }
-
+                udp_struct->lport = info.channel[1].lport;
+                udp_struct->rport = info.channel[1].rport;
+                if (get_udp_stats(udp_struct, 1)) {
+                    vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport,
+                            udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
+                }
             }
             
             if(info.prev_flushed) {
@@ -2726,6 +2733,7 @@ int lfd_linker(void)
     struct timeval  json_timer;
     gettimeofday(&json_timer, NULL);
     info.check_shm = 0; // zeroing check_shm
+
 
     struct timer_obj *recv_n_loss_send_timer = create_timer();
     struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
@@ -3800,6 +3808,13 @@ int lfd_linker(void)
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            udp_struct->lport = info.channel[1].lport;
+            udp_struct->rport = info.channel[1].rport;
+            if (get_udp_stats(udp_struct, 1)) {
+                vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
+                        udp_struct->rx_q, udp_struct->drops);
+            }
+
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
