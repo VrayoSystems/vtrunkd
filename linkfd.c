@@ -231,8 +231,10 @@ struct phisical_status info; /**< We store here all process closed information *
 
 struct {
     int packet_sent_ag;
-    int bytes_rcvd_norm;
     int packet_sent_rmit;
+    int byte_sent_ag_full;
+    int byte_sent_rmit_full;
+    int bytes_rcvd_norm;
     int bytes_rcvd_rx;
     int pkts_dropped;
     int rxmit_req; // outdated: use max_latency_hit + max_reorder_hit
@@ -1330,6 +1332,7 @@ int retransmit_send(char *out2, int n_to_send) {
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         statb.packet_sent_rmit += 1000;
         info.channel[i].up_len += len_ret;
+        statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
 //if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
@@ -1656,6 +1659,7 @@ if(drop_packet_flag) {
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     statb.packet_sent_ag += 1000;
     info.channel[chan_num].up_len += len_ret;
+    statb.byte_sent_ag_full += len_ret;
     info.channel[chan_num].up_packets++;
     info.channel[chan_num].bytes_put++;
 if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ select_send"); } 
@@ -3504,6 +3508,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             add_json(js_buf, &js_cur, "psa", "%d", statb.packet_sent_ag / json_ms); // packet speed in ag
             add_json(js_buf, &js_cur, "psr", "%d", statb.packet_sent_rmit / json_ms); // packet waste speed
+            add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full); // byte transmit in ag mode
+            add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
             add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
