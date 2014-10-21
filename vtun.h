@@ -515,6 +515,7 @@ struct phisical_status { // A.K.A. "info"
     int prev_flushed; // PBL/PSL flag
     int flush_sequential; // PSL
     int write_sequential; // PBL
+    int ploss_event_flag; /** flag to detect PLOSS at tflush */
 };
 
 struct conn_info {

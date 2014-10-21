@@ -789,8 +789,10 @@ int get_write_buf_wait_data() {
                 // means we detected PLOSS event
                 //seq_loss = 1; // re-use variable
                 // TODO rewrite this if
+                info.ploss_event_flag = 1;
             } else {
                 seq_loss = 0;
+                info.ploss_event_flag = 0;
             }
         }
         
@@ -1723,11 +1725,18 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp));
-                } else if (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) {
+                } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
+                    update_prev_flushed(logical_channel, fprev);
+                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp));
+                } else {
+                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!!");
                 }
+
             }
             
             if(info.prev_flushed) {
