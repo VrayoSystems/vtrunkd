@@ -3132,13 +3132,19 @@ int lfd_linker(void)
             rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
-            
+            int pump_adj=( (MAX_LATENCY_DROP_USEC/1000) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
+            if (pump_adj < 0) {
+                pump_adj = 0;
+            }
+
             if(rtt_shift < info.send_q_limit) {
                 info.send_q_limit -= rtt_shift;
             } else {
                 info.send_q_limit = 0;
             }
-            
+
+            info.send_q_limit += pump_adj;
+
             if (info.send_q_limit < SEND_Q_LIMIT_MINIMAL) {
                 info.send_q_limit = SEND_Q_LIMIT_MINIMAL-1;
             }
