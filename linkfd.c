@@ -771,12 +771,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
     return timercmp(&max_wait_tv, &tv_tmp, >=);
 }
 
-int get_write_buf_wait_data() {
+int get_write_buf_wait_data(uint32_t chan_mask) {
     // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
-    uint32_t chan_mask = shm_conn_info->channels_mask;
     int any_lrx, seq_loss = 0;
     for (int i = 0; i < info.channel_amount; i++) {
         info.least_rx_seq[i] = UINT32_MAX;
@@ -4020,6 +4019,9 @@ int lfd_linker(void)
                          \/     \/          \/     \/      
                      * Now do a select () from all devices and channels
                      */
+        sem_wait(&shm_conn_info->AG_flags_sem);
+        chan_mask = shm_conn_info->channels_mask;
+        sem_post(&shm_conn_info->AG_flags_sem);
         sem_wait(write_buf_sem);
         if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
             ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at FCI recv
@@ -4029,7 +4031,7 @@ int lfd_linker(void)
         }
 
         FD_ZERO(&fdset_w);
-        if (get_write_buf_wait_data() || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
+        if (get_write_buf_wait_data(chan_mask) || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
             FD_SET(info.tun_device, pfdset_w);
         } else {
