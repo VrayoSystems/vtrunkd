@@ -3504,6 +3504,8 @@ int lfd_linker(void)
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
             sem_post(&(shm_conn_info->AG_flags_sem));
+            statb.packet_sent_ag = 0;
+            statb.packet_sent_rmit = 0;
             
 #if !defined(DEBUGG) && defined(JSON)
             start_json(js_buf, &js_cur);
@@ -3534,8 +3536,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
             add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
-            add_json(js_buf, &js_cur, "psa", "%d", statb.packet_sent_ag / json_ms); // packet speed in ag
-            add_json(js_buf, &js_cur, "psr", "%d", statb.packet_sent_rmit / json_ms); // packet waste speed
+            add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag
+            add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
