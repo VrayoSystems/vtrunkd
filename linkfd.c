@@ -3249,7 +3249,7 @@ int lfd_linker(void)
 
         // AG DECISION >>>
         ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
-                           || (send_q_limit_cubic_apply <= info.send_q_limit_threshold) 
+                           //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
@@ -3258,7 +3258,7 @@ int lfd_linker(void)
                            ) ? R_MODE : AG_MODE);
         // logging part
         if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
-        if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1;
+        //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
         if(channel_dead) ag_stat.D = 1;
         if(!check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
