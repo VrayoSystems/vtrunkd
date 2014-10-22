@@ -408,6 +408,7 @@ void vtun_syslog_free() {
 }
 
 void vtun_syslog(int priority, char *format, ...) {
+#ifdef SYSLOG
     static volatile sig_atomic_t in_syslog = 0;
     char buf[JS_MAX];
     va_list ap;
@@ -489,9 +490,11 @@ void vtun_syslog(int priority, char *format, ...) {
             syslog(priority, "%s", buf);
         }
         va_end(ap);
-
-        in_syslog = 0;
-    }
+      in_syslog = 0;
+   }
+#else
+    return;
+#endif
 }
 
 /* Methods for periodic JSON logs */

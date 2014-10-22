@@ -294,6 +294,7 @@ struct vtun_host {
 #define AG_MODE 1
 #define R_MODE 0
 
+#define SESSION_NAME_SIZE 50
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */
@@ -301,6 +302,8 @@ struct _write_buf {
     unsigned long last_written_seq; // last pack number has written into device
     unsigned long last_received_seq[MAX_TCP_PHYSICAL_CHANNELS]; // max of 30 physical channels
     unsigned long last_received_seq_shadow[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
+    unsigned long possible_seq_lost[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
+
     struct timeval last_write_time; // into device
     int buf_len;
     int broken_cnt;
@@ -350,6 +353,7 @@ struct speed_chan_data_struct {
  * global structure
  */
 struct conn_stats {
+    char name[SESSION_NAME_SIZE];
     int pid; /* current pid */
     int pid_remote; // pid from another side
     long int weight; /* bandwith-delay product */
@@ -381,6 +385,8 @@ struct conn_stats {
     int head_in;
     int head_use;
     struct timeval bdp1;
+    int packet_speed_ag;
+    int packet_speed_rmit;
 };
 /**
  * Structure for garbage statistic and information
@@ -513,8 +519,14 @@ struct phisical_status { // A.K.A. "info"
     int prev_flushed; // PBL/PSL flag
     int flush_sequential; // PSL
     int write_sequential; // PBL
+    int ploss_event_flag; /** flag to detect PLOSS at tflush */
 };
 
+/** @struct conn_info
+ *  @brief Common shm struct.
+ *
+ *  Description
+ */
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
@@ -682,7 +694,6 @@ extern llist host_list;
 #define D_PWD 8
 #define D_NOREAD 9
 #define D_OTHER 10
-
 
 
 /* Global options */

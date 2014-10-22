@@ -67,6 +67,8 @@
 #include "compat.h"
 #include "netlib.h"
 
+char process_string_cli[100] = { 0 };
+
 static volatile sig_atomic_t client_term;
 static void sig_term(int sig)
 {
@@ -99,6 +101,10 @@ void client(struct vtun_host *host)
      int s, opt, reconnect, sss, len;
      int shm_new = 0;
      struct sockaddr_un remote;
+
+     sprintf(process_string_cli, "vtrunkd %s", host->host);
+     openlog(process_string_cli, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+
 #ifdef CLIENTONLY
      vtun_syslog(LOG_INFO,"vtrunkd client only ver %s %s started",VTUN_VER, BUILD_DATE);
 #else
@@ -128,7 +134,7 @@ void client(struct vtun_host *host)
      * "5678".
      */
      key = vtun.shm_key;
-     
+
 
       /*
       * First, try to open shm

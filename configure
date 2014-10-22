@@ -694,6 +694,7 @@ ac_user_opts='
 enable_option_checking
 enable_o3
 enable_mark
+enable_syslog
 enable_low_mem
 enable_json
 enable_debugg
@@ -1330,6 +1331,7 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
 --disable-o3     	   Compile without -O3 optimization
 --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25
+--disable-syslog          Disable syslog output
 --enable-low-mem         Compile for low ram device
 --enable-json              JSON logging
 --enable-debugg     	   Compile with verbose logging for debug
@@ -2160,6 +2162,15 @@ if test "${enable_mark+set}" = set; then :
   enableval=$enable_mark; MARK=$enableval
 else
   MARK=yes
+
+fi
+
+
+# Check whether --enable-syslog was given.
+if test "${enable_syslog+set}" = set; then :
+  enableval=$enable_syslog; SYSLOG=$enableval
+else
+  SYSLOG=yes
 
 fi
 
@@ -4919,6 +4930,10 @@ fi
 
 if test "$MARK" = "no"; then
 	  CFLAGS="$CFLAGS -DW_O_SO_MARK=1"
+fi
+
+if test "$SYSLOG" = "yes"; then
+          CFLAGS="$CFLAGS -DSYSLOG=1"
 fi
 
 if test "$DEBUGG" = "yes"; then
