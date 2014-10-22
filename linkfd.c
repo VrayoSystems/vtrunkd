@@ -3475,13 +3475,13 @@ int lfd_linker(void)
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
                 if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->dropping = 0;
             } else {
-                if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->dropping = 1;
+                shm_conn_info->dropping = 1;
             }
             
             if(info.head_channel) {
                 timersub(&(info.current_time), &real_loss_time, &tv_tmp_tmp_tmp);
                 if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
-                    shm_conn_info->head_lossing = 0;
+                    if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->head_lossing = 0;
                 } else {
                     shm_conn_info->head_lossing = 1;
                 }
