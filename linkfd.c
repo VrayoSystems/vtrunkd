@@ -2962,53 +2962,7 @@ int lfd_linker(void)
         // <<< END SEND_Q_EFF CALC
         
 
-        // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
-        timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
-        if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
-            info.tv_sqe_mean_added = info.current_time;
-            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                // TODO: write averaged data ? more points -> more avg!
-                if(last_smalldata_ACS != info.packet_recv_upload_avg) {
-                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
-                    smalldata.rtt[s_q_idx] = info.rtt2;
-                    smalldata.ts[s_q_idx] = info.current_time;
-                    last_smalldata_ACS = info.packet_recv_upload_avg;
-                }
-            } else {
-                vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
-            }
-            
-            // push up forced_rtt
-                sem_wait(write_buf_sem);
-                if (((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
-                    if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
-                        shm_conn_info->forced_rtt_start_grow = info.current_time;
-                    }
-                    struct timeval tmp_tv;
-                    timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                    int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
-                    // TODO: overflow here! ^^^
-                    time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
-                    //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
-                    if(shm_conn_info->forced_rtt != time) {
-                        shm_conn_info->forced_rtt = time;
-                        //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
-                        need_send_FCI = 1; // force immediate FCI send!
-                    }
-                } else {
-                    shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
-                    shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
-                    shm_conn_info->forced_rtt = 0;
-                }
-                sem_post(write_buf_sem);
-        
-
-        }
-        // << END AVERAGE (MEAN) SEND_Q_EFF calculation
-
-        
+                
         /* Temporarily disabled this due to massive loss :-\
         // EXTERNAL LOSS DETECT >>> 
         if(send_q_eff > info.send_q_limit_threshold && (send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
@@ -3099,6 +3053,58 @@ int lfd_linker(void)
             shm_conn_info->drop_time = info.current_time;
             shm_conn_info->dropping = 1;
         }
+
+        // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
+        timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
+        if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
+
+            // redetect head experiment
+            redetect_head_unsynced(chan_mask, -1);
+
+            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            info.tv_sqe_mean_added = info.current_time;
+            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
+            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+                // TODO: write averaged data ? more points -> more avg!
+                if(last_smalldata_ACS != info.packet_recv_upload_avg) {
+                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
+                    smalldata.rtt[s_q_idx] = info.rtt2;
+                    smalldata.ts[s_q_idx] = info.current_time;
+                    last_smalldata_ACS = info.packet_recv_upload_avg;
+                }
+            } else {
+                vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
+            }
+            
+            // push up forced_rtt
+                sem_wait(write_buf_sem);
+                if (((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
+                    if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
+                        shm_conn_info->forced_rtt_start_grow = info.current_time;
+                    }
+                    struct timeval tmp_tv;
+                    timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
+                    int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
+                    // TODO: overflow here! ^^^
+                    time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
+                    //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
+                    if(shm_conn_info->forced_rtt != time) {
+                        shm_conn_info->forced_rtt = time;
+                        //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
+                        need_send_FCI = 1; // force immediate FCI send!
+                    }
+                } else {
+                    shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
+                    shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
+                    shm_conn_info->forced_rtt = 0;
+                }
+                sem_post(write_buf_sem);
+        
+
+        }
+        // << END AVERAGE (MEAN) SEND_Q_EFF calculation
+
+
 
         if(shm_conn_info->idle) {
             // use rtt
