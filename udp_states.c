@@ -24,29 +24,41 @@ int get_udp_stats(struct udp_stats* udp_struct, int conn_amount) {
     char line[256];
     int line_counter = 0;
     FILE * f = fopen(udp_stat_path, "r");
-    if (f == NULL) {
+    if (f == NULL ) {
         vtun_syslog(LOG_ERR, "udp_stats %s open fail reason %s (%d)", udp_stat_path, strerror(errno), errno);
         return 0;
     }
     //skip title
-    if (fgets(line, sizeof(line), f) == EOF ) {
+    if (fgets(line, sizeof(line), f) == (char *) EOF) {
         vtun_syslog(LOG_ERR, "udp_stats fgets EOF title reason %s (%d)", strerror(errno), errno);
+        if (fclose(f) == EOF) {
+            vtun_syslog(LOG_ERR, "udp_stats file close err %s (%d)", strerror(errno), errno);
+        }
         return 0;
     }
     while (fgets(line, sizeof(line), f)) {
         int n = strlen(line);
         if (n == 0 || line[n - 1] != '\n') {
             errno = -EINVAL;
+            if (fclose(f) == EOF) {
+                vtun_syslog(LOG_ERR, "udp_stats file close err %s (%d)", strerror(errno), errno);
+            }
             return 0;
         }
         line[n - 1] = 0;
         // line handling
         line_counter += add_line(line, udp_struct, conn_amount);
         if (line_counter == conn_amount) {
+            if (fclose(f) == EOF) {
+                vtun_syslog(LOG_ERR, "udp_stats file close err %s (%d)", strerror(errno), errno);
+            }
             return 1;
         }
     }
     vtun_syslog(LOG_ERR, "udp connection not found reason %s (%d)", strerror(errno), errno);
+    if (fclose(f) == EOF) {
+        vtun_syslog(LOG_ERR, "udp_stats file close err %s (%d)", strerror(errno), errno);
+    }
     return 0;
 }
 
