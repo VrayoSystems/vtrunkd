@@ -3248,7 +3248,7 @@ int lfd_linker(void)
 
 
         // AG DECISION >>>
-        ag_flag_local = ((    (info.rsr <= info.send_q_limit_threshold)  
+        ag_flag_local = ((    (!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
                            //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
