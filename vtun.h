@@ -26,6 +26,7 @@
 #define _VTUN_H
 #include "llist.h"
 #include "frame_llist.h"
+#include "version.h"
 #include <semaphore.h>
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -724,7 +725,7 @@ struct vtun_opts {
 #define VTUN_INETD		1	
 
 #ifndef BUILD_DATE
-  #define BUILD_DATE "build_XXXXXXXXXX"
+  #define BUILD_DATE VERSION
 #endif
 
 extern struct vtun_opts vtun;
