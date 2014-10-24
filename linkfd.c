@@ -83,6 +83,12 @@
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
 #include "timer.h"
+#include "packet_code.h"
+
+#ifdef TESTING
+#include "testing.h"
+#endif
+
 #include <stdarg.h>
 struct my_ip {
     u_int8_t	ip_vhl;		/* header length, version */
@@ -4787,6 +4793,9 @@ int lfd_linker(void)
                last_timing.tv_sec = info.current_time.tv_sec;
                last_timing.tv_usec = info.current_time.tv_usec;
           }
+#ifdef TESTING
+            //write test case here
+#endif
         }
         // <<< END TICK
         

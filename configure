@@ -698,6 +698,7 @@ enable_syslog
 enable_lowmem
 enable_json
 enable_debugg
+enable_self_testing
 enable_client_only
 with_ssl_headers
 with_ssl_lib
@@ -1335,6 +1336,7 @@ Optional Features:
 --enable-low-mem         Compile for low ram device
 --enable-json              JSON logging
 --enable-debugg     	   Compile with verbose logging for debug
+--enable-self-testing         Compile with self-testing support
 --enable-client-only     	   Client only version
 
 Optional Packages:
@@ -2198,6 +2200,15 @@ if test "${enable_debugg+set}" = set; then :
   enableval=$enable_debugg; DEBUGG=$enableval
 else
   DEBUGG=no
+
+fi
+
+
+# Check whether --enable-self-testing was given.
+if test "${enable_self_testing+set}" = set; then :
+  enableval=$enable_self_testing; SELFTESTING=$enableval
+else
+  SELFTESTING=no
 
 fi
 
@@ -4938,6 +4949,10 @@ fi
 
 if test "$DEBUGG" = "yes"; then
 	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$SELFTESTING" = "yes"; then
+          CFLAGS="$CFLAGS -DTESTING=1"
 fi
 
 if test "$LOW_MEM" = "yes"; then

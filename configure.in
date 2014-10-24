@@ -55,6 +55,12 @@ AC_ARG_ENABLE(debugg,
    DEBUGG=no
 )
 
+AC_ARG_ENABLE(self-testing,
+   --enable-self-testing         Compile with self-testing support,
+   SELFTESTING=$enableval,
+   SELFTESTING=no
+)
+
 AC_ARG_ENABLE(client-only,
    --enable-client-only     	   Client only version,
    CLIENTONLY=$enableval,
@@ -138,6 +144,10 @@ fi
 
 if test "$DEBUGG" = "yes"; then
 	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$SELFTESTING" = "yes"; then
+          CFLAGS="$CFLAGS -DTESTING=1"
 fi
 
 if test "$LOW_MEM" = "yes"; then
