@@ -788,6 +788,7 @@ int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
             if( (ag_speed_total < shm_conn_info->stats[i].ACK_speed) && !percent_delta_equal(ag_speed_total, shm_conn_info->stats[i].ACK_speed, 10) ) {
+                vtun_syslog(LOG_INFO, "Allowing to drop flag: as we can send everything thru one chan: total: %d, chan %d ACS: %d", ag_speed_total, i, shm_conn_info->stats[i].ACK_speed);
                 return 1; // allow to drop AG flag as we can send everything thru one chan
             }
         }
@@ -3618,6 +3619,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
+            add_json(js_buf, &js_cur, "lalsn[1]", "%lu", info.channel[1].packet_seq_num_acked);
             
             print_json(js_buf, &js_cur);
 #endif
