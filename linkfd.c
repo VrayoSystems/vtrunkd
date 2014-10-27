@@ -2092,7 +2092,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     int moremax = 0;
     int max_chan_H = -1;
     int max_chan_CS = -1;
-    int min_rtt = 99999;
+    int min_rtt = INT32_MAX;
     int max_ACS = 0;
     int max_ACS_chan = -1;
     int max_chan = shm_conn_info->max_chan;
@@ -2117,7 +2117,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
 
     if(shm_conn_info->idle) {
         // use RTT-only choosing of head while idle!
-        int min_rtt = 99999;
+        int min_rtt = INT32_MAX;
         int min_rtt_chan = 0;
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
