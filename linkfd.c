@@ -2908,7 +2908,7 @@ int lfd_linker(void)
 
         // Section to set exact_rtt
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
-        if( (send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=)) { // TODO: threshold depends on phys RTT and speed; investigate that!
+        if (((send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
