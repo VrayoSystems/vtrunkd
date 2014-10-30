@@ -3172,7 +3172,7 @@ int lfd_linker(void)
             
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-            int rsr_top = shm_conn_info->stats[max_chan].W_cubic;
+            int rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
             if(rsr_top > 500000) {
@@ -3232,6 +3232,8 @@ int lfd_linker(void)
             
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
+        shm_conn_info->stats[info.process_num].rsr = info.rsr;
+
         // uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv; // yes? it is transferred??
         
         if(!info.head_channel) {
