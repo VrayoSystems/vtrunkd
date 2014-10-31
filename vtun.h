@@ -104,7 +104,7 @@
 // maximum VPNs allocated at server side (aaffects SHM memory)
 #define P_MAX_TUNNELS_NUM 20
 // amount of tcp channels per process (vpn link) requested by CLIENT mode
-#define P_TCP_CONN_AMOUNT 5 // int
+#define P_TCP_CONN_AMOUNT 1 // without service channel
 // big jitter
 #define ABSOLUTE_MAX_JITTER 2500 // in ms
 // ag switch compare parameter always less than 1 but higher than 0

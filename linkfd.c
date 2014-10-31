@@ -4396,10 +4396,10 @@ if(drop_packet_flag) {
                                 break;
                             }
                             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
-                            vtun_syslog(LOG_INFO, "Channels connecting to %s to create %d channels", ipstr, lfd_host->TCP_CONN_AMOUNT);
+                            vtun_syslog(LOG_INFO, "Channels connecting to %s to create %d channels", ipstr, P_TCP_CONN_AMOUNT);
                             usleep(500000);
 
-                            for (i = 1; i <= lfd_host->TCP_CONN_AMOUNT; i++) {
+                            for (i = 1; i <= P_TCP_CONN_AMOUNT; i++) {
                                 errno = 0;
                                 if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
                                     vtun_syslog(LOG_ERR, "Can't create CHAN socket. %s(%d) chan %d", strerror(errno), errno, i);
@@ -4428,7 +4428,7 @@ if(drop_packet_flag) {
                                 udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                                 usleep(500000);
                             }
-                            if (i < lfd_host->TCP_CONN_AMOUNT) {
+                            if (i < P_TCP_CONN_AMOUNT) {
                                 vtun_syslog(LOG_ERR, "Could not connect all requested tuns; exit");
                                 linker_term = TERM_NONFATAL;
                                 break;
@@ -5509,7 +5509,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     if (info.srv) {
         info.channel_amount = 0; // first time for server, later server is getting it from client through net
     } else {
-        info.channel_amount = lfd_host->TCP_CONN_AMOUNT + 1; // current here number of channels include service_channel
+        info.channel_amount = P_TCP_CONN_AMOUNT + 1; // current here number of channels include service_channel
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
