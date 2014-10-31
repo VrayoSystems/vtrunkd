@@ -384,6 +384,7 @@ struct conn_stats {
     int head_in;
     int head_use;
     struct timeval bdp1;
+    struct timeval real_loss_time;
     int packet_speed_ag;
     int packet_speed_rmit;
 };
