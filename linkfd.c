@@ -4557,6 +4557,23 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
+                            // rtt calculation, TODO: DUP code below!
+                            if( (info.rtt2_lsn[chan_num] != 0) && (info.channel[chan_num].packet_seq_num_acked > info.rtt2_lsn[chan_num])) {
+                                vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
+                                timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
+                                //info.rtt2 = tv2ms(&tv_tmp);
+                                info.rtt2_lsn[chan_num] = 0;
+                                info.srtt2_10 += ((int)tv2ms(&tv_tmp)*10 - info.srtt2_10) / 8;
+                                info.rtt2 = info.srtt2_10 / 10; // check this!
+                                if (info.rtt2 <= 0) info.rtt2 = 1;
+                                int r_delta = (int)tv2ms(&tv_tmp) - info.srtt2_10 / 10;
+                                if(r_delta > 0) {
+                                    info.srtt2var = (3 * info.srtt2var  +  r_delta)/4;
+                                } else {
+                                    info.srtt2var = (3 * info.srtt2var  -  r_delta)/4;
+                                }
+                            }
+                            
                             memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); //forced_rtt
                             
                             sem_wait(write_buf_sem);
