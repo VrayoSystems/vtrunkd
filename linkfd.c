@@ -3137,6 +3137,9 @@ int lfd_linker(void)
                 redetect_head_unsynced(chan_mask, info.process_num);
             }
         }
+        if (channel_dead == 0 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead){
+            vtun_syslog(LOG_INFO, "Channel %s went alive! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+        }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
