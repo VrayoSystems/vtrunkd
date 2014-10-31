@@ -3542,6 +3542,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
             add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
             add_json(js_buf, &js_cur, "srtt2var", "%d", info.srtt2var);
+            add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
+            add_json(js_buf, &js_cur, "exact_rtt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
             add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
