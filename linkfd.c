@@ -2261,6 +2261,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         // noop
     } else {
         shm_conn_info->head_lossing = 1;
+        shm_conn_info->idle = 0;
     }    
     return fixed;
 }
@@ -3501,6 +3502,7 @@ int lfd_linker(void)
                     if(DL_flag_drop_allowed_unsync_stats(chan_mask)) shm_conn_info->head_lossing = 0;
                 } else {
                     shm_conn_info->head_lossing = 1;
+                    shm_conn_info->idle = 0;
                 }
             }
 
