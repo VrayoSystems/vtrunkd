@@ -2910,7 +2910,7 @@ int lfd_linker(void)
         
         if(info.rtt2_lsn[1] != 0) { // rtt2 DDS detect
             timersub(&info.current_time, &info.rtt2_tv[1], &tv_tmp);
-            if(tv2ms(&tv_tmp) > info.srtt2_10 + info.srtt2var) {
+            if(tv2ms(&tv_tmp) > (info.srtt2_10 + info.srtt2var)/10) {
                 info.rtt2 = tv2ms(&tv_tmp);
                 if (info.rtt2 <= 0) info.rtt2 = 1;
             }
