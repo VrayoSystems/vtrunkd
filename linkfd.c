@@ -146,6 +146,7 @@ struct my_ip {
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
+#define DEAD_CHANNEL_RSR 40000 // fixed RSR for dead channel
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
 #define RSR_SMOOTH_FULL 3000 // ms for full convergence
