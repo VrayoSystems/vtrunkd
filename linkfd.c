@@ -2888,6 +2888,7 @@ int lfd_linker(void)
     int need_send_FCI = 0;
     info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
     int PCS = 0;
+    int PCS_aux = 0;
 /**
  *
  *
@@ -3515,7 +3516,7 @@ int lfd_linker(void)
             }
             
             // now put max_ACS2 and PCS2 to SHM:
-            shm_conn_info->stats[info.process_num].max_PCS2 = PCS * 2 * info.eff_len;
+            shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
@@ -3572,7 +3573,11 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "DL", "%d", ag_stat.DL);
             memset((void *)&ag_stat, 0, sizeof(ag_stat));
             skip=0;
+            if(PCS == 0 && PCS_aux != 0) {
+                vtun_syslog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
+            }
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
+            PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
             // bandwidth utilization extimation experiment
             //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
             /*
@@ -4471,6 +4476,7 @@ if(drop_packet_flag) {
                             vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", info.channel_amount);
                             continue;
                         } else if(flag_var == FRAME_LAST_WRITTEN_SEQ) {
+                            PCS_aux++;
 #ifdef DEBUGG
                             vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
 #endif
@@ -4481,6 +4487,7 @@ if(drop_packet_flag) {
                             if( ntohl(*((uint32_t *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((uint32_t *)buf));
                             continue;
 						} else if (flag_var == FRAME_TIME_LAG) {
+                            PCS_aux++;
 						    int recv_lag = 0;
 							/* Get time_lag and miss_packet_max for some pid from net here */
 						    uint32_t time_lag_and_miss_packets;
@@ -4526,12 +4533,14 @@ if(drop_packet_flag) {
 							sem_post(&(shm_conn_info->stats_sem));
 							continue;
                         } else if (flag_var == FRAME_DEAD_CHANNEL) {
+                            PCS_aux++;
                             uint32_t chan_mask_h;
                             memcpy(&chan_mask_h, buf, sizeof(uint32_t));
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
+                            PCS_aux++;
                             uint32_t tmp32_n;
                             uint16_t tmp16_n;
                             int chan_num;
@@ -4729,6 +4738,7 @@ if(drop_packet_flag) {
 
                     } // bad frame end
                     if( fl==VTUN_ECHO_REQ ) {
+                        PCS_aux++;
                         /* Send ECHO reply */
                         if(!select_net_write(chan_num)) {
                             vtun_syslog(LOG_ERR, "Could not send echo reply due to net not selecting");
@@ -4755,6 +4765,7 @@ if(drop_packet_flag) {
                         continue;
                     }
                     if( fl==VTUN_ECHO_REP ) {
+                        PCS_aux++;
                         /* Just ignore ECHO reply */
                         if(debug_trace) {
                             vtun_syslog(LOG_INFO, "... was echo reply");
