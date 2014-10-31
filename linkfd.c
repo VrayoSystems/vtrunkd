@@ -3245,7 +3245,6 @@ int lfd_linker(void)
             
             //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
         }
-        shm_conn_info->stats[info.process_num].rsr = info.rsr;
 
         // uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv; // yes? it is transferred??
         
@@ -3256,6 +3255,12 @@ int lfd_linker(void)
             t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
             set_W_unsync(t);
         }
+
+        if (channel_dead == 1) {
+            info.rsr = DEAD_CHANNEL_RSR;
+            info.send_q_limit_cubic = DEAD_CHANNEL_RSR;
+        }
+        shm_conn_info->stats[info.process_num].rsr = info.rsr;
 
         int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
