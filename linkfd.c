@@ -1241,7 +1241,8 @@ int retransmit_send(char *out2, int n_to_send) {
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
-            if( (!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing)) {
+            // WARNING! disabled push-to-top policy!
+            if(0 && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
             } else {
