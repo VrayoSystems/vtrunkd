@@ -1780,6 +1780,13 @@ int write_buf_check_n_flush(int logical_channel) {
                 */
             }
             
+            // mean latency experiment
+            int lat = tv2ms(&tv_tmp)*1000;
+            info.mean_latency_us += (lat - info.mean_latency_us)/50;
+            if(lat > info.max_latency_us) {
+                info.max_latency_us = lat;
+            }
+            
             if(info.prev_flushed) {
                 // TODO: write avg stats here?
                 info.write_sequential = 1;
@@ -3552,6 +3559,9 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
             add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
             add_json(js_buf, &js_cur, "srtt2var", "%d", info.srtt2var);
+            add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
+            add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
+            info.max_latency_us = 0;
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "exact_rtt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
