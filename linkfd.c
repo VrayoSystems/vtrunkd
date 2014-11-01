@@ -111,7 +111,7 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_LATENCY_DROP_USEC 180000 // typ. is 204-250 upto 450 max RTO at CUBIC
+#define MAX_LATENCY_DROP_USEC 200000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_DROP_SHIFT 100 // ms. to add to forced_rtt - or use above
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
@@ -2164,39 +2164,39 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                     max_chan_CS = min_Ch_chan; // is result here!
                 }
 
-            }
+        }
 
-            // ---> ACS == and rtt
-            min_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
-                    if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 15% corridor to consider speeds the same
-                        // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
-                        // now choose best rtt2 from all chans that have same speed!
-                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                            min_rtt = shm_conn_info->stats[i].exact_rtt;
-                            max_chan_H = i;
-                        }
-                        // TODO: need smoothed percent compare! with selections auto-mgmt!
-                    }
-                }
-            }
-
-            if(max_chan_H > -1) {
-                vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed, shm_conn_info->stats[max_chan_H].exact_rtt);
-            }
-
-            // TODO: what to do if these two methods disagree? Is it possible?
-            
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
-                    if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
-                             && ( shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed )) { // 15% corridor to consider speeds the same
+        // ---> ACS == and rtt
+        min_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
+                if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 15% corridor to consider speeds the same
+                    // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
+                    // now choose best rtt2 from all chans that have same speed!
+                    if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                        min_rtt = shm_conn_info->stats[i].exact_rtt;
                         max_chan_H = i;
-                        vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed);
                     }
+                    // TODO: need smoothed percent compare! with selections auto-mgmt!
                 }
             }
+        }
+
+        if(max_chan_H > -1) {
+            vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed, shm_conn_info->stats[max_chan_H].exact_rtt);
+        }
+
+        // TODO: what to do if these two methods disagree? Is it possible?
+        
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
+                if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
+                         && ( shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed )) { // 15% corridor to consider speeds the same
+                    max_chan_H = i;
+                    vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed);
+                }
+            }
+        }
         
         // TODO HERE: What if Wf < Wh and Sf > Sh => RSRf < RSRh => f can not get full speed due to RSRf
         if(max_chan_H != -1 && max_chan_CS == -1) {
