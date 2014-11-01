@@ -1783,6 +1783,11 @@ int write_buf_check_n_flush(int logical_channel) {
             // mean latency experiment
             int lat = tv2ms(&tv_tmp)*1000;
             info.mean_latency_us += (lat - info.mean_latency_us)/50;
+            if(lat > info.frtt_us) {
+                info.frtt_us += (lat - info.frtt_us)/3;
+            } else {
+                info.frtt_us += (lat - info.frtt_us)/50;
+            }
             if(lat > info.max_latency_us) {
                 info.max_latency_us = lat;
             }
@@ -3586,6 +3591,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
 
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);

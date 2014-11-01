@@ -523,6 +523,7 @@ struct phisical_status { // A.K.A. "info"
     int ploss_event_flag; /** flag to detect PLOSS at tflush */
     int mean_latency_us;
     int max_latency_us;
+    int frtt_us;
 };
 
 /** @struct conn_info
