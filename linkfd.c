@@ -695,6 +695,7 @@ int check_drop_period_unsync() {
 int check_delivery_time(int mld_divider) {
     // RTT-only for now..
     //    struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    if(info.head_channel) return 1; // this is required! beware when refactoring!
     sem_wait(&(shm_conn_info->stats_sem));
     int ret = check_delivery_time_unsynced(mld_divider);
     sem_post(&(shm_conn_info->stats_sem));
