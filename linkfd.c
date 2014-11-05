@@ -3571,6 +3571,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
+            add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "exact_rtt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
@@ -3595,7 +3596,6 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
-            add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
 
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
