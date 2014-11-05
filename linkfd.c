@@ -3512,6 +3512,16 @@ int lfd_linker(void)
             if(buf != save_buf) {
                 vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
             }
+            
+            // compute perceived loss probability
+            info.i_plp += (((info.channel[1].local_seq_num - info.last_loss_lsn) / info.p_lost) - info.i_plp) / 2;
+            info.last_loss_lsn = info.channel[1].local_seq_num; // WRN channel broken here
+            info.p_lost = 0;
+            
+            info.i_rplp += (((info.channel[1].local_seq_num_recv - info.last_rlost_lsn) / info.r_lost) - info.i_rplp) / 2;
+            info.last_rlost_lsn = info.channel[1].local_seq_num_recv;
+            info.r_lost = 0;
+            
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
@@ -3571,9 +3581,11 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
+            add_json(js_buf, &js_cur, "plp", "%d", info.i_plp);
+            add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
-            add_json(js_buf, &js_cur, "exact_rtt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
+            add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
             add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
@@ -3794,6 +3806,7 @@ int lfd_linker(void)
                     memcpy(buf, &tmp16_n, sizeof(uint16_t)); // amt of rcvd packets
 
                     // TODO: do we use local_seq_num difference or total packets receive count??
+                    info.r_lost++;
                     //if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
                     if( info.channel[i].packet_recv_counter_afterloss > MAX_REORDER_PERPATH) {
                         vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
@@ -4643,6 +4656,7 @@ if(drop_packet_flag) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
+                                info.p_lost++;
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
                                 sem_post(&(shm_conn_info->stats_sem));

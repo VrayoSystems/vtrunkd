@@ -525,6 +525,13 @@ struct phisical_status { // A.K.A. "info"
     int mean_latency_us;
     int max_latency_us;
     int frtt_us;
+    
+    int i_plp; /** inverse packet loss probability (sent) */
+    int p_lost;
+    int last_loss_lsn;
+    int i_rplp; /** inverse packet loss probability (received) */
+    int r_lost;
+    int last_rlost_lsn;
 };
 
 /** @struct conn_info
