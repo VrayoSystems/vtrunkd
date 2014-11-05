@@ -3514,13 +3514,15 @@ int lfd_linker(void)
             }
             
             // compute perceived loss probability
-            info.i_plp += (((info.channel[1].local_seq_num - info.last_loss_lsn) / info.p_lost) - info.i_plp) / 2;
-            info.last_loss_lsn = info.channel[1].local_seq_num; // WRN channel broken here
-            info.p_lost = 0;
-            
-            info.i_rplp += (((info.channel[1].local_seq_num_recv - info.last_rlost_lsn) / info.r_lost) - info.i_rplp) / 2;
-            info.last_rlost_lsn = info.channel[1].local_seq_num_recv;
-            info.r_lost = 0;
+            if(info.p_lost > 0 && info.r_lost > 0) {
+                info.i_plp += (((info.channel[1].local_seq_num - info.last_loss_lsn) / info.p_lost) - info.i_plp) / 2;
+                info.last_loss_lsn = info.channel[1].local_seq_num; // WRN channel broken here
+                info.p_lost = 0;
+                
+                info.i_rplp += (((info.channel[1].local_seq_num_recv - info.last_rlost_lsn) / info.r_lost) - info.i_rplp) / 2;
+                info.last_rlost_lsn = info.channel[1].local_seq_num_recv;
+                info.r_lost = 0;
+            }
             
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
