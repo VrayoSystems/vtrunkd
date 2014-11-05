@@ -4107,7 +4107,8 @@ int lfd_linker(void)
             sem_wait(&(shm_conn_info->common_sem));
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
-                    if( !((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                    // WARNING! disabled push-to-top policy!
+                    if( !((!info.head_channel) && 0 && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
                     } else {
                         need_retransmit = 1; 
