@@ -718,9 +718,9 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
-    if( (shm_conn_info->stats[pnum].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
+    if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider));
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -736,7 +736,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( (shm_conn_info->stats[chan_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
+    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
         return 0;
     }
     return 1;
@@ -2903,6 +2903,7 @@ int lfd_linker(void)
     info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
     int PCS = 0;
     int PCS_aux = 0;
+    int rttvar = 0;
 /**
  *
  *
@@ -2938,6 +2939,7 @@ int lfd_linker(void)
                 info.rtt2 = 1;
             }
             exact_rtt = info.rtt2; 
+            rttvar = info.srtt2var;
         } else {
             // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
@@ -2945,6 +2947,7 @@ int lfd_linker(void)
                 info.rtt = 1;
             }
             exact_rtt = info.rtt;
+            rttvar = 0;
         }
         info.exact_rtt = exact_rtt;
         // <<< END EXACT_RTT
@@ -3158,6 +3161,7 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
+        shm_conn_info->stats[info.process_num].rttvar = rttvar;
         max_chan = shm_conn_info->max_chan;
 #ifdef FIX_HEAD_CHAN
         if(info.process_num == FIX_HEAD_CHAN)  info.head_channel = 1;

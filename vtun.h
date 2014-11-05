@@ -381,6 +381,7 @@ struct conn_stats {
     int hold;
     int channel_dead;
     int exact_rtt;
+    int rttvar;
     int head_in;
     int head_use;
     struct timeval bdp1;
