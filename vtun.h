@@ -292,6 +292,9 @@ struct vtun_host {
 #define AG_MODE 1
 #define R_MODE 0
 
+#define PLP_BUF_SIZE 20 // size of buffer used for old values of PBL for PLP calc
+#define PLP_BUF_TIMEOUT_MS 5000 // timeout for PLP buffer values
+
 #define SESSION_NAME_SIZE 50
 struct _write_buf {
     struct frame_llist frames;
@@ -532,6 +535,13 @@ struct phisical_status { // A.K.A. "info"
     int i_rplp; /** inverse packet loss probability (received) */
     int r_lost;
     int last_rlost_lsn;
+
+    int l_pbl;
+    int pbl_cnt;
+    struct {
+        int pbl;
+        struct timeval ts;
+    } plp_buf[PLP_BUF_SIZE];
 };
 
 /** @struct conn_info

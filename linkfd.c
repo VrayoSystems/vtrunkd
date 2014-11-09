@@ -2358,6 +2358,35 @@ int get_slope(struct _smalldata *sd) {
     return (int) (c1 * 100.0);
 }
 
+int plp_add_pbl(int l_pbl, struct timeval *current_time) {
+    if(info.pbl_cnt > PLP_BUF_SIZE) {
+        info.pbl_cnt = 0;
+    }
+    info.plp_buf[info.pbl_cnt].pbl = l_pbl;
+    info.plp_buf[info.pbl_cnt].ts = *current_time;
+    info.pbl_cnt++;
+}
+
+
+int plp_avg_pbl() {
+    struct timeval tv_tmp;
+    int pbl_acc = 0;
+    int pbl_cnt = 0;
+    for(int i=0; i<PLP_BUF_SIZE;i++) {
+        timersub(&info.current_time, &info.plp_buf[i].ts, &tv_tmp);
+        if(tv2ms(&tv_tmp) < PLP_BUF_TIMEOUT_MS) {
+            pbl_acc+=info.plp_buf[i].pbl;
+            pbl_cnt++;
+        }
+    }
+    // now add current if it is greater than mean
+    if((pbl_cnt > 0) && (info.l_pbl > (pbl_acc / pbl_cnt))) {
+        pbl_acc += info.l_pbl;
+        pbl_cnt++;
+    }
+    if(pbl_cnt == 0) return INT32_MAX;
+    return pbl_acc / pbl_cnt;
+}
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -3525,6 +3554,8 @@ int lfd_linker(void)
                 info.r_lost = 0;
             }
             
+            int cur_plp = plp_avg_pbl();
+            
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
@@ -3584,6 +3615,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
+            add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
             add_json(js_buf, &js_cur, "plp", "%d", info.i_plp);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
@@ -4660,6 +4692,8 @@ if(drop_packet_flag) {
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 info.p_lost++;
+                                plp_add_pbl(info.l_pbl, &info.current_time);
+                                info.l_pbl = 0;
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
                                 sem_post(&(shm_conn_info->stats_sem));
@@ -4896,6 +4930,7 @@ if(drop_packet_flag) {
                     gettimeofday(&info.current_time, NULL);
                     info.channel[chan_num].down_packets++; // accumulate number of packets
                     PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
+                    info.l_pbl++;
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
