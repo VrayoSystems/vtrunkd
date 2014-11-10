@@ -529,6 +529,7 @@ struct phisical_status { // A.K.A. "info"
     int max_latency_us;
     int frtt_us;
     int frtt_us_applied;
+    int PCS2_recv; // through FRAME_CHANNEL_INFO
     
     int i_plp; /** inverse packet loss probability (sent) */
     int p_lost;
