@@ -3606,6 +3606,7 @@ int lfd_linker(void)
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
             info.channel[1].packet_download = (PCS) * 2 * info.eff_len;
+            need_send_FCI = 1;
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
