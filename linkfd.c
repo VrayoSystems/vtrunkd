@@ -3607,7 +3607,7 @@ int lfd_linker(void)
             
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
-            info.channel[1].packet_download = shm_conn_info->stats[info.process_num].max_PCS2;
+            info.channel[1].packet_download = (PCS) * 2 * info.eff_len;
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
@@ -3652,7 +3652,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
             add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
-            add_json(js_buf, &js_cur, "PCS2_recv", "%d", info.PCS2_recv);
+            add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
