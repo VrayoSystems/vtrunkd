@@ -143,6 +143,7 @@ struct my_ip {
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
 #define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
+#define FORCE_RTT_JITTER_THRESH_MS 45 // ms of jitter to start growing rtt (subbing?)
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -1782,7 +1783,7 @@ int write_buf_check_n_flush(int logical_channel) {
             }
             
             // mean latency experiment
-            int lat = tv2ms(&tv_tmp)*1000;
+            int lat = tv2ms(&tv_tmp)*1000 - shm_conn_info->forced_rtt;
             info.mean_latency_us += (lat - info.mean_latency_us)/50;
             if(lat > info.frtt_us) {
                 info.frtt_us += (lat - info.frtt_us)/3;
@@ -3133,31 +3134,48 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
-            
-            // push up forced_rtt
-                sem_wait(write_buf_sem);
-                if (((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
-                    if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
-                        shm_conn_info->forced_rtt_start_grow = info.current_time;
-                    }
-                    struct timeval tmp_tv;
-                    timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                    int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
-                    // TODO: overflow here! ^^^
-                    time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
-                    //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
-                    if(shm_conn_info->forced_rtt != time) {
-                        shm_conn_info->forced_rtt = time;
-                        //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
-                        need_send_FCI = 1; // force immediate FCI send!
-                    }
-                } else {
-                    shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
-                    shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
-                    shm_conn_info->forced_rtt = 0;
+                
+            // calculate forced rtt >>>
+            // TODO: full FRTT/xhi support!
+            /*
+            int max_rttvar = 0; // ms
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) { // hope this works..
+                    if(shm_conn_info->stats[i].rttvar)
                 }
-                sem_post(write_buf_sem);
-        
+            }
+            */
+            if(shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
+                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar - FORCE_RTT_JITTER_THRESH_MS;
+            }
+            // <<< END forced_rtt calc
+            
+
+            // push up forced_rtt
+            sem_wait(write_buf_sem);
+            // TODO: need a smooth down-shift for frtt_us_applied; currently we just drop to zero
+            if ( (info.frtt_us_applied >= shm_conn_info->forced_rtt) && ((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
+                if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
+                    shm_conn_info->forced_rtt_start_grow = info.current_time;
+                }
+                struct timeval tmp_tv;
+                timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
+                int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
+                // TODO: overflow here! ^^^
+                //time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
+                time = time > info.frtt_us_applied ? info.frtt_us_applied : time;
+                //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
+                if(shm_conn_info->forced_rtt != time) {
+                    shm_conn_info->forced_rtt = time;
+                    //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
+                    need_send_FCI = 1; // force immediate FCI send!
+                }
+            } else {
+                shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
+                shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
+                shm_conn_info->forced_rtt = 0;
+            }
+            sem_post(write_buf_sem);
 
         }
         // << END AVERAGE (MEAN) SEND_Q_EFF calculation
@@ -3214,7 +3232,7 @@ int lfd_linker(void)
 #endif
         // <<< DEAD DETECT and COPY HEAD from SHM
         
-
+    
 
         // RSR section here >>>
         int32_t rtt_shift;
@@ -3619,6 +3637,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "plp", "%d", info.i_plp);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
+            add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);

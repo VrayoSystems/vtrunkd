@@ -384,7 +384,7 @@ struct conn_stats {
     int hold;
     int channel_dead;
     int exact_rtt;
-    int rttvar;
+    int rttvar; // pure ms
     int head_in;
     int head_use;
     struct timeval bdp1;
@@ -528,6 +528,7 @@ struct phisical_status { // A.K.A. "info"
     int mean_latency_us;
     int max_latency_us;
     int frtt_us;
+    int frtt_us_applied;
     
     int i_plp; /** inverse packet loss probability (sent) */
     int p_lost;
