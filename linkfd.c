@@ -1390,7 +1390,7 @@ int select_net_write(chan_num) {
     if (sel_ret == 0) {
         return 0; // save rtt!
     } else if (sel_ret == -1) {
-        vtun_syslog(LOG_ERR, "write_buf_check_n_flush select error! errno %d",errno);
+        vtun_syslog(LOG_ERR, "select_net_write() select error! errno %d",errno);
         return 0;
     }
     return 1;
