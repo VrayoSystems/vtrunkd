@@ -1347,6 +1347,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
         // send DATA
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
+        info.channel[i].packet_recv_counter = 0;
         if (len && (len_ret < 0)) {
             vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
             return BREAK_ERROR;
@@ -1646,6 +1647,7 @@ if(drop_packet_flag) {
     gettimeofday(&send1, NULL );
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
+    info.channel[chan_num].packet_recv_counter = 0;
     if (len && (len_ret < 0)) {
         vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
@@ -3605,7 +3607,7 @@ int lfd_linker(void)
             
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
-            info.channel[1].packet_download = (PCS) * 2 * info.eff_len;
+            info.channel[1].packet_download = PCS * 2;
             need_send_FCI = 1;
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
@@ -3652,6 +3654,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
             add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
+            add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
