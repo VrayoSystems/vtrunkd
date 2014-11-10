@@ -2245,7 +2245,9 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
             }
             if(alive_cnt == 1) {
-                vtun_syslog(LOG_INFO, "Head change - first alive (default): %d, excluded: %d ACS2=%d,PCS2=%d (idle? %d) (sqe %d) (rsr %d) ", alive_chan, exclude, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->idle, send_q_eff, info.rsr );
+                vtun_syslog(LOG_INFO, "Head change - first alive (default): %s(%d), excluded: %d ACS2=%d,PCS2=%d (idle? %d)",
+                        shm_conn_info->stats[alive_chan].name, alive_chan, exclude, shm_conn_info->stats[alive_chan].max_ACS2,
+                        shm_conn_info->stats[alive_chan].max_PCS2, shm_conn_info->idle);
                 shm_conn_info->max_chan = alive_chan;
             }
             if(alive_cnt == 0) { // no chan is alive, do without excluded
@@ -3195,7 +3197,7 @@ int lfd_linker(void)
         }
 
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
-            vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+            vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
             shm_conn_info->last_switch_time.tv_sec = 0;
             if(info.head_channel) {
                 vtun_syslog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
@@ -3203,7 +3205,7 @@ int lfd_linker(void)
             }
         }
         if (channel_dead == 0 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead){
-            vtun_syslog(LOG_INFO, "Channel %s went alive! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+            vtun_syslog(LOG_INFO, "Channel %s went alive! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
