@@ -544,6 +544,10 @@ struct phisical_status { // A.K.A. "info"
         int pbl;
         struct timeval ts;
     } plp_buf[PLP_BUF_SIZE];
+    
+    int fast_pcs_old;
+    int pcs_sent_old;
+    struct timeval fast_pcs_ts;
 };
 
 /** @struct conn_info

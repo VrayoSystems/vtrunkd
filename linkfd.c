@@ -156,6 +156,9 @@ struct my_ip {
 //#define NOCONTROL
 //#define NO_ACK
 
+#define FAST_PCS_PACKETS_CAN_CALC_SPEED 200 // packets count to calculate PCS speed statistically correct
+#define FAST_PCS_MINIMAL_INTERVAL 50 // ms minimal interval
+
 #define RCVBUF_SIZE 1048576
 #define WHO_LOST 1
 #define WHO_LAGGING 2
@@ -3118,8 +3121,20 @@ int lfd_linker(void)
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-
-            // redetect head experiment
+            // FAST TIMER HERE
+            
+            // FAST speed counter
+            timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
+            int time_passed = tv2ms(&tv_tmp_tmp_tmp);
+            if(        (PCS > FAST_PCS_PACKETS_CAN_CALC_SPEED) 
+                    && (time_passed > FAST_PCS_MINIMAL_INTERVAL)
+                    && (info.fast_pcs_old < PCS) 
+              ) {
+                info.channel[1].packet_download = (PCS - info.fast_pcs_old) * 10 / time_passed * 100; // packets/second
+                need_send_FCI = 1;
+            }
+            
+            // FAST-redetect head experiment
             redetect_head_unsynced(chan_mask, -1);
 
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
@@ -3607,7 +3622,10 @@ int lfd_linker(void)
             
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
-            info.channel[1].packet_download = PCS * 2;
+            if(info.pcs_sent_old == info.channel[1].packet_download)  {
+                info.channel[1].packet_download = PCS * 2;
+                info.pcs_sent_old = info.channel[1].packet_download;
+            }
             need_send_FCI = 1;
             max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len));
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
@@ -3654,6 +3672,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
             add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
+            add_json(js_buf, &js_cur, "PCS_fast", "%d", info.channel[1].packet_download); // TMP REMOVE
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
