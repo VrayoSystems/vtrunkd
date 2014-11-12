@@ -2940,6 +2940,7 @@ int lfd_linker(void)
     int PCS = 0;
     int PCS_aux = 0;
     int rttvar = 0;
+    info.fast_pcs_ts = info.current_time;
 /**
  *
  *
@@ -3126,12 +3127,14 @@ int lfd_linker(void)
             // FAST speed counter
             timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
             int time_passed = tv2ms(&tv_tmp_tmp_tmp);
-            if(        (PCS > FAST_PCS_PACKETS_CAN_CALC_SPEED) 
+            if(        ( (PCS-info.fast_pcs_old) > FAST_PCS_PACKETS_CAN_CALC_SPEED) 
                     && (time_passed > FAST_PCS_MINIMAL_INTERVAL)
                     && (info.fast_pcs_old < PCS) 
               ) {
-                info.channel[1].packet_download = (PCS - info.fast_pcs_old) * 10 / time_passed * 100; // packets/second
+                info.channel[1].packet_download = (PCS - info.fast_pcs_old) * 100 / time_passed * 10; // packets/second
                 need_send_FCI = 1;
+		info.fast_pcs_ts = info.current_time;
+                info.fast_pcs_old = PCS;
             }
             
             // FAST-redetect head experiment
@@ -3671,7 +3674,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
             add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
-            add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
+            add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
             add_json(js_buf, &js_cur, "PCS_fast", "%d", info.channel[1].packet_download); // TMP REMOVE
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
@@ -3702,6 +3705,7 @@ int lfd_linker(void)
             }
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
+            info.fast_pcs_old=0;
             // bandwidth utilization extimation experiment
             //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
             /*
@@ -4685,7 +4689,7 @@ if(drop_packet_flag) {
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             // rtt calculation, TODO: DUP code below!
                             if( (info.rtt2_lsn[chan_num] != 0) && (info.channel[chan_num].packet_seq_num_acked > info.rtt2_lsn[chan_num])) {
-                                vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
+                                //vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
                                 timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                                 //info.rtt2 = tv2ms(&tv_tmp);
                                 info.rtt2_lsn[chan_num] = 0;
