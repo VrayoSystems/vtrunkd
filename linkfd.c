@@ -720,9 +720,9 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
-    if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
+    if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider + shm_conn_info->forced_rtt)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -738,7 +738,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
+    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ( (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt)) {
         return 0;
     }
     return 1;
