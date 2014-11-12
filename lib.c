@@ -552,10 +552,10 @@ int start_json_arr(char *buf, int *pos, const char *name) {
 int add_json_arr(char *buf, int *pos, const char *format, ...) {
     va_list args;
     int bs = 0;
-    if (*pos > (JS_MAX-2)) return -1;
+    if (*pos > (JS_MAX-20)) return -1; // 20 chars max per record
 
     va_start(args, format);
-    bs = vsnprintf(buf+*pos, JS_MAX-1, format, args);
+    bs = vsnprintf(buf+*pos, JS_MAX-*pos-1, format, args);
     va_end(args);
     
     *pos = *pos + bs;
