@@ -2941,6 +2941,8 @@ int lfd_linker(void)
     int PCS_aux = 0;
     int rttvar = 0;
     info.fast_pcs_ts = info.current_time;
+    int pump_adj = 0;
+    
 /**
  *
  *
@@ -3286,7 +3288,7 @@ int lfd_linker(void)
             rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
-            int pump_adj=( (MAX_LATENCY_DROP_USEC/1000 + shm_conn_info->forced_rtt) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
+            pump_adj=( (MAX_LATENCY_DROP_USEC/1000 + shm_conn_info->forced_rtt) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
             if (pump_adj < 0) {
                 pump_adj = 0;
             }
@@ -3654,8 +3656,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "agag", "%d", agag);
             add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
-            add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
-            add_json(js_buf, &js_cur, "srtt2var", "%d", info.srtt2var);
+            //add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
+            add_json(js_buf, &js_cur, "rtt2var", "%d", info.srtt2var);
             add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
@@ -3679,9 +3681,9 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-            add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
+            //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
-            add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+            //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag
             add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full); // byte transmit in ag mode
@@ -3753,8 +3755,9 @@ int lfd_linker(void)
             }
             sem_post(&(shm_conn_info->stats_sem));
             
-            add_json(js_buf, &js_cur, "Ch", "%d", Ch);
-            add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+            //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+            //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+            add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
 
             // now get slope
             //int slope = get_slope(&smalldata);
