@@ -143,7 +143,7 @@ struct my_ip {
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
 #define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
-#define FORCE_RTT_JITTER_THRESH_MS 45 // ms of jitter to start growing rtt (subbing?)
+#define FORCE_RTT_JITTER_THRESH_MS 30 // ms of jitter to start growing rtt (subbing?)
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
@@ -3135,7 +3135,7 @@ int lfd_linker(void)
               ) {
                 info.channel[1].packet_download = (PCS - info.fast_pcs_old) * 100 / time_passed * 10; // packets/second
                 need_send_FCI = 1;
-		info.fast_pcs_ts = info.current_time;
+                info.fast_pcs_ts = info.current_time;
                 info.fast_pcs_old = PCS;
             }
             
@@ -3168,7 +3168,8 @@ int lfd_linker(void)
             }
             */
             if(shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
-                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar - FORCE_RTT_JITTER_THRESH_MS;
+                vtun_syslog(LOG_INFO, "Setting rttvar to %d", shm_conn_info->stats[max_chan].rttvar);
+                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar;
             }
             // <<< END forced_rtt calc
             
