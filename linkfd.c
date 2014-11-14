@@ -3633,7 +3633,7 @@ int lfd_linker(void)
                 info.pcs_sent_old = info.channel[1].packet_download;
             }
             need_send_FCI = 1;
-            max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len));
+            //max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len)); // disabled for future fix
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
@@ -3682,7 +3682,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
             add_json(js_buf, &js_cur, "PCS_fast", "%d", info.channel[1].packet_download); // TMP REMOVE
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
-            add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
+            //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
@@ -3854,7 +3854,7 @@ int lfd_linker(void)
                 tmp16_n = htons((uint16_t) i); // chan_num ?? not needed in fact TODO remove
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[1].packet_download);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan (PCS send)
                 struct timeval tmp_tv;
                 // local_seq_num
                 tmp32_n = htonl(info.channel[i].local_seq_num);
@@ -4691,7 +4691,7 @@ if(drop_packet_flag) {
                             info.channel[chan_num].packet_loss = ntohs(tmp16_n); // FCI-only data only on loss
                             memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
-                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t)); // PCS send
                             info.PCS2_recv = ntohl(tmp32_n);
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             // rtt calculation, TODO: DUP code below!
