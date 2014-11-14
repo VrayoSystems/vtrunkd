@@ -3675,7 +3675,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
             add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
-            add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            add_json(js_buf, &js_cur, "ACS_ll", "%d", info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
             add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
             add_json(js_buf, &js_cur, "PCS_fast", "%d", info.channel[1].packet_download); // TMP REMOVE
