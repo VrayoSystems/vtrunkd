@@ -3109,7 +3109,7 @@ int lfd_linker(void)
 
         
         // DEAD DETECT and COPY HEAD from SHM >>>
-        max_chan=-1;
+        // max_chan=-1; // this is bad practice ;-)
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
