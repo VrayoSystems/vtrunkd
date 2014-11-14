@@ -2942,7 +2942,7 @@ int lfd_linker(void)
     int rttvar = 0;
     info.fast_pcs_ts = info.current_time;
     int pump_adj = 0;
-    
+    int temp_sql_copy =0;
 /**
  *
  *
@@ -3259,6 +3259,7 @@ int lfd_linker(void)
 
         // RSR section here >>>
         int32_t rtt_shift;
+        int rsr_top;
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
@@ -3274,7 +3275,7 @@ int lfd_linker(void)
             
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-            int rsr_top = shm_conn_info->stats[max_chan].rsr;
+            rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
             if(rsr_top > 500000) {
@@ -3284,7 +3285,7 @@ int lfd_linker(void)
                 info.send_q_limit = (rsr_top * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
                                              / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             }
-            
+            temp_sql_copy = info.send_q_limit; 
             
             rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
@@ -3672,6 +3673,10 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
             add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
+            add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
+            add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
+            add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
+            add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
             add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
@@ -3760,8 +3765,6 @@ int lfd_linker(void)
             
             //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
             //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
-            add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
-            add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
 
             // now get slope
             //int slope = get_slope(&smalldata);
