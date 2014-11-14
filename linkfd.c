@@ -3761,6 +3761,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
             //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
+            add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
 
             // now get slope
             //int slope = get_slope(&smalldata);
