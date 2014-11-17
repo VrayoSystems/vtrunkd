@@ -3908,10 +3908,6 @@ int lfd_linker(void)
             set_W_unsync(t);
         }
 
-        if (channel_dead == 1) {
-            info.rsr = DEAD_CHANNEL_RSR;
-            info.send_q_limit_cubic = DEAD_CHANNEL_RSR;
-        }
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
 
         int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
