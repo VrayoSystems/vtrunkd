@@ -108,6 +108,8 @@ struct my_ip {
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 #define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 5 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
+#define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
+
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -2960,6 +2962,12 @@ int lfd_linker(void)
         errno = 0;
         super++;
         
+        // IDLE EXIT >>>
+        if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
+            shm_conn_info->idle = 0; // exit IDLE immediately for all chans    
+        }
+        // <<< END IDLE EXIT
+        
         // EXACT_RTT >>>
         
         if(info.rtt2_lsn[1] != 0) { // rtt2 DDS detect
@@ -2972,7 +2980,7 @@ int lfd_linker(void)
 
         // Section to set exact_rtt
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
-        if (((send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
+        if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
@@ -4021,9 +4029,19 @@ int lfd_linker(void)
 
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
-            if( (send_q_eff_mean < SEND_Q_IDLE) && !(shm_conn_info->idle)) {
-                shm_conn_info->idle = 1;
+            int idle = 1;
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
+                        idle = 0;
+                    }
+                }
             }
+
+            if(idle) {
+                shm_conn_info->idle = 0;    
+            }
+            
             sem_post(&(shm_conn_info->stats_sem));
             // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) SPEED_REDETECT_TV), >=)) {
