@@ -150,7 +150,7 @@ struct my_ip {
 #define DEAD_CHANNEL_RSR 40000 // fixed RSR for dead channel
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
-#define RSR_SMOOTH_FULL 3000 // ms for full convergence
+#define RSR_SMOOTH_FULL 500 // ms for full convergence
 #define TRAIN_PKTS 80
 #define WRITE_OUT_MAX 30 // write no more than 30 packets at once
 //#define NOCONTROL
