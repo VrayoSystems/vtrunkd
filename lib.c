@@ -110,10 +110,11 @@ void set_title(const char *fmt, ...)
 }
 #endif  /* HAVE_SETPROC_TITLE */
 
-#define SYSLOG_DUPS 2
+#define SYSLOG_DUPS 3
 char *syslog_buf[SYSLOG_DUPS];
 int syslog_buf_counter = 0;
 int syslog_dup_counter = 0;
+int syslog_sequential_counter = 0;
 int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
 int init = 0;
 
@@ -421,31 +422,61 @@ void vtun_syslog(int priority, char *format, ...) {
         vsnprintf(buf, sizeof(buf) - 1, format, ap);
         if (init) {
             if (syslog_dup_type == 0) {
+//                syslog(priority, "type 1 test counter %d %s new - %s",syslog_buf_counter,syslog_buf[syslog_buf_counter], buf);
+
                 if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
                     syslog_dup_counter++;
                     syslog_dup_type = 1;
+                    syslog_sequential_counter = 0;
+//                    syslog(priority, "type %d raise",syslog_dup_type);
                 } else {
-                    int counter = syslog_dup_counter - 1;
+                    int counter = syslog_buf_counter - 1;
                     if (counter < 0) {
                         counter = SYSLOG_DUPS - 1;
                     }
+//                    syslog(priority, "type 2 test buf %d counter %d %s new - %s",syslog_buf_counter,counter,syslog_buf[counter], buf);
                     if (!strcmp(syslog_buf[counter], buf)) {
                         syslog_dup_counter++;
                         syslog_dup_type = 2;
+//                        syslog(priority, "type %d raise",syslog_dup_type);
+                        syslog_sequential_counter = 0;
                     } else {
-                        if (++syslog_buf_counter == SYSLOG_DUPS) {
-                            syslog_buf_counter = 0;
+                        if (--counter < 0) {
+                            counter = SYSLOG_DUPS - 1;
                         }
-                        int string_len = strlen(buf);
-                        if (string_len > JS_MAX) {
-                            string_len = JS_MAX - 2;
+//                        syslog(priority, "type 3 test buf %d counter %d %s new - %s",syslog_buf_counter,counter,syslog_buf[counter], buf);
+
+                        if (!strcmp(syslog_buf[counter], buf)) {
+                            syslog_dup_counter++;
+                            syslog_dup_type = 3;
+                            syslog_sequential_counter = 1;
+//                            syslog(priority, "type %d raise",syslog_dup_type);
+                        } else {
+                            if (++syslog_buf_counter == SYSLOG_DUPS) {
+                                syslog_buf_counter = 0;
+                            }
+                            int string_len = strlen(buf);
+                            if (string_len > JS_MAX) {
+                                string_len = JS_MAX - 2;
+                            }
+//                            syslog(priority, "first save test buf %d %s",syslog_buf_counter, buf);
+                            memcpy(syslog_buf[syslog_buf_counter], buf, string_len + 1);
+                            print = 1;
                         }
-                        memcpy(syslog_buf[syslog_buf_counter], buf, string_len+1);
-                        print = 1;
                     }
                 }
             } else if (syslog_dup_type == 1) {
-                if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
+                if (syslog_sequential_counter < 0) {
+                    syslog_sequential_counter = syslog_dup_type-1;
+                }
+                int counter = syslog_buf_counter - syslog_sequential_counter;
+                if (counter < 0) {
+                    counter = syslog_buf_counter - syslog_sequential_counter + (SYSLOG_DUPS - 1);
+                }
+//                syslog(priority, "type %d buf_counter %d sequential_counter %d counter %d log:\"%s\"",syslog_dup_type,syslog_buf_counter, syslog_sequential_counter, counter, syslog_buf[counter]);
+
+                if (!strcmp(syslog_buf[counter], buf)) {
+                    syslog_sequential_counter--;
                     syslog_dup_counter++;
                 } else {
                     if (++syslog_buf_counter == SYSLOG_DUPS) {
@@ -459,12 +490,40 @@ void vtun_syslog(int priority, char *format, ...) {
                     print = 1;
                 }
             } else if (syslog_dup_type == 2) {
-                if (!strcmp(syslog_buf[syslog_buf_counter], buf)) {
+                if (syslog_sequential_counter < 0) {
+                    syslog_sequential_counter = syslog_dup_type-1;
+                }
+                int counter = syslog_buf_counter - syslog_sequential_counter;
+                if (counter < 0) {
+                    counter = syslog_buf_counter - syslog_sequential_counter + (SYSLOG_DUPS );
+                }
+ //               syslog(priority, "type %d buf_counter %d sequential_counter %d counter %d log:\"%s\"",syslog_dup_type,syslog_buf_counter, syslog_sequential_counter, counter, syslog_buf[counter]);
+                if (!strcmp(syslog_buf[counter], buf)) {
+                    syslog_sequential_counter--;
                     syslog_dup_counter++;
-                    syslog_dup_type = 2;
+                } else {
                     if (++syslog_buf_counter == SYSLOG_DUPS) {
                         syslog_buf_counter = 0;
                     }
+                    int string_len = strlen(buf);
+                    if (string_len > JS_MAX) {
+                        string_len = JS_MAX - 2;
+                    }
+                    memcpy(syslog_buf[syslog_buf_counter], buf, string_len+1);
+                    print = 1;
+                }
+            }  else if (syslog_dup_type == 3) {
+                if (syslog_sequential_counter < 0) {
+                    syslog_sequential_counter = syslog_dup_type-1;
+                }
+                int counter = syslog_buf_counter - syslog_sequential_counter;
+                if (counter < 0) {
+                    counter = syslog_buf_counter - syslog_sequential_counter + (SYSLOG_DUPS );
+                }
+//                syslog(priority, "type %d buf_counter %d sequential_counter %d counter %d log:\"%s\"",syslog_dup_type,syslog_buf_counter, syslog_sequential_counter, counter, syslog_buf[counter]);
+                if (!strcmp(syslog_buf[counter], buf)) {
+                    syslog_sequential_counter--;
+                    syslog_dup_counter++;
                 } else {
                     if (++syslog_buf_counter == SYSLOG_DUPS) {
                         syslog_buf_counter = 0;
@@ -483,9 +542,16 @@ void vtun_syslog(int priority, char *format, ...) {
 
         if (print) {
             if (syslog_dup_counter) {
-                syslog(priority, "Last %d message(s) repeat %d times", syslog_dup_type, syslog_dup_counter/syslog_dup_type);
+                syslog(priority, "Last %d message(s) repeat %d times dups %d", syslog_dup_type, syslog_dup_counter/syslog_dup_type + 1, syslog_dup_counter);
                 syslog_dup_counter = 0;
                 syslog_dup_type = 0;
+                syslog_sequential_counter = 0;
+                for (int i = 0; i < SYSLOG_DUPS; i++) {
+                    if (i == syslog_buf_counter)
+                        continue;
+                    memset(syslog_buf[i], 0, JS_MAX);
+                }
+
             }
             syslog(priority, "%s", buf);
         }
