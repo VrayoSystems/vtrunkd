@@ -3175,7 +3175,7 @@ int lfd_linker(void)
                 }
             }
             */
-            if(shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
+            if(0 && shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
                 vtun_syslog(LOG_INFO, "Setting rttvar to %d", shm_conn_info->stats[max_chan].rttvar);
                 info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar;
             }
