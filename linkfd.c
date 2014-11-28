@@ -108,6 +108,8 @@ struct my_ip {
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 #define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 5 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
+#define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
+
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -143,18 +145,21 @@ struct my_ip {
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
 #define LIN_FORCE_RTT_GROW 0 // ms // TODO: need to find optimal value for required performance region
-#define FORCE_RTT_JITTER_THRESH_MS 45 // ms of jitter to start growing rtt (subbing?)
+#define FORCE_RTT_JITTER_THRESH_MS 30 // ms of jitter to start growing rtt (subbing?)
 
 #define DEAD_RTT 1500 // ms. RTT to consider chan dead
 #define DEAD_RSR_USG 40 // %. RSR utilization to consider chan dead if ACS=0
 #define DEAD_CHANNEL_RSR 40000 // fixed RSR for dead channel
 
 #define RSR_SMOOTH_GRAN 10 // ms granularity
-#define RSR_SMOOTH_FULL 3000 // ms for full convergence
+#define RSR_SMOOTH_FULL 500 // ms for full convergence
 #define TRAIN_PKTS 80
 #define WRITE_OUT_MAX 30 // write no more than 30 packets at once
 //#define NOCONTROL
 //#define NO_ACK
+
+#define FAST_PCS_PACKETS_CAN_CALC_SPEED 200 // packets count to calculate PCS speed statistically correct
+#define FAST_PCS_MINIMAL_INTERVAL 50 // ms minimal interval
 
 #define RCVBUF_SIZE 1048576
 #define WHO_LOST 1
@@ -720,9 +725,9 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
         vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
-    if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider)) ) {
+    if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider + shm_conn_info->forced_rtt)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider));
+        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -738,7 +743,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > (int32_t)(tv2ms(&max_latency_drop)) ) {
+    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ( (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt)) {
         return 0;
     }
     return 1;
@@ -2937,6 +2942,9 @@ int lfd_linker(void)
     int PCS = 0;
     int PCS_aux = 0;
     int rttvar = 0;
+    info.fast_pcs_ts = info.current_time;
+    int pump_adj = 0;
+    int temp_sql_copy =0;
 /**
  *
  *
@@ -2954,6 +2962,12 @@ int lfd_linker(void)
         errno = 0;
         super++;
         
+        // IDLE EXIT >>>
+        if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
+            shm_conn_info->idle = 0; // exit IDLE immediately for all chans    
+        }
+        // <<< END IDLE EXIT
+        
         // EXACT_RTT >>>
         
         if(info.rtt2_lsn[1] != 0) { // rtt2 DDS detect
@@ -2966,7 +2980,7 @@ int lfd_linker(void)
 
         // Section to set exact_rtt
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
-        if (((send_q_eff_mean > SEND_Q_EFF_WORK) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
+        if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
@@ -3103,7 +3117,7 @@ int lfd_linker(void)
 
         
         // DEAD DETECT and COPY HEAD from SHM >>>
-        max_chan=-1;
+        // max_chan=-1; // this is bad practice ;-)
         sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
         sem_post(&(shm_conn_info->AG_flags_sem));
@@ -3118,8 +3132,22 @@ int lfd_linker(void)
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-
-            // redetect head experiment
+            // FAST TIMER HERE
+            
+            // FAST speed counter
+            timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
+            int time_passed = tv2ms(&tv_tmp_tmp_tmp);
+            if(        ( (PCS-info.fast_pcs_old) > FAST_PCS_PACKETS_CAN_CALC_SPEED) 
+                    && (time_passed > FAST_PCS_MINIMAL_INTERVAL)
+                    && (info.fast_pcs_old < PCS) 
+              ) {
+                info.channel[1].packet_download = (PCS - info.fast_pcs_old) * 100 / time_passed * 10; // packets/second
+                need_send_FCI = 1;
+                info.fast_pcs_ts = info.current_time;
+                info.fast_pcs_old = PCS;
+            }
+            
+            // FAST-redetect head experiment
             redetect_head_unsynced(chan_mask, -1);
 
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
@@ -3147,8 +3175,9 @@ int lfd_linker(void)
                 }
             }
             */
-            if(shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
-                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar - FORCE_RTT_JITTER_THRESH_MS;
+            if(0 && shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
+                vtun_syslog(LOG_INFO, "Setting rttvar to %d", shm_conn_info->stats[max_chan].rttvar);
+                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar;
             }
             // <<< END forced_rtt calc
             
@@ -3238,6 +3267,7 @@ int lfd_linker(void)
 
         // RSR section here >>>
         int32_t rtt_shift;
+        int rsr_top;
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
@@ -3253,7 +3283,7 @@ int lfd_linker(void)
             
             
             //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-            int rsr_top = shm_conn_info->stats[max_chan].rsr;
+            rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
             if(rsr_top > 500000) {
@@ -3263,12 +3293,12 @@ int lfd_linker(void)
                 info.send_q_limit = (rsr_top * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
                                              / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             }
-            
+            temp_sql_copy = info.send_q_limit; 
             
             rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
             
-            int pump_adj=( (MAX_LATENCY_DROP_USEC/1000) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
+            pump_adj=( (MAX_LATENCY_DROP_USEC/1000 + shm_conn_info->forced_rtt) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
             if (pump_adj < 0) {
                 pump_adj = 0;
             }
@@ -3607,9 +3637,12 @@ int lfd_linker(void)
             
             // now put max_ACS2 and PCS2 to SHM:
             shm_conn_info->stats[info.process_num].max_PCS2 = (PCS + PCS_aux) * 2 * info.eff_len;
-            info.channel[1].packet_download = PCS * 2;
+            if(info.pcs_sent_old == info.channel[1].packet_download)  {
+                info.channel[1].packet_download = PCS * 2;
+                info.pcs_sent_old = info.channel[1].packet_download;
+            }
             need_send_FCI = 1;
-            max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len));
+            //max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len)); // disabled for future fix
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             miss_packets_max = shm_conn_info->miss_packets_max;
@@ -3633,8 +3666,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "agag", "%d", agag);
             add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
-            add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
-            add_json(js_buf, &js_cur, "srtt2var", "%d", info.srtt2var);
+            //add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
+            add_json(js_buf, &js_cur, "rtt2var", "%d", info.srtt2var);
             add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
@@ -3643,23 +3676,30 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
-            add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%d", info.rtt2_lsn[1]);
+            add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
-            add_json(js_buf, &js_cur, "buf_len", "%d", my_miss_packets_max);
-            add_json(js_buf, &js_cur, "buf_len_remote", "%d", miss_packets_max);
-            add_json(js_buf, &js_cur, "rsr", "%d", info.rsr);
-            add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
-            add_json(js_buf, &js_cur, "send_q", "%d", send_q_eff);
+            add_json(js_buf, &js_cur, "buf_len", "%d", (int)my_miss_packets_max);
+            add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)miss_packets_max);
+            add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
+            add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
+            add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
+            add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
+            add_json(js_buf, &js_cur, "rtt_shift", "%d", (int)rtt_shift);
+            add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
+            add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
-            add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
+            add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
-            add_json(js_buf, &js_cur, "PCS2", "%d", shm_conn_info->stats[info.process_num].max_PCS2);
+            add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
+            add_json(js_buf, &js_cur, "PCS_fast", "%u", (unsigned int)info.channel[1].packet_download); // TMP REMOVE
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
-            add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
-            add_json(js_buf, &js_cur, "upload", "%d", shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-            add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
+            //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
+            add_json(js_buf, &js_cur, "upload", "%u", (unsigned int)shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
+            //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
-            add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
+            //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag
             add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full); // byte transmit in ag mode
@@ -3683,6 +3723,7 @@ int lfd_linker(void)
             }
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
+            info.fast_pcs_old=0;
             // bandwidth utilization extimation experiment
             //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
             /*
@@ -3730,8 +3771,8 @@ int lfd_linker(void)
             }
             sem_post(&(shm_conn_info->stats_sem));
             
-            add_json(js_buf, &js_cur, "Ch", "%d", Ch);
-            add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+            //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+            //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
 
             // now get slope
             //int slope = get_slope(&smalldata);
@@ -3824,7 +3865,7 @@ int lfd_linker(void)
                 tmp16_n = htons((uint16_t) i); // chan_num ?? not needed in fact TODO remove
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[1].packet_download);
-                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan (PCS send)
                 struct timeval tmp_tv;
                 // local_seq_num
                 tmp32_n = htonl(info.channel[i].local_seq_num);
@@ -3988,9 +4029,19 @@ int lfd_linker(void)
 
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
-            if( (send_q_eff_mean < SEND_Q_IDLE) && !(shm_conn_info->idle)) {
-                shm_conn_info->idle = 1;
+            int idle = 1;
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
+                        idle = 0;
+                    }
+                }
             }
+
+            if(idle) {
+                shm_conn_info->idle = 0;    
+            }
+            
             sem_post(&(shm_conn_info->stats_sem));
             // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) SPEED_REDETECT_TV), >=)) {
@@ -4661,12 +4712,12 @@ if(drop_packet_flag) {
                             info.channel[chan_num].packet_loss = ntohs(tmp16_n); // FCI-only data only on loss
                             memcpy(&tmp32_n, buf + 3 * sizeof(uint16_t), sizeof(uint32_t));
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
-                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t)); // PCS send
                             info.PCS2_recv = ntohl(tmp32_n);
                             //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             // rtt calculation, TODO: DUP code below!
                             if( (info.rtt2_lsn[chan_num] != 0) && (info.channel[chan_num].packet_seq_num_acked > info.rtt2_lsn[chan_num])) {
-                                vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
+                                //vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
                                 timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                                 //info.rtt2 = tv2ms(&tv_tmp);
                                 info.rtt2_lsn[chan_num] = 0;
