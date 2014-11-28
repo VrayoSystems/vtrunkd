@@ -810,7 +810,7 @@ int get_write_buf_wait_data(uint32_t chan_mask) {
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
     int any_lrx, seq_loss = 0;
-    for (int i = 0; i < info.channel_amount; i++) {
+    for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
         info.least_rx_seq[i] = UINT32_MAX;
         seq_loss = 0;
         if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
@@ -851,7 +851,9 @@ int get_write_buf_wait_data(uint32_t chan_mask) {
             }
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
-            info.least_rx_seq[i] = any_lrx;
+            vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
+            //info.least_rx_seq[i] = any_lrx;
+            info.least_rx_seq[i] = 0; // do not detect any loss
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i);
