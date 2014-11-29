@@ -2397,6 +2397,15 @@ int plp_avg_pbl() {
     if(pbl_cnt == 0) return INT32_MAX;
     return pbl_acc / pbl_cnt;
 }
+
+int print_flush_data() {
+    // info.least_rx_seq[i]  on all chans // logical_chan_num
+    // shm_conn_info->stats[i].channel_dead for all chans // process_num
+    // shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] // log and proc
+    // shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] 
+    // shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num]
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
