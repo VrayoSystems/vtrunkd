@@ -2410,6 +2410,7 @@ int print_flush_data() {
     // TODO: put to shm!!!
     // shm_conn_info->stats[p].local_seq_num_beforeloss
     //shm_conn_info->stats[info.process_num].packet_recv_counter_afterloss
+    uint32_t chan_mask = shm_conn_info->channels_mask;
     start_json(js_buf_fl, &js_cur_fl);
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
         add_json(js_buf_fl, &js_cur_fl, "_CHAN_", "%d", i);
