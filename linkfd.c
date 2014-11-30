@@ -2429,6 +2429,112 @@ int print_flush_data() {
     }
 }
 
+int lossed_consume(unsigned int local_seq_num, unsigned int seq_num) {
+    // 1. try to fill in the array with lsn
+    // 1.1 shift the cursors if all OK
+    // 2. detect loss events by setting flags for FCI
+    // 3. set up loss cutoff for tflush
+    // 4. upon loss, shift the cursor
+   
+    // TODO: LATENCY??
+    // TODO: seq_num unused??
+    
+    int s_shift = local_seq_num - info.lossed_loop_data[info.lossed_last_received].local_seq_num;
+    int new_idx = info.lossed_last_received + s_shift;
+    
+    if(new_idx > LOSSED_BACKLOG_SIZE) {
+        new_idx = new_idx - LOSSED_BACKLOG_SIZE;
+    }
+    if(new_idx < 0) {
+        new_idx = LOSSED_BACKLOG_SIZE - new_idx;
+    }
+    
+    if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
+        info.lossed_last_received = new_idx;
+        info.lossed_complete_received = new_idx;
+        return 0;
+    }
+    
+    if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
+        vtun_syslog(LOG_INFO, "DUP? lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        return -1;
+    }
+    
+    if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
+        vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        // TODO: detect loss, cutoff and shift cursors
+        info.lossed_complete_received = 0;
+        info.lossed_last_received = 0;
+        return s_shift - 1;
+    }
+    
+    if(s_shift >= LOSSED_BACKLOG_SIZE) {
+        vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        // TODO: detect loss, cutoff and shift cursors
+        info.lossed_complete_received = new_idx;
+        info.lossed_last_received = new_idx;
+        return s_shift - 1;
+    }
+    
+    int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
+    if(reordering > MAX_REORDER_PERPATH) {
+        // TODO HERE: count lost pkts!
+        int loss_calc = 0;
+        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        // TODO: detect loss, cutoff and shift cursors
+        info.lossed_complete_received = new_idx;
+        info.lossed_last_received = new_idx;
+        return reordering - 1;
+    }
+    
+    // now we have finished error handling - now account for pure data receipt
+    
+    if(s_shift > 0) {
+        vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        info.lossed_last_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
+        return s_shift - 1;
+    }
+    
+    // now detect situation where array was re-assembled successfully (if was)
+    
+    // again, detect DUPs
+    if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
+        vtun_syslog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        return -2;
+    }
+    
+    // now try to re-assemble
+    // [ 0 1[2]  4 5 6 7 8 9 ]
+    //         3
+    
+    // add data to its position
+    
+    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+    info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+    info.lossed_loop_data[new_idx].seq_num = seq_num;
+    
+    int next_missed;
+    
+    while(1) {
+        next_missed = info.lossed_complete_received + 1;
+        if(next_missed > LOSSED_BACKLOG_SIZE) next_missed = next_missed - LOSSED_BACKLOG_SIZE;
+        
+        if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
+            info.lossed_complete_received = next_missed;
+        } else {
+            return info.lossed_complete_received - info.lossed_complete_received - 1;
+        }
+        
+        if(info.lossed_complete_received == info.lossed_last_received) {
+            vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            return 0;
+        }
+    }
+    
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -5179,6 +5285,9 @@ if(drop_packet_flag) {
                     }
                     
                     // this is loss detection -->
+                    lossed_consume(local_seq_tmp, seq_num);
+                    
+                    // OLD loss detecor code ->>
                     // TODO: DUPs detect! +loss/DUP mess?? need a small buffer of received pkts?
                     if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {                        
                         // increment packet_loss_counter unconditionally
@@ -5256,6 +5365,7 @@ if(drop_packet_flag) {
                     if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                         info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
                     }
+                    // <<< END this is loss detection
 
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
