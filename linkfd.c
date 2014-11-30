@@ -175,7 +175,8 @@ struct my_ip {
 #endif
 
 char *js_buf; // for tick JSON
-int js_cur;
+char *js_buf_fl;
+int js_cur, js_cur_fl;
 
 #define SEND_Q_LOG
 
@@ -1760,6 +1761,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 if (get_udp_stats(udp_struct, 1)) {
                     sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
                 }
+                print_flush_data();
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
@@ -1767,17 +1769,17 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), tmp);
+                    vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), tmp, js_buf_fl);
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp);
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp, js_buf_fl);
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp);
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp, js_buf_fl);
                 } else {
-                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s", tmp);
+                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", tmp, js_buf_fl);
                 }
                 /*
                 udp_struct->lport = info.channel[1].lport;
@@ -2404,6 +2406,26 @@ int print_flush_data() {
     // shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] // log and proc
     // shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] 
     // shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num]
+    // beforeloss and how fci is sent
+    // TODO: put to shm!!!
+    // shm_conn_info->stats[p].local_seq_num_beforeloss
+    //shm_conn_info->stats[info.process_num].packet_recv_counter_afterloss
+    start_json(js_buf_fl, &js_cur_fl);
+    for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
+        add_json(js_buf_fl, &js_cur_fl, "_CHAN_", "%d", i);
+        for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+            if (chan_mask & (1 << p)) {
+                add_json(js_buf_fl, &js_cur_fl, "_PNUM_", "%d", p);
+                add_json(js_buf_fl, &js_cur_fl, "least_rx_seq", "%d", info.least_rx_seq[i]);
+                add_json(js_buf_fl, &js_cur_fl, "dead", "%d", shm_conn_info->stats[p].channel_dead);
+                add_json(js_buf_fl, &js_cur_fl, "p_seq_lost", "%d", shm_conn_info->write_buf[i].possible_seq_lost[p]);
+                add_json(js_buf_fl, &js_cur_fl, "lrs", "%d", shm_conn_info->write_buf[i].last_received_seq[p] );
+                add_json(js_buf_fl, &js_cur_fl, "lrs_s", "%d", shm_conn_info->write_buf[i].last_received_seq_shadow[p]);      
+                add_json(js_buf_fl, &js_cur_fl, "lsn_b", "%d", shm_conn_info->stats[p].local_seq_num_beforeloss);                        
+                add_json(js_buf_fl, &js_cur_fl, "prc_al", "%d", shm_conn_info->stats[p].packet_recv_counter_afterloss);  
+            }   
+        }
+    }
 }
 
 /*
@@ -2433,6 +2455,10 @@ int lfd_linker(void)
     js_buf = malloc(JS_MAX);
     memset(js_buf, 0, JS_MAX);
     js_cur = 0;
+
+    js_buf_fl = malloc(JS_MAX);
+    memset(js_buf_fl, 0, JS_MAX);
+    js_cur_fl = 0;
 
     #ifdef SEND_Q_LOG
         jsSQ_buf = malloc(JS_MAX);
@@ -3928,6 +3954,7 @@ int lfd_linker(void)
                     }
 
                     info.channel[i].local_seq_num_beforeloss = 0;
+                    shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = 0;
                     tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
                     
                     info.channel[i].packet_loss_counter = 0;
@@ -5159,8 +5186,10 @@ if(drop_packet_flag) {
                         // if this is first(?) loss, restart counters
                         if(info.channel[chan_num].local_seq_num_beforeloss == 0) {
                             info.channel[chan_num].local_seq_num_beforeloss = info.channel[chan_num].local_seq_num_recv;
+                            shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = info.channel[chan_num].local_seq_num_recv;
                             info.channel[chan_num].loss_time = info.current_time;
                             info.channel[chan_num].packet_recv_counter_afterloss = 0;
+                            shm_conn_info->stats[info.process_num].packet_recv_counter_afterloss = 0;
                         }
 //#ifdef DEBUGG
                         vtun_syslog(LOG_INFO, "loss +%d calced seq was %"PRIu32" now %"PRIu32" loss is %"PRId16" seq_num is %"PRIu32"", 
@@ -5201,16 +5230,20 @@ if(drop_packet_flag) {
                     if(info.channel[chan_num].local_seq_num_beforeloss != 0) {
                         if(info.channel[chan_num].packet_loss_counter == 0) { // situation normalized, all packets received
                             info.channel[chan_num].local_seq_num_beforeloss = 0;
+                            shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = 0;
                             shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
                             //shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
                         } else {
                             // TODO: why this? -->
                             if(local_seq_tmp == (info.channel[chan_num].local_seq_num_beforeloss + 1)) { // we received last lost pkt
                                 info.channel[chan_num].packet_recv_counter_afterloss--; // one packet less
+                                shm_conn_info->stats[info.process_num].packet_recv_counter_afterloss--;
                                 info.channel[chan_num].local_seq_num_beforeloss = local_seq_tmp;
+                                shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = local_seq_tmp;
                                 // TODO: info.channel[chan_num].loss_time = info.current_time; // <- here??
                             } else {
-                                info.channel[chan_num].packet_recv_counter_afterloss++; 
+                                info.channel[chan_num].packet_recv_counter_afterloss++;
+                                shm_conn_info->stats[info.process_num].packet_recv_counter_afterloss++;
                             }
                         }
                         shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = seq_num;

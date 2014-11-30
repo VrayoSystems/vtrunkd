@@ -391,6 +391,8 @@ struct conn_stats {
     struct timeval real_loss_time;
     int packet_speed_ag;
     int packet_speed_rmit;
+    int local_seq_num_beforeloss;
+    int packet_recv_counter_afterloss;
 };
 /**
  * Structure for garbage statistic and information
