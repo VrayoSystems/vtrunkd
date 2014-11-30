@@ -466,10 +466,10 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     // find possible processes
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (chan_mask & (1 << i) && (!shm_conn_info->stats[i].channel_dead) && check_rtt_latency_drop_chan(i)) {
-            if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
-                if(shm_conn_info->write_buf[logical_channel].last_received_seq[i] > lrq) { // we find the most recent one that fulfills the conditions
+            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) < lost_seq_num)) {
+                if( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) > lrq) { // we find the most recent one that fulfills the conditions
                     strcpy(pname, shm_conn_info->stats[i].name); 
-                    lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i];
+                    lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF;
                 }
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
@@ -484,7 +484,7 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     // now count only
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (chan_mask & (1 << i)) {
-            if( (status == WHO_LAGGING) && (shm_conn_info->write_buf[logical_channel].last_received_seq[i] < lost_seq_num)) {
+            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) < lost_seq_num)) {
                 lagging++;
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
@@ -1748,7 +1748,7 @@ int write_buf_check_n_flush(int logical_channel) {
         if (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
+                      || ( (shm_conn_info->frames_buf[fprev].seq_num < (info.least_rx_seq[logical_channel] - LOST_SEQN_DIFF)) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
@@ -3962,7 +3962,7 @@ int lfd_linker(void)
                     
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
-                    shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                    shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
                     shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - 1;
                     //shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
                     sem_post(&(shm_conn_info->write_buf_sem));
@@ -5232,7 +5232,7 @@ if(drop_packet_flag) {
                         if(info.channel[chan_num].packet_loss_counter == 0) { // situation normalized, all packets received
                             info.channel[chan_num].local_seq_num_beforeloss = 0;
                             shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = 0;
-                            shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] - MAX_REORDER_PERPATH;
+                            shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num];
                             //shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = 0;
                         } else {
                             // TODO: why this? -->
@@ -5249,7 +5249,7 @@ if(drop_packet_flag) {
                         }
                         shm_conn_info->write_buf[chan_num].last_received_seq_shadow[info.process_num] = seq_num;
                     } else {
-                        shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
+                        shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = seq_num;
                     }
 
                     // this is normal operation -->
