@@ -469,7 +469,13 @@ struct phisical_status { // A.K.A. "info"
     int tun_device; /**< /dev/tun descriptor */
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
     int head_channel;
-
+#define LOSSED_BACKLOG_SIZE 20
+    struct {
+        unsigned int seq_num;
+        unsigned int local_seq_num;
+    } lossed_loop_data[LOSSED_BACKLOG_SIZE]; // array of seq_nums for lossed detect
+    int lossed_complete_received;
+    int lossed_last_received;
     /** Collect statistic*/
     int mode;   /**< local aggregation flag, can be AG_MODE and R_MODE */
     struct timeval current_time;    /**< Is last got time.*/
@@ -561,13 +567,7 @@ struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t tun_device_sem;
-#define LOSSED_BACKLOG_SIZE 20
-    struct {
-        unsigned int seq_num;
-        unsigned int local_seq_num;
-    } lossed_loop_data[LOSSED_BACKLOG_SIZE]; // array of seq_nums for lossed detect
-    int lossed_complete_received;
-    int lossed_last_received;
+
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;

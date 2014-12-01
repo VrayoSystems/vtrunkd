@@ -220,6 +220,8 @@ int max_chan=-1;
 uint32_t start_of_train = 0, end_of_train = 0;
 struct timeval flood_start_time = { 0, 0 };
 
+int need_send_loss_FCI_flag = 0;
+
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
 int32_t ACK_coming_speed_avg = 0;
@@ -466,10 +468,10 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     // find possible processes
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (chan_mask & (1 << i) && (!shm_conn_info->stats[i].channel_dead) && check_rtt_latency_drop_chan(i)) {
-            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) < lost_seq_num)) {
-                if( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) > lrq) { // we find the most recent one that fulfills the conditions
+            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i]) < lost_seq_num)) {
+                if( (shm_conn_info->write_buf[logical_channel].last_received_seq[i]) > lrq) { // we find the most recent one that fulfills the conditions
                     strcpy(pname, shm_conn_info->stats[i].name); 
-                    lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF;
+                    lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i];
                 }
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
@@ -484,7 +486,7 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     // now count only
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (chan_mask & (1 << i)) {
-            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i] - LOST_SEQN_DIFF) < lost_seq_num)) {
+            if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i]) < lost_seq_num)) {
                 lagging++;
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
@@ -1748,7 +1750,7 @@ int write_buf_check_n_flush(int logical_channel) {
         if (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || ( timercmp(&tv_tmp, &max_latency_drop, >=))
-                      || ( (shm_conn_info->frames_buf[fprev].seq_num < (info.least_rx_seq[logical_channel] - LOST_SEQN_DIFF)) && forced_rtt_reached )
+                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
@@ -2429,20 +2431,55 @@ int print_flush_data() {
     }
 }
 
-int lossed_consume(unsigned int local_seq_num, unsigned int seq_num) {
+int lossed_count() {
+    int cnt = 0;
+    int idx_prev = info.lossed_complete_received;
+    int idx = idx_prev;
+    unsigned int old_lsn = info.lossed_loop_data[idx].local_seq_num;
+    while(idx != info.lossed_last_received) {
+        idx++;
+        if(idx >= LOSSED_BACKLOG_SIZE) idx = LOSSED_BACKLOG_SIZE - idx;
+        if((info.lossed_loop_data[idx_prev].local_seq_num + 1) == info.lossed_loop_data[idx].local_seq_num) {
+            // ok
+        } else {
+            cnt++;
+        }
+        idx_prev = idx;
+    }
+    return cnt;
+}
+
+int lossed_latency_drop(unsigned int *last_received_seq) {
+    // finish waiting for packets by latency; should be called by FCI process
+    vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+    int loss = lossed_count();
+    info.lossed_complete_received = info.lossed_last_received;
+    *last_received_seq = info.lossed_loop_data[info.lossed_last_received].local_seq_num;
+    return loss;
+}
+
+int is_loss() {
+    if( (info.lossed_last_received - info.lossed_complete_received) > 0) {
+        return 1;
+    }
+    if( (info.lossed_last_received - info.lossed_complete_received) < 0) {
+        vtun_syslog(LOG_ERR, "PROGRAMMING ERROR! lossed_complete_received %d > lossed_last_received %d", info.lossed_complete_received, info.lossed_last_received);
+    }
+    return 0;
+}
+
+int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned int *last_received_seq) {
     // 1. try to fill in the array with lsn
     // 1.1 shift the cursors if all OK
     // 2. detect loss events by setting flags for FCI
     // 3. set up loss cutoff for tflush
     // 4. upon loss, shift the cursor
    
-    // TODO: LATENCY??
-    // TODO: seq_num unused??
     
     int s_shift = local_seq_num - info.lossed_loop_data[info.lossed_last_received].local_seq_num;
     int new_idx = info.lossed_last_received + s_shift;
     
-    if(new_idx > LOSSED_BACKLOG_SIZE) {
+    if(new_idx >= LOSSED_BACKLOG_SIZE) {
         new_idx = new_idx - LOSSED_BACKLOG_SIZE;
     }
     if(new_idx < 0) {
@@ -2462,28 +2499,30 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num) {
     
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
         vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        // TODO: detect loss, cutoff and shift cursors
+        need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = 0;
         info.lossed_last_received = 0;
+        *last_received_seq = seq_num;
         return s_shift - 1;
     }
     
     if(s_shift >= LOSSED_BACKLOG_SIZE) {
         vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        // TODO: detect loss, cutoff and shift cursors
+        need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
+        *last_received_seq = seq_num;
         return s_shift - 1;
     }
     
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
     if(reordering > MAX_REORDER_PERPATH) {
-        // TODO HERE: count lost pkts!
-        int loss_calc = 0;
-        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        // TODO: detect loss, cutoff and shift cursors
+        int loss_calc = lossed_count();
+        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        need_send_loss_FCI_flag = loss_calc;
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
+        *last_received_seq = seq_num;
         return reordering - 1;
     }
     
@@ -2519,10 +2558,11 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num) {
     
     while(1) {
         next_missed = info.lossed_complete_received + 1;
-        if(next_missed > LOSSED_BACKLOG_SIZE) next_missed = next_missed - LOSSED_BACKLOG_SIZE;
+        if(next_missed >= LOSSED_BACKLOG_SIZE) next_missed = next_missed - LOSSED_BACKLOG_SIZE;
         
         if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
             info.lossed_complete_received = next_missed;
+            *last_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
         } else {
             return info.lossed_complete_received - info.lossed_complete_received - 1;
         }
@@ -4043,34 +4083,28 @@ int lfd_linker(void)
             }
 
             // now check if we need to fire LOSS event - send and commit locally
-            if(info.channel[i].local_seq_num_beforeloss != 0) { // we are in loss monitoring state..
+            if(is_loss() || need_send_loss_FCI_flag) { // we are in loss monitoring state..
                 timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
                 int timer_result2 = timercmp(&tv_tmp, &info.max_reorder_latency, >=);
-                if ( ((info.channel[i].packet_recv_counter_afterloss > MAX_REORDER_PERPATH) || timer_result2) && select_net_write(i)) {
+                if ( (need_send_loss_FCI_flag || timer_result2) && select_net_write(i)) {
                     // now send and zero
+                    int lrs = 0; // TODO: this seems unessessary
+                    if(timer_result2) need_send_loss_FCI_flag = lossed_latency_drop(&lrs);
                     tmp16_n = htons((uint16_t)info.channel[i].packet_recv_counter); // amt of rcvd packets
                     memcpy(buf, &tmp16_n, sizeof(uint16_t)); // amt of rcvd packets
 
                     // TODO: do we use local_seq_num difference or total packets receive count??
                     info.r_lost++;
                     //if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                    if( info.channel[i].packet_recv_counter_afterloss > MAX_REORDER_PERPATH) {
-                        vtun_syslog(LOG_INFO, "sedning loss by REORDER %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
-                    } else {
-                        vtun_syslog(LOG_INFO, "sedning loss by LATENCY %hd lrs %d, llrs %d, lsnbl %d", info.channel[i].packet_loss_counter, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv, info.channel[i].local_seq_num_beforeloss);
-                    }
+                    vtun_syslog(LOG_INFO, "sedning loss %hd lrs %d, llrs %d", need_send_loss_FCI_flag, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv);
 
-                    info.channel[i].local_seq_num_beforeloss = 0;
-                    shm_conn_info->stats[info.process_num].local_seq_num_beforeloss = 0;
-                    tmp16_n = htons((uint16_t)info.channel[i].packet_loss_counter); // amt of pkts lost till this moment
-                    
-                    info.channel[i].packet_loss_counter = 0;
+                    tmp16_n = htons(need_send_loss_FCI_flag); // amt of pkts lost till this moment
+                    need_send_loss_FCI_flag = 0;
                     
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
-                    shm_conn_info->write_buf[i].last_received_seq[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num];
-                    shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] - 1;
-                    //shm_conn_info->write_buf[i].last_received_seq_shadow[info.process_num] = 0;
+                    if(lrs) shm_conn_info->write_buf[i].last_received_seq[info.process_num] = lrs; // TODO: this seems unessessary
+                    shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq[info.process_num] - 1;
                     sem_post(&(shm_conn_info->write_buf_sem));
 
                     memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
@@ -5285,10 +5319,17 @@ if(drop_packet_flag) {
                     }
                     
                     // this is loss detection -->
-                    lossed_consume(local_seq_tmp, seq_num);
+                    unsigned int lrs;
+                    if(lossed_consume(local_seq_tmp, seq_num, &lrs) == 0) {
+                        info.channel[chan_num].loss_time = info.current_time;
+                    }
+                    sem_wait(write_buf_sem);
+                    shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = lrs;
+                    sem_post(write_buf_sem);
                     
                     // OLD loss detecor code ->>
                     // TODO: DUPs detect! +loss/DUP mess?? need a small buffer of received pkts?
+                    /*
                     if (local_seq_tmp > (info.channel[chan_num].local_seq_num_recv + 1)) {                        
                         // increment packet_loss_counter unconditionally
                         info.channel[chan_num].packet_loss_counter += (((int32_t) local_seq_tmp)
@@ -5366,7 +5407,7 @@ if(drop_packet_flag) {
                         info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
                     }
                     // <<< END this is loss detection
-
+                    */
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
 if(drop_packet_flag) {
