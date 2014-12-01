@@ -2431,6 +2431,14 @@ int print_flush_data() {
     }
 }
 
+int lossed_print_debug() {
+    vtun_syslog(LOG_INFO, "lossed buffer: complete: %d lsn %d, last: %d lsn %d", 
+        info.lossed_complete_received, info.lossed_loop_data[info.lossed_complete_received].local_seq_num, info.lossed_last_received, info.lossed_loop_data[info.lossed_last_received].local_seq_num);
+    for(int i=0; i<LOSSED_BACKLOG_SIZE; i++) {
+        vtun_syslog(LOG_INFO, "> %d lsn %d, sn %d", i, info.lossed_loop_data[i].local_seq_num, info.lossed_loop_data[i].seq_num);
+    }
+}
+
 int lossed_count() {
     int cnt = 0;
     int idx_prev = info.lossed_complete_received;
@@ -2452,6 +2460,7 @@ int lossed_count() {
 int lossed_latency_drop(unsigned int *last_received_seq) {
     // finish waiting for packets by latency; should be called by FCI process
     vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+    lossed_print_debug();
     int loss = lossed_count();
     info.lossed_complete_received = info.lossed_last_received;
     *last_received_seq = info.lossed_loop_data[info.lossed_last_received].local_seq_num;
@@ -2493,11 +2502,13 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
+        lossed_print_debug();
         vtun_syslog(LOG_INFO, "DUP? lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         return -1;
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
+        lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = 0;
@@ -2507,6 +2518,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(s_shift >= LOSSED_BACKLOG_SIZE) {
+        lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = new_idx;
@@ -2518,6 +2530,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
     if(reordering > MAX_REORDER_PERPATH) {
         int loss_calc = lossed_count();
+        lossed_print_debug();
         vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         need_send_loss_FCI_flag = loss_calc;
         info.lossed_complete_received = new_idx;
@@ -2529,6 +2542,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     // now we have finished error handling - now account for pure data receipt
     
     if(s_shift > 0) {
+        lossed_print_debug();
         vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
@@ -2540,6 +2554,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // again, detect DUPs
     if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
+        lossed_print_debug();
         vtun_syslog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         return -2;
     }
@@ -2549,7 +2564,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     //         3
     
     // add data to its position
-    
+    lossed_print_debug();
     vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
     info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
     info.lossed_loop_data[new_idx].seq_num = seq_num;
@@ -2568,6 +2583,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         }
         
         if(info.lossed_complete_received == info.lossed_last_received) {
+            lossed_print_debug();
             vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
             return 0;
         }
@@ -5325,7 +5341,6 @@ if(drop_packet_flag) {
                     }
                     sem_wait(write_buf_sem);
                     shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = lrs;
-                    sem_post(write_buf_sem);
                     
                     // OLD loss detecor code ->>
                     // TODO: DUPs detect! +loss/DUP mess?? need a small buffer of received pkts?
