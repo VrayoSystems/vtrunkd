@@ -2501,6 +2501,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
         info.lossed_last_received = new_idx;
         info.lossed_complete_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
         lossed_print_debug();
         return 0;
     }
