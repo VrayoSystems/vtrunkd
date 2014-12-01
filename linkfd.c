@@ -2484,7 +2484,10 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     // 3. set up loss cutoff for tflush
     // 4. upon loss, shift the cursor
    
-    
+    // TODO: local seq add at FCI receive
+    // TODO: rtt and send_q calculations
+   
+    // local_seq_num is init at 1 so it is okay to start right-away
     int s_shift = local_seq_num - info.lossed_loop_data[info.lossed_last_received].local_seq_num;
     int new_idx = info.lossed_last_received + s_shift;
     
@@ -2498,6 +2501,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
         info.lossed_last_received = new_idx;
         info.lossed_complete_received = new_idx;
+        lossed_print_debug();
         return 0;
     }
     
@@ -2577,7 +2581,11 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         
         if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
             info.lossed_complete_received = next_missed;
-            *last_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
+            if(info.lossed_loop_data[next_missed].seq_num != 0) {
+                *last_received_seq = info.lossed_loop_data[next_missed].seq_num;
+            } else {
+                vtun_syslog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            }
         } else {
             return info.lossed_complete_received - info.lossed_complete_received - 1;
         }
@@ -3088,6 +3096,7 @@ int lfd_linker(void)
     info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
 
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+        info.channel[i].local_seq_num=1; // init to 1 for lossed
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
 //        info.channel[i].ACS2 = 0;
@@ -5062,9 +5071,13 @@ if(drop_packet_flag) {
                             // local seq_num
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             uint32_t local_seq_tmp = ntohl(tmp32_n); 
-                            if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
-                                info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
-                            }
+                            
+                            unsigned int lrs2;
+                            lossed_consume(local_seq_tmp, 0, &lrs2); // TODO: lrs?? not updated!
+                            
+                            //if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
+                            //    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
+                            //}
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t)); // dn speed
 #ifdef DEBUGG
 
