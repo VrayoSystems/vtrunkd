@@ -2520,6 +2520,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = 0;
         info.lossed_last_received = 0;
+        info.lossed_loop_data[0].local_seq_num = local_seq_num;
+        info.lossed_loop_data[0].seq_num = seq_num;
         *last_received_seq = seq_num;
         return s_shift - 1;
     }
@@ -2530,6 +2532,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         need_send_loss_FCI_flag = lossed_count();
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
         *last_received_seq = seq_num;
         return s_shift - 1;
     }
