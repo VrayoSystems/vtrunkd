@@ -2499,12 +2499,12 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
-        vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
+        //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
         info.lossed_last_received = new_idx;
         info.lossed_complete_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
-        lossed_print_debug();
+        //lossed_print_debug();
         return 0;
     }
     
@@ -2555,7 +2555,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     // now we have finished error handling - now account for pure data receipt
     
     if(s_shift > 1) {
-        lossed_print_debug();
+        //lossed_print_debug();
         vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
@@ -2569,13 +2569,13 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
-        lossed_print_debug();
+        //lossed_print_debug();
         return -3;
     }
     
     // again, detect DUPs
     if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
-        lossed_print_debug();
+        //lossed_print_debug();
         vtun_syslog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         return -2;
     }
