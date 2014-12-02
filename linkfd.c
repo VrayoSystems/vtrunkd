@@ -2446,7 +2446,7 @@ int lossed_count() {
     unsigned int old_lsn = info.lossed_loop_data[idx].local_seq_num;
     while(idx != info.lossed_last_received) {
         idx++;
-        if(idx >= LOSSED_BACKLOG_SIZE) idx = LOSSED_BACKLOG_SIZE - idx;
+        if(idx >= LOSSED_BACKLOG_SIZE) idx = 0;
         if((info.lossed_loop_data[idx_prev].local_seq_num + 1) == info.lossed_loop_data[idx].local_seq_num) {
             // ok
         } else {
@@ -2554,7 +2554,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // now we have finished error handling - now account for pure data receipt
     
-    if(s_shift > 0) {
+    if(s_shift > 1) {
         lossed_print_debug();
         vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
@@ -2563,7 +2563,15 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         return s_shift - 1;
     }
     
-    // now detect situation where array was re-assembled successfully (if was)
+    if(s_shift == 1) {
+        // if s_shift == 1 && (info.lossed_complete_received != info.lossed_last_received)
+        vtun_syslog(LOG_INFO, "Added packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        info.lossed_last_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
+        lossed_print_debug();
+        return -3;
+    }
     
     // again, detect DUPs
     if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
