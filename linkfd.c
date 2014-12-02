@@ -5366,6 +5366,7 @@ if(drop_packet_flag) {
                     if(lossed_consume(local_seq_tmp, seq_num, &lrs) == 0) {
                         info.channel[chan_num].loss_time = info.current_time;
                     }
+                    info.channel[chan_num].local_seq_num_recv = lrs;
                     sem_wait(write_buf_sem);
                     shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = lrs;
                     
