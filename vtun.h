@@ -295,6 +295,8 @@ struct vtun_host {
 #define PLP_BUF_SIZE 20 // size of buffer used for old values of PBL for PLP calc
 #define PLP_BUF_TIMEOUT_MS 5000 // timeout for PLP buffer values
 
+#define FLUSHED_PACKET_ARRAY_SIZE 1000
+
 #define SESSION_NAME_SIZE 50
 struct _write_buf {
     struct frame_llist frames;
@@ -581,6 +583,7 @@ struct conn_info {
     sem_t resend_buf_sem; //for resend buf,  (ever between write_buf_sem if need double blocking)
     sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
+    uint32_t flushed_packet[FLUSHED_PACKET_ARRAY_SIZE]; //sync by write_buf_sem
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;

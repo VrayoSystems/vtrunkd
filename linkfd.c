@@ -1814,6 +1814,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 info.write_sequential++;
             }
             info.prev_flushed = 0;
+            shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
 
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
@@ -1926,6 +1927,29 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->write_buf[conn_num].broken_cnt = 0;
 
     if ( (seq_num <= shm_conn_info->write_buf[conn_num].last_written_seq)) {
+        //check for oldest dups
+        if (shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] != seq_num) {
+            shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] = seq_num;
+            struct timeval work_loop1, work_loop2, tmp_tv;
+            gettimeofday(&work_loop1, NULL );
+            int len_ret = dev_write(info.tun_device, out, len);
+            gettimeofday(&work_loop2, NULL );
+            timersub(&work_loop2, &work_loop1, &tmp_tv);
+            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %u", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv));
+            if (len_ret < 0) {
+                vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
+                if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
+                    vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                } else {
+                    vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                    return 0;
+                }
+
+            } else if (len_ret < len) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
+            }
+
+        }
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "drop dup pkt seq_num %"PRIu32" lws %"PRIu32"", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
 #endif
