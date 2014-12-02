@@ -2536,13 +2536,15 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
     if(reordering > MAX_REORDER_PERPATH) {
-        int loss_calc = lossed_count();
-        lossed_print_debug();
-        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
-        need_send_loss_FCI_flag = loss_calc;
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
         *last_received_seq = seq_num;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
+        int loss_calc = lossed_count();
+        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        need_send_loss_FCI_flag = loss_calc;
+        lossed_print_debug();
         return reordering - 1;
     }
     
