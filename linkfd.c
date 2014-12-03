@@ -2603,7 +2603,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // add data to its position
     lossed_print_debug();
-    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
     info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
     info.lossed_loop_data[new_idx].seq_num = seq_num;
     
