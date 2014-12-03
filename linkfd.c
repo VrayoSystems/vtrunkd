@@ -3132,9 +3132,11 @@ int lfd_linker(void)
     gettimeofday(&agon_time, NULL);
     
     info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
+    for (int i = 0; i < info.channel_amount; i++) {
+        info.channel[i].local_seq_num=1; // init to 1 for lossed
+    }
 
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
-        info.channel[i].local_seq_num=1; // init to 1 for lossed
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
 //        info.channel[i].ACS2 = 0;
