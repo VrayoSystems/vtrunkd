@@ -2511,7 +2511,12 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
         lossed_print_debug();
-        vtun_syslog(LOG_INFO, "DUP? lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        // now check if it is dup or LATE
+        if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
+            vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        } else {
+            vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        }
         *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
         *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
         return -1;
