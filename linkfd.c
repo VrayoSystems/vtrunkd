@@ -4801,7 +4801,6 @@ if(drop_packet_flag) {
                                     linker_term = TERM_FATAL;
                                     break;
                                 }
-#ifndef W_O_SO_MARK
                                 if (lfd_host->RT_MARK != -1) {
                                     if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
                                         vtun_syslog(LOG_ERR, "Client CHAN socket rt mark error %s(%d)", strerror(errno), errno);
@@ -4809,7 +4808,6 @@ if(drop_packet_flag) {
                                         break;
                                     }
                                 }
-#endif
                                 sendbuff = RCVBUF_SIZE;
                                 // WARNING! This should be on sysadmin's duty to optimize!
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
