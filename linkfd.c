@@ -178,6 +178,8 @@ char *js_buf; // for tick JSON
 char *js_buf_fl;
 int js_cur, js_cur_fl;
 
+
+#define PUSH_TO_TOP 0
 #define SEND_Q_LOG
 
 #ifdef SEND_Q_LOG
@@ -1254,7 +1256,7 @@ int retransmit_send(char *out2, int n_to_send) {
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             // WARNING! disabled push-to-top policy!
-            if(0 && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
+            if(PUSH_TO_TOP && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
             } else {
@@ -4477,7 +4479,7 @@ int lfd_linker(void)
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
                     // WARNING! disabled push-to-top policy!
-                    if( !((!info.head_channel) && 0 && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                    if( !((!info.head_channel) && PUSH_TO_TOP && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
                     } else {
                         need_retransmit = 1; 
