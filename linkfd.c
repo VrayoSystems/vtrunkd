@@ -2493,15 +2493,17 @@ int lossed_count() {
     int idx_prev = info.lossed_complete_received;
     int idx = idx_prev;
     unsigned int old_lsn = info.lossed_loop_data[idx].local_seq_num;
+    int pkt_shift = 1;
     while(idx != info.lossed_last_received) {
         idx++;
         if(idx >= LOSSED_BACKLOG_SIZE) idx = 0;
-        if((info.lossed_loop_data[idx_prev].local_seq_num + 1) == info.lossed_loop_data[idx].local_seq_num) {
+        if((info.lossed_loop_data[info.lossed_complete_received].local_seq_num + pkt_shift) == info.lossed_loop_data[idx].local_seq_num) {
             // ok
         } else {
             cnt++;
         }
         idx_prev = idx;
+        pkt_shift++;
     }
     return cnt - 1; // last one is for vendetta!
 }
