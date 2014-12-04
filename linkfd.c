@@ -178,6 +178,8 @@ char *js_buf; // for tick JSON
 char *js_buf_fl;
 int js_cur, js_cur_fl;
 
+
+#define PUSH_TO_TOP 0
 #define SEND_Q_LOG
 
 #ifdef SEND_Q_LOG
@@ -1254,7 +1256,7 @@ int retransmit_send(char *out2, int n_to_send) {
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             // WARNING! disabled push-to-top policy!
-            if(0 && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
+            if(PUSH_TO_TOP && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
             } else {
@@ -2447,7 +2449,7 @@ int lossed_count() {
     int pkt_shift = 1;
     while(idx != info.lossed_last_received) {
         idx++;
-        if(idx >= LOSSED_BACKLOG_SIZE) idx = LOSSED_BACKLOG_SIZE - idx;
+        if(idx >= LOSSED_BACKLOG_SIZE) idx = 0;
         if((info.lossed_loop_data[info.lossed_complete_received].local_seq_num + pkt_shift) == info.lossed_loop_data[idx].local_seq_num) {
             // ok
         } else {
@@ -2456,7 +2458,7 @@ int lossed_count() {
         idx_prev = idx;
         pkt_shift++;
     }
-    return cnt;
+    return cnt - 1; // last one is for vendetta!
 }
 
 int lossed_latency_drop(unsigned int *last_received_seq) {
@@ -2470,16 +2472,13 @@ int lossed_latency_drop(unsigned int *last_received_seq) {
 }
 
 int is_loss() {
-    if( (info.lossed_last_received - info.lossed_complete_received) > 0) {
+    if(info.lossed_last_received != info.lossed_complete_received) {
         return 1;
-    }
-    if( (info.lossed_last_received - info.lossed_complete_received) < 0) {
-        vtun_syslog(LOG_ERR, "PROGRAMMING ERROR! lossed_complete_received %d > lossed_last_received %d", info.lossed_complete_received, info.lossed_last_received);
     }
     return 0;
 }
 
-int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned int *last_received_seq) {
+int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned int *last_received_seq, unsigned int *last_local_received_seq) {
     // 1. try to fill in the array with lsn
     // 1.1 shift the cursors if all OK
     // 2. detect loss events by setting flags for FCI
@@ -2488,6 +2487,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
    
     // TODO: local seq add at FCI receive
     // TODO: rtt and send_q calculations
+    
+    // TODO: may be optimized by not doing excessive *last_local_received_seq = local_seq_num
    
     // local_seq_num is init at 1 so it is okay to start right-away
     int s_shift = local_seq_num - info.lossed_loop_data[info.lossed_last_received].local_seq_num;
@@ -2501,18 +2502,27 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
-        vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
+        //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
         info.lossed_last_received = new_idx;
         info.lossed_complete_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
-        lossed_print_debug();
+        *last_received_seq = seq_num;
+        *last_local_received_seq = local_seq_num;
+        //lossed_print_debug();
         return 0;
     }
     
     if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
         lossed_print_debug();
-        vtun_syslog(LOG_INFO, "DUP? lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        // now check if it is dup or LATE
+        if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
+            vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        } else {
+            vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        }
+        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
+        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
         return -1;
     }
     
@@ -2525,6 +2535,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_loop_data[0].local_seq_num = local_seq_num;
         info.lossed_loop_data[0].seq_num = seq_num;
         *last_received_seq = seq_num;
+        *last_local_received_seq = local_seq_num;
         return s_shift - 1;
     }
     
@@ -2537,18 +2548,20 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
         *last_received_seq = seq_num;
+        *last_local_received_seq = local_seq_num;
         return s_shift - 1;
     }
     
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
     if(reordering > MAX_REORDER_PERPATH) {
-        info.lossed_complete_received = new_idx;
-        info.lossed_last_received = new_idx;
         *last_received_seq = seq_num;
+        *last_local_received_seq = local_seq_num;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
         int loss_calc = lossed_count();
         vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        info.lossed_complete_received = new_idx;
+        info.lossed_last_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         lossed_print_debug();
         return reordering - 1;
@@ -2556,21 +2569,35 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // now we have finished error handling - now account for pure data receipt
     
-    if(s_shift > 0) {
-        lossed_print_debug();
+    if(s_shift > 1) {
+        //lossed_print_debug();
         vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
+        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
+        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
         return s_shift - 1;
     }
     
-    // now detect situation where array was re-assembled successfully (if was)
+    if(s_shift == 1) {
+        // if s_shift == 1 && (info.lossed_complete_received != info.lossed_last_received)
+        vtun_syslog(LOG_INFO, "Added packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        info.lossed_last_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
+        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
+        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
+        //lossed_print_debug();
+        return -3;
+    }
     
     // again, detect DUPs
     if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
-        lossed_print_debug();
+        //lossed_print_debug();
         vtun_syslog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
+        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
         return -2;
     }
     
@@ -2580,7 +2607,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // add data to its position
     lossed_print_debug();
-    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
     info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
     info.lossed_loop_data[new_idx].seq_num = seq_num;
     
@@ -2592,10 +2619,12 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         
         if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
             info.lossed_complete_received = next_missed;
-            if(info.lossed_loop_data[next_missed].seq_num != 0) {
+            if(info.lossed_loop_data[next_missed].seq_num != 0) { // 0 is set by FCI seq_num (0)
                 *last_received_seq = info.lossed_loop_data[next_missed].seq_num;
+                *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             } else {
-                vtun_syslog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+                vtun_syslog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+                *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             }
         } else {
             return info.lossed_complete_received - info.lossed_complete_received - 1;
@@ -2603,7 +2632,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         
         if(info.lossed_complete_received == info.lossed_last_received) {
             lossed_print_debug();
-            vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %s", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
             return 0;
         }
     }
@@ -3105,9 +3134,11 @@ int lfd_linker(void)
     gettimeofday(&agon_time, NULL);
     
     info.max_reorder_latency = MAX_REORDER_LATENCY; // is rtt * 2 actually
+    for (int i = 0; i < info.channel_amount; i++) {
+        info.channel[i].local_seq_num=1; // init to 1 for lossed
+    }
 
     for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
-        info.channel[i].local_seq_num=1; // init to 1 for lossed
         info.rtt2_lsn[i] = 0;
         info.rtt2_send_q[i] = 0;
 //        info.channel[i].ACS2 = 0;
@@ -4452,7 +4483,7 @@ int lfd_linker(void)
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
                     // WARNING! disabled push-to-top policy!
-                    if( !((!info.head_channel) && 0 && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                    if( !((!info.head_channel) && PUSH_TO_TOP && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
                     } else {
                         need_retransmit = 1; 
@@ -4774,7 +4805,6 @@ if(drop_packet_flag) {
                                     linker_term = TERM_FATAL;
                                     break;
                                 }
-#ifndef W_O_SO_MARK
                                 if (lfd_host->RT_MARK != -1) {
                                     if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
                                         vtun_syslog(LOG_ERR, "Client CHAN socket rt mark error %s(%d)", strerror(errno), errno);
@@ -4782,7 +4812,6 @@ if(drop_packet_flag) {
                                         break;
                                     }
                                 }
-#endif
                                 sendbuff = RCVBUF_SIZE;
                                 // WARNING! This should be on sysadmin's duty to optimize!
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
@@ -5084,7 +5113,7 @@ if(drop_packet_flag) {
                             uint32_t local_seq_tmp = ntohl(tmp32_n); 
                             
                             unsigned int lrs2;
-                            lossed_consume(local_seq_tmp, 0, &lrs2); // TODO: lrs?? not updated!
+                            lossed_consume(local_seq_tmp, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv); // TODO: lrs?? not updated!
                             
                             //if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                             //    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
@@ -5360,7 +5389,7 @@ if(drop_packet_flag) {
                     
                     // this is loss detection -->
                     unsigned int lrs;
-                    if(lossed_consume(local_seq_tmp, seq_num, &lrs) == 0) {
+                    if(lossed_consume(local_seq_tmp, seq_num, &lrs, &info.channel[chan_num].local_seq_num_recv) == 0) {
                         info.channel[chan_num].loss_time = info.current_time;
                     }
                     sem_wait(write_buf_sem);

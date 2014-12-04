@@ -224,7 +224,7 @@ void client(struct vtun_host *host)
         opt=1;
         setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
         
-        #ifndef W_O_SO_MARK
+//        #ifndef W_O_SO_MARK
         if(host->RT_MARK != -1) {
                if (setsockopt(s, SOL_SOCKET, SO_MARK, &host->RT_MARK, sizeof(host->RT_MARK))) {
                    vtun_syslog(LOG_ERR,"client socket rt mark error %s(%d)",
@@ -232,7 +232,7 @@ void client(struct vtun_host *host)
                    break;
                }
         }
-        #endif
+//        #endif
 
 
         if( bind(s,(struct sockaddr *)&my_addr,sizeof(my_addr)) ){
