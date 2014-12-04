@@ -26,6 +26,7 @@
 
 */
 
+#include <stdio.h>
 
 struct {
     int lossed_complete_received;
@@ -56,15 +57,6 @@ int lossed_count() {
     return cnt - 1; // last one is for vendetta!
 }
 
-int lossed_latency_drop(unsigned int *last_received_seq) {
-    // finish waiting for packets by latency; should be called by FCI process
-    vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
-    lossed_print_debug();
-    int loss = lossed_count();
-    info.lossed_complete_received = info.lossed_last_received;
-    *last_received_seq = info.lossed_loop_data[info.lossed_last_received].local_seq_num;
-    return loss;
-}
 
 int is_loss() {
     if(info.lossed_last_received != info.lossed_complete_received) {
@@ -74,8 +66,8 @@ int is_loss() {
 }
 
 int main(int argc, char **argv) {
-    info.lossed_complete_received = 0;
-    info.lossed_last_received = 0;
+    info.lossed_complete_received = 4;
+    info.lossed_last_received = 8;
     info.lossed_loop_data = { 
         { 6480, 12869 },
         { 6481, 12870 },
@@ -88,4 +80,6 @@ int main(int argc, char **argv) {
         { 6485, 12869 },
         { 6465, 12869 }
     };
+    printf("count %d", lossed_count());
+    return 0;
 }
