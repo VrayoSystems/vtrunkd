@@ -223,6 +223,10 @@ uint32_t start_of_train = 0, end_of_train = 0;
 struct timeval flood_start_time = { 0, 0 };
 
 int need_send_loss_FCI_flag = 0;
+#define WB_1MS_SIZE 500
+int wb_1ms[WB_1MS_SIZE] = { 0 };
+int wb_1ms_idx = 2, start_print = 0;
+char wb_1ms_str[5000] = { '\0' };
 
 /*Variables for the exact way of measuring speed*/
 struct timeval send_q_read_time, send_q_read_timer = {0,0}, send_q_read_drop_time = {0, 100000}, send_q_mode_switch_time = {0,0}, net_model_start = {0,0};
@@ -1759,13 +1763,15 @@ int write_buf_check_n_flush(int logical_channel) {
                 int r_amt = 0;
                 shm_conn_info->tflush_counter += shm_conn_info->frames_buf[fprev].seq_num
                         - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+#ifdef TRACE_BUF_LEN
                 udp_struct->lport = info.channel[1].lport;
                 udp_struct->rport = info.channel[1].rport;
                 char tmp[2000] = { 0 };
                 if (get_udp_stats(udp_struct, 1)) {
-                    sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
+                    sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d ", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
                 }
                 print_flush_data();
+#endif
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
@@ -1785,14 +1791,29 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", tmp, js_buf_fl);
                 }
-                /*
-                udp_struct->lport = info.channel[1].lport;
-                udp_struct->rport = info.channel[1].rport;
-                if (get_udp_stats(udp_struct, 1)) {
-                    vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport,
-                            udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
+#ifdef TRACE_BUF_LEN
+                int check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
+                if(check_result < 0) {
+                    sprintf(tmp + strlen(tmp), "WB Fail %d ", check_result);
+                } else {
+                    sprintf(tmp + strlen(tmp), "WB ok ");
                 }
-                */
+                vtun_syslog(LOG_INFO, tmp);
+                int wb_1ms_str_pos = 0;
+                wb_1ms_str_pos += sprintf(wb_1ms_str, "{\"wb_s\":[");
+                for (; ; ) {
+                    wb_1ms_str_pos += sprintf(wb_1ms_str + wb_1ms_str_pos,"%d,",wb_1ms[start_print]);
+                    if (start_print == wb_1ms_idx) break;
+                    start_print++;
+                    if (start_print >= WB_1MS_SIZE) {
+                        start_print = 0;
+                    }
+                }
+                sprintf(wb_1ms_str + wb_1ms_str_pos - 1, "]}");
+                vtun_syslog(LOG_INFO, wb_1ms_str);
+                memset(wb_1ms_str, '\0', 5000);
+#endif
+
             }
             
             // mean latency experiment
@@ -1854,6 +1875,7 @@ int write_buf_check_n_flush(int logical_channel) {
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
             frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
+            shm_conn_info->write_buf[logical_channel].frames.len--;
             return 1;
         } else {
             return 0;
@@ -2000,6 +2022,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
+    shm_conn_info->write_buf[conn_num].frames.len++;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
@@ -3218,6 +3241,10 @@ int lfd_linker(void)
     info.fast_pcs_ts = info.current_time;
     int pump_adj = 0;
     int temp_sql_copy =0;
+
+    struct timeval wb_1ms_time = { 0, 1000 };
+    struct timeval wb_1ms_timer = info.current_time;
+
 /**
  *
  *
@@ -3235,6 +3262,23 @@ int lfd_linker(void)
         errno = 0;
         super++;
         
+        gettimeofday(&info.current_time, NULL);
+        timersub(&info.current_time, &wb_1ms_timer, &tv_tmp);
+        if (timercmp(&tv_tmp, &wb_1ms_time, >)) {
+            wb_1ms_timer = info.current_time;
+            wb_1ms_idx++;
+            if (wb_1ms_idx >= WB_1MS_SIZE) {
+                wb_1ms_idx = 0;
+            }
+            if (start_print == wb_1ms_idx) {
+                start_print++;
+                if (start_print >= WB_1MS_SIZE) {
+                    start_print = 0;
+                }
+            }
+            wb_1ms[wb_1ms_idx] = shm_conn_info->write_buf[1].frames.len;
+        }
+
         // IDLE EXIT >>>
         if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
             shm_conn_info->idle = 0; // exit IDLE immediately for all chans    
