@@ -2446,15 +2446,17 @@ int lossed_count() {
     int idx_prev = info.lossed_complete_received;
     int idx = idx_prev;
     unsigned int old_lsn = info.lossed_loop_data[idx].local_seq_num;
+    int pkt_shift = 1;
     while(idx != info.lossed_last_received) {
         idx++;
         if(idx >= LOSSED_BACKLOG_SIZE) idx = 0;
-        if((info.lossed_loop_data[idx_prev].local_seq_num + 1) == info.lossed_loop_data[idx].local_seq_num) {
+        if((info.lossed_loop_data[info.lossed_complete_received].local_seq_num + pkt_shift) == info.lossed_loop_data[idx].local_seq_num) {
             // ok
         } else {
             cnt++;
         }
         idx_prev = idx;
+        pkt_shift++;
     }
     return cnt - 1; // last one is for vendetta!
 }
@@ -2556,10 +2558,10 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         *last_local_received_seq = local_seq_num;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
+        info.lossed_last_received = new_idx;
         int loss_calc = lossed_count();
         vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         info.lossed_complete_received = new_idx;
-        info.lossed_last_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         lossed_print_debug();
         return reordering - 1;
