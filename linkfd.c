@@ -2523,33 +2523,33 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         }
         *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
         *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
-        return 0;
+        return -1;
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
         lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        need_send_loss_FCI_flag = lossed_count();
+        need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = 0;
         info.lossed_last_received = 0;
         info.lossed_loop_data[0].local_seq_num = local_seq_num;
         info.lossed_loop_data[0].seq_num = seq_num;
         *last_received_seq = seq_num;
         *last_local_received_seq = local_seq_num;
-        return s_shift - 1;
+        return 0;
     }
     
     if(s_shift >= LOSSED_BACKLOG_SIZE) {
         lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        need_send_loss_FCI_flag = lossed_count();
+        need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
         *last_received_seq = seq_num;
         *last_local_received_seq = local_seq_num;
-        return s_shift - 1;
+        return 0;
     }
     
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
@@ -2564,7 +2564,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_complete_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         lossed_print_debug();
-        return reordering - 1;
+        return reordering;
     }
     
     // now we have finished error handling - now account for pure data receipt
@@ -2582,7 +2582,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     if(s_shift == 1) {
         // if s_shift == 1 && (info.lossed_complete_received != info.lossed_last_received)
-        vtun_syslog(LOG_INFO, "Added packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vtun_syslog(LOG_INFO, "Append packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
@@ -2636,7 +2636,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
             return 0;
         }
     }
-    
+    return -1;
 }
 
 /*
