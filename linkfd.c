@@ -5231,7 +5231,6 @@ if(drop_packet_flag) {
                     }
                     if( fl==VTUN_CONN_CLOSE ) {
                         vtun_syslog(LOG_INFO,"Connection close requested by other side daemon");
-                        vtun_syslog(LOG_INFO, "sem_post! conn closed other");
                         linker_term = TERM_NONFATAL;
                         break;
                     }
