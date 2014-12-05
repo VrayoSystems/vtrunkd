@@ -3937,6 +3937,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
             add_json(js_buf, &js_cur, "rtt_shift", "%d", (int)rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
+            add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
