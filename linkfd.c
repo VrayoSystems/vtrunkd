@@ -2523,7 +2523,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         }
         *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
         *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
-        return -1;
+        return 0;
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
@@ -5113,7 +5113,9 @@ if(drop_packet_flag) {
                             uint32_t local_seq_tmp = ntohl(tmp32_n); 
                             
                             unsigned int lrs2;
-                            lossed_consume(local_seq_tmp, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv); // TODO: lrs?? not updated!
+                            if (lossed_consume(local_seq_tmp, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv) == 0) { // TODO: lrs?? not updated!
+                                info.channel[chan_num].loss_time = info.current_time;
+                            }
                             
                             //if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                             //    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
