@@ -2458,7 +2458,7 @@ int lossed_count() {
         idx_prev = idx;
         pkt_shift++;
     }
-    return cnt - 1; // last one is for vendetta!
+    return cnt;
 }
 
 int lossed_latency_drop(unsigned int *last_received_seq) {
