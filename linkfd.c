@@ -2375,16 +2375,17 @@ int get_slope(struct _smalldata *sd) {
 }
 
 int plp_add_pbl(int l_pbl, struct timeval *current_time) {
-    if(info.pbl_cnt > PLP_BUF_SIZE) {
+    if(info.pbl_cnt >= PLP_BUF_SIZE) {
         info.pbl_cnt = 0;
     }
     info.plp_buf[info.pbl_cnt].pbl = l_pbl;
     info.plp_buf[info.pbl_cnt].ts = *current_time;
-    info.pbl_cnt++;
+    //info.pbl_cnt++;
 }
 
 
-int plp_avg_pbl() {
+int plp_avg_pbl(int l_pbl_cur) {
+    /*
     struct timeval tv_tmp;
     int pbl_acc = 0;
     int pbl_cnt = 0;
@@ -2402,6 +2403,11 @@ int plp_avg_pbl() {
     }
     if(pbl_cnt == 0) return INT32_MAX;
     return pbl_acc / pbl_cnt;
+    */
+    if(l_pbl_cur > info.plp_buf[0].pbl) {
+        return l_pbl_cur;
+    }
+    return info.plp_buf[0].pbl;
 }
 
 int print_flush_data() {
@@ -3855,7 +3861,7 @@ int lfd_linker(void)
                 info.r_lost = 0;
             }
             
-            int cur_plp = plp_avg_pbl();
+            int cur_plp = plp_avg_pbl(info.l_pbl);
             
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
