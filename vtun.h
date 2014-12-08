@@ -394,6 +394,7 @@ struct conn_stats {
     int local_seq_num_beforeloss;
     int packet_recv_counter_afterloss;
     int l_pbl;
+    int brl_ag_enabled;
 };
 /**
  * Structure for garbage statistic and information
