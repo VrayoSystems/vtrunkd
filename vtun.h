@@ -393,6 +393,7 @@ struct conn_stats {
     int packet_speed_rmit;
     int local_seq_num_beforeloss;
     int packet_recv_counter_afterloss;
+    int l_pbl;
 };
 /**
  * Structure for garbage statistic and information

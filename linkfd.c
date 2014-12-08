@@ -277,6 +277,13 @@ struct {
     int DL;
 } ag_stat;
 
+struct mini_path_desc
+{
+    int process_num;
+    int rtt;
+    int packets_between_loss;
+};
+
 struct time_lag_info time_lag_info_arr[MAX_TCP_LOGICAL_CHANNELS];
 struct time_lag time_lag_local;
 struct timeval socket_timeout = { 10, 0 };
@@ -2410,6 +2417,66 @@ int plp_avg_pbl(int l_pbl_cur) {
     return info.plp_buf[0].pbl;
 }
 
+int fill_path_descs_unsync(struct mini_path_desc *path_descs, uint32_t chan_mask) {
+    int p=0;
+    memset((void *)&path_descs, 0, sizeof(path_descs));
+    
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i))
+            && (!shm_conn_info->stats[i].channel_dead)) {
+            path_descs[p].process_num = i;
+            path_descs[p].rtt = shm_conn_info->stats[i].exact_rtt;
+            path_descs[p].packets_between_loss = shm_conn_info->stats[i].packets_between_loss;
+            p++;
+        }
+    }
+    return p;
+}
+
+int compare_descs_pbl (struct mini_path_desc *a, struct mini_path_desc *b) {
+     int temp = b->packets_between_loss - a->packets_between_loss; // b-a = descending
+     if (temp > 0)
+          return 1;
+     else if (temp < 0)
+          return -1;
+     else
+          return 0;
+}
+
+int set_cubic_brl_flags_unsync() {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    struct mini_path_desc path_descs[MAX_TCP_PHYSICAL_CHANNELS];
+    int count = fill_path_descs_unsync(path_descs, chan_mask);
+    qsort(path_descs, count, sizeof(struct mini_path_desc), compare_descs_pbl);
+    // 1. find worst rtt from AG chans
+    // 1.1 calculate sum speed of ALL alive chans
+    int max_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+    int sum_speed = 0;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if (       (chan_mask & (1 << i)) 
+                && (!shm_conn_info->stats[i].channel_dead)) {
+            if((max_rtt < shm_conn_info->stats[i].exact_rtt) && shm_conn_info->stats[info.process_num].ag_flag_local ) {
+                max_rtt = shm_conn_info->stats[i].exact_rtt;
+            }
+            sum_speed += shm_conn_info->stats[i].ACK_speed / info.eff_len;
+        }
+    }
+
+    // 2. now calc xhi and Ps and set flags per chans
+    double Ps = 0;
+    // 2.1 first, enable one channel
+    // TODO; what if highest speed chan != lowest p chan?
+    // maybe sort by speed instead?
+    shm_conn_info->stats[path_descs[0].process_num].brl_ag_enabled = 1;
+    for(int j=0; j<count; j++) {
+        for (int i=0; i< count; i++ ) {
+            Ps = 1111;
+            path_descs[i].rtt=1111;
+        }
+    }
+}
+
+
 int print_flush_data() {
     // info.least_rx_seq[i]  on all chans // logical_chan_num
     // shm_conn_info->stats[i].channel_dead for all chans // process_num
@@ -3864,6 +3931,7 @@ int lfd_linker(void)
             int cur_plp = plp_avg_pbl(info.l_pbl);
             
             sem_wait(&(shm_conn_info->stats_sem));
+            shm_conn_info->stats[info.process_num].l_pbl = cur_plp;
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
 
@@ -5025,6 +5093,7 @@ if(drop_packet_flag) {
                                 plp_add_pbl(info.l_pbl, &info.current_time);
                                 info.l_pbl = 0;
                                 sem_wait(&(shm_conn_info->stats_sem));
+                                shm_conn_info->stats[info.process_num].l_pbl = plp_avg_pbl(info.l_pbl);
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
                                 sem_post(&(shm_conn_info->stats_sem));
                                 if(info.head_channel) {
