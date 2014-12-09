@@ -2457,13 +2457,14 @@ int compare_descs_pbl (struct mini_path_desc *a, struct mini_path_desc *b) {
 
 int calc_xhi(struct mini_path_desc *path_descs, int count) {
     int xhi = 0;
-    double rtt,pbl,Ps,Ps_u=0,Ps_d = 0;
+    double rtt,Ps,Ps_u=0,Ps_d = 0,spd;
     int max_rtt = -1;
 
     for (int i=0; i< count; i++ ) {
         if(shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled) {
-            Ps_u += ((double)(shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len))/(double)path_descs[i].packets_between_loss;
-            Ps_d += (double)(shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len);
+            spd = (double) shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len;
+            Ps_u += spd / (double)path_descs[i].packets_between_loss;
+            Ps_d += spd;
             if(path_descs[i].rtt > max_rtt) {
                 max_rtt = path_descs[i].rtt;
             }
@@ -2471,8 +2472,10 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
     }
 
     Ps = Ps_u / Ps_d;
+    rtt = (double)max_rtt;
+    rtt /= 1000; // ms -> s
 
-    xhi = (int) round((1.17 * pow( ((double)max_rtt)/Ps, 3.0/4.0)) / (double) max_rtt);
+    xhi = (int) round( 1.17 * pow( rtt/Ps, 3.0/4.0 ) / rtt );
 
     return xhi;
 }
@@ -2480,7 +2483,7 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
 int print_xhi_data(struct mini_path_desc *path_descs, int count) {
     for (int i=0; i< count; i++ ) {
         vtun_syslog(LOG_INFO, "XHI: pnum=%d rtt=%d, pbl=%d, ACS=%d, ENB=%d", path_descs[i].process_num, 
-                path_descs[i].rtt, path_descs[i].packets_between_loss, shm_conn_info->stats[path_descs[i].process_num].ACK_speed, shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled);
+                path_descs[i].rtt, path_descs[i].packets_between_loss, shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len, shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled);
     }
 }
 
@@ -2505,13 +2508,16 @@ int set_xhi_brl_flags_unsync() {
     // 2. now calc xhi and Ps and set flags per chans
     // 2.1 first, enable one channel
     shm_conn_info->stats[path_descs[0].process_num].brl_ag_enabled = 1;
+    print_xhi_data(path_descs, count);
+    xhi = calc_xhi(path_descs, count);
+    vtun_syslog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
 
     // 2.2 try to add each chan one-by-one and calculate total xhi
     for(int j=1; j<count; j++) {
         shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 1;
         print_xhi_data(path_descs, count);
         xhi = calc_xhi(path_descs, count);
-        vtun_syslog(LOG_INFO, "XHI: %d", xhi);
+        vtun_syslog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
         if(xhi < sum_speed) { // TODO: really sum_speed ? or maybe sum of the above? or just max speed chan?
             shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 0;
             break;
