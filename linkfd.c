@@ -501,7 +501,19 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
                 lagging++;
             }
+        }
+    }
 
+    if(lagging == 0 && status == WHO_LOST) { // fixing WHO_LOST only
+        // could not detect who lost directly(for example, no seq_num has arrived yet on lossing chan [loss detected by FCI]), doing 'possible' mode
+        pname[0]='p';
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if (chan_mask & (1 << i)) {
+                if( (status == WHO_LOST) && shm_conn_info->write_buf[logical_channel].packet_lost_state[i]) {
+                    strcpy(pname+1, shm_conn_info->stats[i].name);
+                    lagging++;
+                }
+            }
         }
     }
 
@@ -4281,6 +4293,9 @@ int lfd_linker(void)
                     sem_wait(&(shm_conn_info->write_buf_sem));
                     if(lrs) shm_conn_info->write_buf[i].last_received_seq[info.process_num] = lrs; // TODO: this seems unessessary
                     shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq[info.process_num] - 1;
+                    // inform that we lost packet
+                    shm_conn_info->write_buf[i].packet_lost_state[info.process_num] = 1;
+                    
                     sem_post(&(shm_conn_info->write_buf_sem));
 
                     memcpy(buf + sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // loss
@@ -5502,6 +5517,7 @@ if(drop_packet_flag) {
                     unsigned int lrs;
                     if(lossed_consume(local_seq_tmp, seq_num, &lrs, &info.channel[chan_num].local_seq_num_recv) == 0) {
                         info.channel[chan_num].loss_time = info.current_time;
+                        shm_conn_info->write_buf[chan_num].packet_lost_state[info.process_num] = 0; // no need to sync
                     }
                     sem_wait(write_buf_sem);
                     shm_conn_info->write_buf[chan_num].last_received_seq[info.process_num] = lrs;

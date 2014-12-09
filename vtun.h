@@ -304,6 +304,7 @@ struct _write_buf {
     unsigned long last_received_seq[MAX_TCP_PHYSICAL_CHANNELS]; // max of 30 physical channels
     unsigned long last_received_seq_shadow[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
     unsigned long possible_seq_lost[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
+    unsigned long packet_lost_state[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
 
     struct timeval last_write_time; // into device
     int buf_len;
