@@ -578,7 +578,8 @@ void segfault_sigaction(int signal, siginfo_t *si, void *arg)
 static void sig_term(int sig)
 {
     vtun_syslog(LOG_INFO, "Get sig_term");
-    vtun_syslog(LOG_INFO, "Closing connection");
+    if (shmctl(lfd_host->shmid, IPC_RMID, NULL ) == -1)
+        vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
     io_cancel();
     linker_term = VTUN_SIG_TERM;
 }
@@ -6396,6 +6397,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         sem_wait(&(shm_conn_info->stats_sem));
         pid_t pid = shm_conn_info->stats[i].pid;
         sem_post(&(shm_conn_info->stats_sem));
+    }
+
+    /* detach shm segment: */
+    if (shmdt(shm_conn_info) == -1) {
+        vtun_syslog(LOG_INFO, "Detach shm fail; reason %s (%d)", strerror(errno), errno);
     }
 
     sigaction(SIGTERM,&sa_oldterm,NULL);

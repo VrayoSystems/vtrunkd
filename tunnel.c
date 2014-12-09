@@ -89,6 +89,7 @@ int (*proto_write)(int fd, char *buf, int len);
 int (*proto_read)(int fd, char *buf);
 
 int fdserver_term = 0;
+int shmid;
 
 ssize_t
 read_fd(int fd, void *ptr, size_t nbytes, int *recvfd)
@@ -189,6 +190,9 @@ write_fd(int fd, void *ptr, size_t nbytes, int sendfd)
 /* end write_fd */
 
 static void fd_server_term(int sig){
+    vtun_syslog(LOG_INFO, "Get sig_term");
+    if (shmctl(shmid, IPC_RMID, NULL ) == -1)
+        vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
      fdserver_term = 1;
 }
 
@@ -309,6 +313,10 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
     }
      // clean up
      memset(shm_conn_info, 0, sizeof(struct conn_info));
+     /* detach shm segment: */
+     if (shmdt(shm_conn_info) == -1) {
+         vtun_syslog(LOG_INFO, "Detach shm fail; reason %s (%d)", strerror(errno), errno);
+     }
      vtun_syslog(LOG_INFO, "fd_server zeroing shm & exiting.\n");
      exit(0);
  
@@ -350,7 +358,7 @@ int tunnel(struct vtun_host *host, int srv)
      int fd[2]={-1, -1};
      char dev[VTUN_DEV_LEN]="";
      int interface_already_open = 0;
-     int shmid, i;
+     int i;
      struct sockaddr_un remote;
      int connid = -1;
      struct conn_info *shm_conn_info;
@@ -621,6 +629,7 @@ int tunnel(struct vtun_host *host, int srv)
               }
 	      break;
 	}
+        host->shmid = shmid;
         vtun_syslog(LOG_INFO,"Setting loc_fd to %d", fd[0]);
 	host->loc_fd = fd[0];
      }
