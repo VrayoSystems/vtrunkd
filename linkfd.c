@@ -2490,7 +2490,11 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
     rtt = (double)max_rtt;
     rtt /= 1000; // ms -> s
 
-    xhi = (int) round( 1.17 * pow( rtt/Ps, 3.0/4.0 ) / rtt );
+    double maxwin = 1.17 * pow( rtt/Ps, 3.0/4.0 );
+#define TCP_MINWIN 35.0
+    if(maxwin < TCP_MINWIN) maxwin = TCP_MINWIN; // protect us from dropping window too much on very-high-speed links (see office wi-fi)
+    // TODO: this is uninvestigated area: cubic seems to behave differently on lower-cwnd areas and lower RTTs (hystart?)
+    xhi = (int) round( maxwin / rtt );
 
     return xhi;
 }
