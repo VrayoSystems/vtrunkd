@@ -506,10 +506,25 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
 
     if(lagging == 0 && status == WHO_LOST) { // fixing WHO_LOST only
         // could not detect who lost directly(for example, no seq_num has arrived yet on lossing chan [loss detected by FCI]), doing 'possible' mode
-        pname[0]='p';
+        pname[0]='L';
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if (chan_mask & (1 << i)) {
                 if( (status == WHO_LOST) && shm_conn_info->write_buf[logical_channel].packet_lost_state[i]) {
+                    strcpy(pname+1, shm_conn_info->stats[i].name);
+                    lagging++;
+                }
+            }
+        }
+    }
+    
+    if(lagging == 0 && status == WHO_LOST) { // fixing WHO_LOST only
+        // now find last one who lost by possible_seq_lost
+        pname[0]='p';
+        unsigned int highest_psl = 0;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if (chan_mask & (1 << i)) {
+                if(shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] > highest_psl) {
+                    highest_psl = shm_conn_info->write_buf[logical_channel].possible_seq_lost[i];
                     strcpy(pname+1, shm_conn_info->stats[i].name);
                     lagging++;
                 }
