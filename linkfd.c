@@ -2419,7 +2419,7 @@ int plp_avg_pbl(int l_pbl_cur) {
 
 int fill_path_descs_unsync(struct mini_path_desc *path_descs, uint32_t chan_mask) {
     int p=0;
-    memset((void *)&path_descs, 0, sizeof(path_descs));
+    memset((void *)path_descs, 0, sizeof(path_descs));
     
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((chan_mask & (1 << i))
