@@ -2450,8 +2450,8 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
 
     for (int i=0; i< count; i++ ) {
         if(shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled) {
-            Ps_u += ((double)(shm_conn_info->stats[i].ACK_speed/info.eff_len))/(double)path_descs[i].packets_between_loss;
-            Ps_d += (double)(shm_conn_info->stats[i].ACK_speed/info.eff_len);
+            Ps_u += ((double)(shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len))/(double)path_descs[i].packets_between_loss;
+            Ps_d += (double)(shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len);
             if(path_descs[i].rtt > max_rtt) {
                 max_rtt = path_descs[i].rtt;
             }
@@ -2465,7 +2465,14 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
     return xhi;
 }
 
-int set_cubic_brl_flags_unsync() {
+int print_xhi_data(struct mini_path_desc *path_descs, int count) {
+    for (int i=0; i< count; i++ ) {
+        vtun_syslog(LOG_INFO, "XHI: pnum=%d rtt=%d, pbl=%d, ACS=%d, ENB=%d", path_descs[i].process_num, 
+                path_descs[i].rtt, path_descs[i].packets_between_loss, shm_conn_info->stats[path_descs[i].process_num].ACK_speed, shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled);
+    }
+}
+
+int set_xhi_brl_flags_unsync() {
     uint32_t chan_mask = shm_conn_info->channels_mask;
     struct mini_path_desc path_descs[MAX_TCP_PHYSICAL_CHANNELS];
     int count = fill_path_descs_unsync(path_descs, chan_mask);
@@ -2475,14 +2482,10 @@ int set_cubic_brl_flags_unsync() {
     qsort(path_descs, count, sizeof(struct mini_path_desc), compare_descs_pbl);
     // 1. find worst rtt from AG chans
     // 1.1 calculate sum speed of ALL alive chans
-    int max_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
     int sum_speed = 0;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (       (chan_mask & (1 << i)) 
                 && (!shm_conn_info->stats[i].channel_dead)) {
-            if((max_rtt < shm_conn_info->stats[i].exact_rtt) && shm_conn_info->stats[info.process_num].ag_flag_local ) {
-                max_rtt = shm_conn_info->stats[i].exact_rtt;
-            }
             sum_speed += shm_conn_info->stats[i].ACK_speed / info.eff_len;
         }
     }
@@ -2494,12 +2497,15 @@ int set_cubic_brl_flags_unsync() {
     // 2.2 try to add each chan one-by-one and calculate total xhi
     for(int j=1; j<count; j++) {
         shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 1;
+        print_xhi_data(path_descs, count);
         xhi = calc_xhi(path_descs, count);
+        vtun_syslog(LOG_INFO, "XHI: %d", xhi);
         if(xhi < sum_speed) { // TODO: really sum_speed ? or maybe sum of the above? or just max speed chan?
             shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 0;
             break;
         }
     }
+    return xhi;
 }
 
 
@@ -3958,6 +3964,7 @@ int lfd_linker(void)
             
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp;
+            set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
 
@@ -4068,6 +4075,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "D", "%d", ag_stat.D);
             add_json(js_buf, &js_cur, "CL", "%d", ag_stat.CL);
             add_json(js_buf, &js_cur, "DL", "%d", ag_stat.DL);
+            add_json(js_buf, &js_cur, "Xi", "%d", !shm_conn_info->stats[info.process_num].brl_ag_enabled);
             memset((void *)&ag_stat, 0, sizeof(ag_stat));
             skip=0;
             if(PCS == 0 && PCS_aux != 0) {
