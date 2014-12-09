@@ -379,6 +379,7 @@ struct conn_stats {
     int rtt_phys_avg; // accurate on idling
     int rtt2; // RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
     int srtt2_10; // COPIED from info RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
+    int srtt2_100; // COPIED from info RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
     int sqe_mean;
     int my_max_send_q_chan_num;
     int ag_flag_local;
@@ -525,6 +526,7 @@ struct phisical_status { // A.K.A. "info"
     struct timeval rtt2_tv[MAX_TCP_LOGICAL_CHANNELS]; 
     int rtt2; // max..?
     int srtt2_10; // max..?
+    int srtt2_100; // max..?
     int srtt2var; 
     int dropping;
     struct timeval max_reorder_latency;

@@ -2452,7 +2452,7 @@ int fill_path_descs_unsync(struct mini_path_desc *path_descs, uint32_t chan_mask
         if ((chan_mask & (1 << i))
             && (!shm_conn_info->stats[i].channel_dead)) {
             path_descs[p].process_num = i;
-            path_descs[p].rtt = shm_conn_info->stats[i].exact_rtt;
+            path_descs[p].rtt = shm_conn_info->stats[i].srtt2_100/100;
             path_descs[p].packets_between_loss = shm_conn_info->stats[i].l_pbl;
             p++;
         }
@@ -2473,25 +2473,32 @@ int compare_descs_pbl (struct mini_path_desc *a, struct mini_path_desc *b) {
 int calc_xhi(struct mini_path_desc *path_descs, int count) {
     int xhi = 0;
     double rtt,Ps,Ps_u=0,Ps_d = 0,spd;
-    int max_rtt = -1;
-
+    //int max_rtt = -1;
+    int min_rtt = INT32_MAX;
+    int sum_rtt = 0;
+    if(count == 0) return 0;
     for (int i=0; i< count; i++ ) {
         if(shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled) {
             spd = (double) shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len;
             Ps_u += spd / (double)path_descs[i].packets_between_loss;
             Ps_d += spd;
-            if(path_descs[i].rtt > max_rtt) {
-                max_rtt = path_descs[i].rtt;
+            sum_rtt += path_descs[i].rtt;
+            //if(path_descs[i].rtt > max_rtt) {
+            //    max_rtt = path_descs[i].rtt;
+            //}
+            if(path_descs[i].rtt && (path_descs[i].rtt < min_rtt)) {
+                min_rtt = path_descs[i].rtt;
             }
         }
     }
 
     Ps = Ps_u / Ps_d;
-    rtt = (double)max_rtt;
+    //rtt = (double) (sum_rtt / count);
+    rtt = (double) min_rtt;
     rtt /= 1000; // ms -> s
 
     double maxwin = 1.17 * pow( rtt/Ps, 3.0/4.0 );
-#define TCP_MINWIN 35.0
+#define TCP_MINWIN 49.0
     if(maxwin < TCP_MINWIN) maxwin = TCP_MINWIN; // protect us from dropping window too much on very-high-speed links (see office wi-fi)
     // TODO: this is uninvestigated area: cubic seems to behave differently on lower-cwnd areas and lower RTTs (hystart?)
     xhi = (int) round( maxwin / rtt );
@@ -3772,6 +3779,7 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
+                           || ( !shm_conn_info->stats[info.process_num].brl_ag_enabled )
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
@@ -5115,6 +5123,7 @@ if(drop_packet_flag) {
                                 //info.rtt2 = tv2ms(&tv_tmp);
                                 info.rtt2_lsn[chan_num] = 0;
                                 info.srtt2_10 += ((int)tv2ms(&tv_tmp)*10 - info.srtt2_10) / 8;
+                                info.srtt2_100 += ((int)tv2ms(&tv_tmp)*100 - info.srtt2_100) / 50;
                                 info.rtt2 = info.srtt2_10 / 10; // check this!
                                 if (info.rtt2 <= 0) info.rtt2 = 1;
                                 int r_delta = (int)tv2ms(&tv_tmp) - info.srtt2_10 / 10;
@@ -5425,6 +5434,7 @@ if(drop_packet_flag) {
                         //info.rtt2 = tv2ms(&tv_tmp);
                         info.rtt2_lsn[chan_num] = 0;
                         info.srtt2_10 += ((int)tv2ms(&tv_tmp)*10 - info.srtt2_10) / 8;
+                        info.srtt2_100 += ((int)tv2ms(&tv_tmp)*100 - info.srtt2_100) / 50;
                         info.rtt2 = info.srtt2_10 / 10; // check this!
                         if (info.rtt2 <= 0) info.rtt2 = 1;
                         int r_delta = (int)tv2ms(&tv_tmp) - info.srtt2_10 / 10;
@@ -5526,6 +5536,7 @@ if(drop_packet_flag) {
                     shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
                     shm_conn_info->stats[info.process_num].rtt2 = info.rtt2; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     shm_conn_info->stats[info.process_num].srtt2_10 = info.srtt2_10; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
+                    shm_conn_info->stats[info.process_num].srtt2_100 = info.srtt2_100; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     sem_post(&(shm_conn_info->stats_sem));
 
                     //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
