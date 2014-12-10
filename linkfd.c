@@ -5225,7 +5225,7 @@ if(drop_packet_flag) {
                                     }
                                     sem_post(&(shm_conn_info->stats_sem));
                                 }
-                                ms2tv(&loss_tv, info.rtt / 2);
+                                ms2tv(&loss_tv, info.rtt);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if(info.head_channel) {
                                     info.send_q_limit_cubic_max = info.max_send_q; // fast-converge to flow (head now always converges!)
