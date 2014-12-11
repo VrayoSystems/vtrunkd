@@ -572,6 +572,7 @@ int tunnel(struct vtun_host *host, int srv)
                     sem_init(&shm_conn_info[connid].AG_flags_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].common_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].hard_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].recv_loss_sem, 1, 1);
 
                     struct timeval session_hash_time;
                     gettimeofday(&session_hash_time, NULL );

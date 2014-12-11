@@ -187,6 +187,9 @@ char *jsSQ_buf; // for send_q compressor
 int jsSQ_cur;
 #endif
 
+char lossLog[JS_MAX] = { 0 }; // for send_q compressor
+int lossLog_cur = 0;
+
 // flags:
 uint8_t time_lag_ready;
 
@@ -1800,33 +1803,42 @@ int write_buf_check_n_flush(int logical_channel) {
                     sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
                 }
                 print_flush_data();
+                int loss_flag = 0;
                 if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, tmp);
+                    loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), tmp, js_buf_fl);
+                    loss_flag = 1;
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp, js_buf_fl);
+                    loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s %s", info.flush_sequential, info.write_sequential, lag_pname, (r_amt-1), shm_conn_info->tflush_counter, incomplete_seq_len, shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tmp, js_buf_fl);
+                    loss_flag = 1;
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", tmp, js_buf_fl);
                 }
-                /*
-                udp_struct->lport = info.channel[1].lport;
-                udp_struct->rport = info.channel[1].rport;
-                if (get_udp_stats(udp_struct, 1)) {
-                    vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport,
-                            udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
-                }
-                */
+                if (loss_flag) {
+                    shm_conn_info->loss[shm_conn_info->loss_idx].pbl = info.write_sequential;
+                    shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
+                    struct {
+                        struct timeval timestamp;
+                        int pbl;
+                        int psl;
+                    } loss[LOSS_ARRAY]; // sync by write_buf_sem
+                    shm_conn_info->loss_idx++;
+                    if (shm_conn_info->loss_idx == LOSS_ARRAY) {
+                        shm_conn_info->loss_idx = 0;
+                    }
             }
             
             // mean latency experiment
@@ -3361,7 +3373,27 @@ int lfd_linker(void)
     while( !linker_term ) {
         errno = 0;
         super++;
-        
+        sem_wait(&shm_conn_info->write_buf_sem);
+        if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
+            uint32_t tmp_h;
+            struct timeval tv_tmp;
+            start_json(lossLog, &lossLog_cur);
+            memcpy(&tmp_h, buf, sizeof(uint32_t));
+            int idx = ntohl(tmp_h);
+            memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+            tv_tmp.tv_sec = ntohl(tmp_h);
+            memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+            tv_tmp.tv_usec = ntohl(tmp_h);
+            add_json(lossLog, &lossLog_cur, "tsec", "%d", tv_tmp.tv_sec);
+            add_json(lossLog, &lossLog_cur, "tusec", "%d", tv_tmp.tv_usec);
+            memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
+            add_json(lossLog, &lossLog_cur, "psl", "%d",  ntohl(tmp_h));
+            memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
+            add_json(lossLog, &lossLog_cur, "pbl", "%d",  ntohl(tmp_h));
+            print_json_arr(lossLog, &lossLog_cur);
+        }
+        sem_post(&shm_conn_info->write_buf_sem);
+
         // IDLE EXIT >>>
         if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
             shm_conn_info->idle = 0; // exit IDLE immediately for all chans    
@@ -5098,6 +5130,39 @@ if(drop_packet_flag) {
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
+                        } else if (flag_var == FRAME_LOSS_INFO) {
+                            uint32_t tmp_h;
+                            struct timeval tv_tmp;
+                            start_json(lossLog, &lossLog_cur);
+                            memcpy(&tmp_h, buf, sizeof(uint32_t));
+                            int idx = ntohl(tmp_h);
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+                            tv_tmp.tv_sec = ntohl(tmp_h);
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            tv_tmp.tv_usec = ntohl(tmp_h);
+                            add_json(lossLog, &lossLog_cur, "tsec", "%d", tv_tmp.tv_sec);
+                            add_json(lossLog, &lossLog_cur, "tusec", "%d", tv_tmp.tv_usec);
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
+                            add_json(lossLog, &lossLog_cur, "psl", "%d",  ntohl(tmp_h));
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
+                            add_json(lossLog, &lossLog_cur, "pbl", "%d",  ntohl(tmp_h));
+                            print_json_arr(lossLog, &lossLog_cur);
+
+                        } else if (flag_var == FRAME_L_LOSS_INFO) {
+                            uint32_t tmp_h;
+                            struct timeval tv_tmp;
+                            memcpy(&tmp_h, buf, sizeof(uint32_t));
+                            int idx = ntohl(tmp_h);
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
+                            tv_tmp.tv_sec = ntohl(tmp_h);
+                            memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
+                            tv_tmp.tv_usec = ntohl(tmp_h);
+                            if (timercmp(&tv_tmp, &shm_conn_info->l_loss_recv[idx].timestamp, >)) {
+                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
+                                shm_conn_info->l_loss_recv[idx].psl = ntohl(tmp_h);
+                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
+                                shm_conn_info->l_loss_recv[idx].pbl = ntohl(tmp_h);
+                            }
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
                             PCS_aux++;
                             uint32_t tmp32_n;

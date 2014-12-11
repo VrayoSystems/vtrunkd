@@ -279,6 +279,8 @@ struct vtun_host {
 #define FRAME_TIME_LAG 5 // time lag from favorite CONN - Issue #11
 #define FRAME_DEAD_CHANNEL 6
 #define FRAME_CHANNEL_INFO 7
+#define FRAME_LOSS_INFO 8
+#define FRAME_L_LOSS_INFO 9
 
 #define HAVE_MSGHDR_MSG_CONTROL
 
@@ -561,6 +563,16 @@ struct phisical_status { // A.K.A. "info"
     int fast_pcs_old;
     int pcs_sent_old;
     struct timeval fast_pcs_ts;
+    struct timeval last_sent_FLI;
+    int last_sent_FLI_idx;
+
+};
+
+#define LOSS_ARRAY 10
+struct timed_loss {
+    struct timeval timestamp;
+    int pbl;
+    int psl;
 };
 
 /** @struct conn_info
@@ -572,7 +584,6 @@ struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t tun_device_sem;
-
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;
@@ -595,6 +606,7 @@ struct conn_info {
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
+
     //int broken_cnt;
     long int lock_time;
     long int alive;
@@ -622,6 +634,13 @@ struct conn_info {
     int forced_rtt_recv; //in ms
     int idle;
     struct timeval drop_time; // time that we DROPPED by fact!
+    struct timed_loss loss[LOSS_ARRAY]; // sync by write_buf_sem
+    struct timed_loss loss_recv[LOSS_ARRAY]; // sync by recv_loss_sem
+    struct timed_loss l_loss[LOSS_ARRAY]; // sync by write_buf_sem
+    struct timed_loss l_loss_recv[LOSS_ARRAY]; // sync by recv_loss_sem
+    sem_t recv_loss_sem;
+    int loss_idx; // sync by write_buf_sem
+    int l_loss_idx; // sync by write_buf_sem
     struct {
 #define EFF_LEN_BUFF 15
         int warming_up;
