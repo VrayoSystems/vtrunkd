@@ -32,6 +32,8 @@
 #include <fcntl.h>
 #include <syslog.h>
 #include <sys/mman.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
@@ -244,7 +246,13 @@ int main(int argc, char *argv[], char *env[])
      if( daemon ){
 	if( dofork && fork() )
 	   exit(0);
+        struct rlimit core_limit;
+        core_limit.rlim_cur = RLIM_INFINITY;
+        core_limit.rlim_max = RLIM_INFINITY;
 
+        if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
+            vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+        }
         /* Direct stdin,stdout,stderr to '/dev/null' */
         fd = open("/dev/null", O_RDWR);
 	close(0); dup(fd);

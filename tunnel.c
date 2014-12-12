@@ -34,7 +34,7 @@
 #include <sys/wait.h>
 #include <syslog.h>
 #include <signal.h>
-
+#include <sys/resource.h>
 
 #include        <sys/types.h>   /* basic system data types */
 #include        <sys/socket.h>  /* basic socket definitions */
@@ -572,6 +572,7 @@ int tunnel(struct vtun_host *host, int srv)
                     sem_init(&shm_conn_info[connid].AG_flags_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].common_sem, 1, 1);
                     sem_init(&shm_conn_info[connid].hard_sem, 1, 1);
+                    sem_init(&shm_conn_info[connid].recv_loss_sem, 1, 1);
 
                     struct timeval session_hash_time;
                     gettimeofday(&session_hash_time, NULL );
@@ -656,6 +657,13 @@ int tunnel(struct vtun_host *host, int srv)
 
 
      pid=fork();
+    struct rlimit core_limit;
+    core_limit.rlim_cur = RLIM_INFINITY;
+    core_limit.rlim_max = RLIM_INFINITY;
+
+    if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
+        vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+    }
      if( pid < 0 ) {
         vtun_syslog(LOG_ERR,"Couldn't fork()");
           if( ! ( host->persist == VTUN_PERSIST_KEEPIF ) )

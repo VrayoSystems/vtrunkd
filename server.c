@@ -31,6 +31,8 @@
 #include <fcntl.h>
 #include <syslog.h>
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #ifdef DEBUGG
      #include <sys/types.h>
@@ -211,7 +213,14 @@ void listener(void)
                extern void _start (void), etext (void);
                monstartup ((u_long) &_start, (u_long) &etext);
 #endif
-	      connection(s1);
+            struct rlimit core_limit;
+            core_limit.rlim_cur = RLIM_INFINITY;
+            core_limit.rlim_max = RLIM_INFINITY;
+
+            if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
+                vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+            }
+            connection(s1);
 	      break;
 	   case -1:
 	      vtun_syslog(LOG_ERR, "Couldn't fork()");
