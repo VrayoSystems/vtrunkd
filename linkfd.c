@@ -3400,6 +3400,31 @@ int lfd_linker(void)
                 }
             } else
                 break;
+        for (;;)
+            if (info.last_sent_FLLI_idx != shm_conn_info->l_loss_idx) {
+                info.last_sent_FLLI_idx++;
+                if (info.last_sent_FLLI_idx == LOSS_ARRAY) {
+                    info.last_sent_FLLI_idx = 0;
+                }
+                uint32_t tmp_h = htonl(info.last_sent_FLLI_idx);
+                memcpy(buf, &tmp_h, sizeof(uint32_t));
+                tmp_h = htons(FRAME_L_LOSS_INFO);
+                memcpy(buf + sizeof(uint32_t), &tmp_h, sizeof(uint16_t));
+                tmp_h = htonl(shm_conn_info->l_loss[info.last_sent_FLLI_idx].timestamp.tv_sec);
+                memcpy(buf + sizeof(uint16_t) + sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->l_loss[info.last_sent_FLLI_idx].timestamp.tv_usec);
+                memcpy(buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->l_loss[info.last_sent_FLLI_idx].psl);
+                memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->l_loss[info.last_sent_FLLI_idx].pbl);
+                memcpy(buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                if (proto_write(service_channel, buf, ((5*sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                    vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                    close(prio_s);
+                    return 0;
+                }
+            } else
+                break;
         sem_post(&shm_conn_info->write_buf_sem);
 
         // IDLE EXIT >>>
@@ -4360,10 +4385,17 @@ int lfd_linker(void)
                     vtun_syslog(LOG_INFO, "sedning loss %hd lrs %d, llrs %d", need_send_loss_FCI_flag, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv);
 
                     tmp16_n = htons(need_send_loss_FCI_flag); // amt of pkts lost till this moment
-                    need_send_loss_FCI_flag = 0;
-                    
+
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
+                    shm_conn_info->l_loss_idx++;
+                    if (shm_conn_info->l_loss_idx == LOSS_ARRAY) {
+                        shm_conn_info->l_loss_idx = 0;
+                    }
+                    shm_conn_info->l_loss[shm_conn_info->l_loss_idx].timestamp = info.current_time;
+                    shm_conn_info->l_loss[shm_conn_info->l_loss_idx].psl = need_send_loss_FCI_flag;
+                    shm_conn_info->l_loss[shm_conn_info->l_loss_idx].pbl = shm_conn_info->stats[info.process_num].l_pbl;
+                    need_send_loss_FCI_flag = 0;
                     if(lrs) shm_conn_info->write_buf[i].last_received_seq[info.process_num] = lrs; // TODO: this seems unessessary
                     shm_conn_info->write_buf[i].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[i].last_received_seq[info.process_num] - 1;
                     // inform that we lost packet
@@ -5138,7 +5170,7 @@ if(drop_packet_flag) {
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
-                        } else if (flag_var == FRAME_LOSS_INFO) {
+                        } else if ((flag_var == FRAME_LOSS_INFO) || (flag_var == FRAME_L_LOSS_INFO)) {
                             uint32_t tmp_h;
                             struct timeval tv_tmp;
                             start_json(lossLog, &lossLog_cur);
@@ -5152,26 +5184,18 @@ if(drop_packet_flag) {
                             add_json(lossLog, &lossLog_cur, "tsec", "%d", tv_tmp.tv_sec);
                             add_json(lossLog, &lossLog_cur, "tusec", "%d", tv_tmp.tv_usec);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
-                            add_json(lossLog, &lossLog_cur, "psl", "%d",  ntohl(tmp_h));
+                            if (flag_var == FRAME_LOSS_INFO)
+                                add_json(lossLog, &lossLog_cur, "psl", "%d", ntohl(tmp_h));
+                            else
+                                add_json(lossLog, &lossLog_cur, "l_psl", "%d", ntohl(tmp_h));
+
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
-                            add_json(lossLog, &lossLog_cur, "pbl", "%d",  ntohl(tmp_h));
+                            if (flag_var == FRAME_LOSS_INFO)
+                                add_json(lossLog, &lossLog_cur, "pbl", "%d", ntohl(tmp_h));
+                            else
+                                add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
                             print_json_arr(lossLog, &lossLog_cur);
                             continue;
-                        } else if (flag_var == FRAME_L_LOSS_INFO) {
-                            uint32_t tmp_h;
-                            struct timeval tv_tmp;
-                            memcpy(&tmp_h, buf, sizeof(uint32_t));
-                            int idx = ntohl(tmp_h);
-                            memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
-                            tv_tmp.tv_sec = ntohl(tmp_h);
-                            memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
-                            tv_tmp.tv_usec = ntohl(tmp_h);
-                            if (timercmp(&tv_tmp, &shm_conn_info->l_loss_recv[idx].timestamp, >)) {
-                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
-                                shm_conn_info->l_loss_recv[idx].psl = ntohl(tmp_h);
-                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
-                                shm_conn_info->l_loss_recv[idx].pbl = ntohl(tmp_h);
-                            }
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
                             PCS_aux++;
                             uint32_t tmp32_n;
