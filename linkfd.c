@@ -1835,7 +1835,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     shm_conn_info->loss[shm_conn_info->loss_idx].pbl = info.write_sequential;
                     shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
                 }
-            
+            }
             // mean latency experiment
             int lat = tv2ms(&tv_tmp)*1000 - shm_conn_info->forced_rtt;
             info.mean_latency_us += (lat - info.mean_latency_us)/50;
@@ -3369,30 +3369,30 @@ int lfd_linker(void)
         errno = 0;
         super++;
         sem_wait(&shm_conn_info->write_buf_sem);
-            for (;;)
-                if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
-                    info.last_sent_FLI_idx++;
-                    if (info.last_sent_FLI_idx == LOSS_ARRAY) {
-                        info.last_sent_FLI_idx = 0;
-                    }
-                    uint32_t tmp_h = htonl(info.last_sent_FLI_idx);
-                    memcpy(buf, &tmp_h, sizeof(uint32_t));
-      //             memcpy(buf + sizeof(uint32_t), &htons(FRAME_LOSS_INFO), sizeof(uint16_t));
-                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_sec);
-                    memcpy(buf + sizeof(uint16_t) + sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
-                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_usec);
-                    memcpy(buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
-                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].psl);
-                    memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
-                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
-                    memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
-                    if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
-                        close(prio_s);
-                        return 0;
-                    }
-                } else
-                    break;
+        for (;;)
+            if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
+                info.last_sent_FLI_idx++;
+                if (info.last_sent_FLI_idx == LOSS_ARRAY) {
+                    info.last_sent_FLI_idx = 0;
+                }
+                uint32_t tmp_h = htonl(info.last_sent_FLI_idx);
+                memcpy(buf, &tmp_h, sizeof(uint32_t));
+                //             memcpy(buf + sizeof(uint32_t), &htons(FRAME_LOSS_INFO), sizeof(uint16_t));
+                tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_sec);
+                memcpy(buf + sizeof(uint16_t) + sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_usec);
+                memcpy(buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].psl);
+                memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
+                memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
+                if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                    vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                    close(prio_s);
+                    return 0;
+                }
+            } else
+                break;
         sem_post(&shm_conn_info->write_buf_sem);
 
         // IDLE EXIT >>>
