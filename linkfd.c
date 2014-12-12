@@ -5269,8 +5269,7 @@ if(drop_packet_flag) {
                             tv_tmp.tv_sec = ntohl(tmp_h);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             tv_tmp.tv_usec = ntohl(tmp_h);
-                            add_json(lossLog, &lossLog_cur, "tsec", "%d", tv_tmp.tv_sec);
-                            add_json(lossLog, &lossLog_cur, "tusec", "%d", tv_tmp.tv_usec);
+                            add_json(lossLog, &lossLog_cur, "ts", "%d", tv2ms(&tv_tmp));
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
                             if (flag_var == FRAME_LOSS_INFO)
                                 add_json(lossLog, &lossLog_cur, "psl", "%d", ntohl(tmp_h));
@@ -5282,7 +5281,7 @@ if(drop_packet_flag) {
                                 add_json(lossLog, &lossLog_cur, "pbl", "%d", ntohl(tmp_h));
                             else
                                 add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
-                            print_json_arr(lossLog, &lossLog_cur);
+                            print_json(lossLog, &lossLog_cur);
                             continue;
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
                             PCS_aux++;
