@@ -3369,24 +3369,30 @@ int lfd_linker(void)
         errno = 0;
         super++;
         sem_wait(&shm_conn_info->write_buf_sem);
-        if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
-            uint32_t tmp_h;
-            struct timeval tv_tmp;
-            start_json(lossLog, &lossLog_cur);
-            memcpy(&tmp_h, buf, sizeof(uint32_t));
-            int idx = ntohl(tmp_h);
-            memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
-            tv_tmp.tv_sec = ntohl(tmp_h);
-            memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
-            tv_tmp.tv_usec = ntohl(tmp_h);
-            add_json(lossLog, &lossLog_cur, "tsec", "%d", tv_tmp.tv_sec);
-            add_json(lossLog, &lossLog_cur, "tusec", "%d", tv_tmp.tv_usec);
-            memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
-            add_json(lossLog, &lossLog_cur, "psl", "%d",  ntohl(tmp_h));
-            memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
-            add_json(lossLog, &lossLog_cur, "pbl", "%d",  ntohl(tmp_h));
-            print_json_arr(lossLog, &lossLog_cur);
-        }
+            for (;;)
+                if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
+                    info.last_sent_FLI_idx++;
+                    if (info.last_sent_FLI_idx == LOSS_ARRAY) {
+                        info.last_sent_FLI_idx = 0;
+                    }
+                    uint32_t tmp_h = htonl(info.last_sent_FLI_idx);
+                    memcpy(buf, &tmp_h, sizeof(uint32_t));
+      //             memcpy(buf + sizeof(uint32_t), &htons(FRAME_LOSS_INFO), sizeof(uint16_t));
+                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_sec);
+                    memcpy(buf + sizeof(uint16_t) + sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_usec);
+                    memcpy(buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].psl);
+                    memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                    tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
+                    memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
+                    if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        close(prio_s);
+                        return 0;
+                    }
+                } else
+                    break;
         sem_post(&shm_conn_info->write_buf_sem);
 
         // IDLE EXIT >>>
