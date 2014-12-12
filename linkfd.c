@@ -1828,18 +1828,13 @@ int write_buf_check_n_flush(int logical_channel) {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", tmp, js_buf_fl);
                 }
                 if (loss_flag) {
-                    shm_conn_info->loss[shm_conn_info->loss_idx].pbl = info.write_sequential;
-                    shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
-                    struct {
-                        struct timeval timestamp;
-                        int pbl;
-                        int psl;
-                    } loss[LOSS_ARRAY]; // sync by write_buf_sem
                     shm_conn_info->loss_idx++;
                     if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                         shm_conn_info->loss_idx = 0;
                     }
-            }
+                    shm_conn_info->loss[shm_conn_info->loss_idx].pbl = info.write_sequential;
+                    shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
+                }
             
             // mean latency experiment
             int lat = tv2ms(&tv_tmp)*1000 - shm_conn_info->forced_rtt;
