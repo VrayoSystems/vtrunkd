@@ -5281,6 +5281,7 @@ if(drop_packet_flag) {
                                 add_json(lossLog, &lossLog_cur, "pbl", "%d", ntohl(tmp_h));
                             else
                                 add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
+                            add_json(lossLog, &lossLog_cur, "name", "\"%s\"", lfd_host->host);
                             print_json(lossLog, &lossLog_cur);
                             continue;
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
