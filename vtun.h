@@ -568,6 +568,7 @@ struct phisical_status { // A.K.A. "info"
     struct timeval last_sent_FLI;
     int last_sent_FLI_idx;
     int last_sent_FLLI_idx;
+    int tpps_old;
 };
 
 #define LOSS_ARRAY 10

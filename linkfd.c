@@ -4208,6 +4208,8 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->AG_flags_sem));
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
+            int tpps=(shm_conn_info->seq_counter[1] - info.tpps_old)*2;
+            info.tpps_old=shm_conn_info->seq_counter[1];
             
 #if !defined(DEBUGG) && defined(JSON)
             start_json(js_buf, &js_cur);
@@ -4245,6 +4247,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
+            add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
