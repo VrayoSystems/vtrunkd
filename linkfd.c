@@ -3932,7 +3932,7 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
-                           || ( !shm_conn_info->stats[info.process_num].brl_ag_enabled )
+                           //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
