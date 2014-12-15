@@ -83,7 +83,6 @@
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
 #include "timer.h"
-#include "packet_code.h"
 
 #ifdef TESTING
 #include "testing.h"
