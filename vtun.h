@@ -572,6 +572,7 @@ struct phisical_status { // A.K.A. "info"
 #define LOSS_ARRAY 80
 struct timed_loss {
     struct timeval timestamp;
+    uint16_t name;
     int pbl;
     int psl;
 };
