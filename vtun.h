@@ -571,7 +571,7 @@ struct phisical_status { // A.K.A. "info"
     int tpps_old;
 };
 
-#define LOSS_ARRAY 10
+#define LOSS_ARRAY 80
 struct timed_loss {
     struct timeval timestamp;
     int pbl;
