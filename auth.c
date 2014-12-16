@@ -308,7 +308,7 @@ struct vtun_host * auth_server(int fd, int *reason)
 
         set_title("authentication");
 
-    print_p(fd, "VTRUNKD server ver %s\n", VTUN_VER);
+	print_p(fd,"VTUN server ver %s\n",VTUN_VER);
 
 	stage = ST_HOST;
     *reason = D_NOREAD;
@@ -394,7 +394,7 @@ int auth_client(int fd, struct vtun_host *host, int * reason)
 	   buf[sizeof(buf)-1]='\0';
 	   switch( stage ){
 		case ST_INIT:
-            if (!strncmp(buf, "VTRUNKD", 7)) {
+	    	   if( !strncmp(buf,"VTUN",4) ){
 		      stage = ST_HOST;
 		      print_p(fd,"HOST: %s\n",host->host);
 		      continue;
