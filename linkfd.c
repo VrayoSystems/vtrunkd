@@ -5297,7 +5297,7 @@ if(drop_packet_flag) {
                                 uint16_t tmp = ntohs(tmp_h);
                                 char char_tmp[3] = { 0 };
                                 memcpy(char_tmp, &tmp, sizeof(uint16_t));
-                                add_json(lossLog, &lossLog_cur, "name", "%s", char_tmp);
+                                add_json(lossLog, &lossLog_cur, "name", "\"%s\"", char_tmp);
                             }
                             print_json(lossLog, &lossLog_cur);
                             continue;
