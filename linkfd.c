@@ -468,7 +468,7 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
 }
 
 int update_prev_flushed(int logical_channel, int fprev) {
-    if(info.prev_flushed) {
+    if(shm_conn_info->prev_flushed) {
         info.flush_sequential += 
             shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
     } else {
@@ -476,7 +476,7 @@ int update_prev_flushed(int logical_channel, int fprev) {
         info.flush_sequential = 
             shm_conn_info->frames_buf[fprev].seq_num - (shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
     }
-    info.prev_flushed = 1;
+    shm_conn_info->prev_flushed = 1;
 }
 
 // return who is lagging. 
@@ -1820,14 +1820,14 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d", info.flush_sequential,
-                            info.write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len);
+                            shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len);
                     loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO,
                             "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s",
-                            info.flush_sequential, info.write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
+                            info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), js_buf_fl);
                     loss_flag = 1;
@@ -1836,7 +1836,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
-                            info.flush_sequential, info.write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
+                            info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), js_buf_fl);
 
@@ -1845,7 +1845,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
-                            info.flush_sequential, info.write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
+                            info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), js_buf_fl);
                     loss_flag = 1;
@@ -1880,7 +1880,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->loss_idx = 0;
                     }
                     gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
-                    shm_conn_info->loss[shm_conn_info->loss_idx].pbl = info.write_sequential;
+                    shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
                     shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
                 }
             }
@@ -1896,13 +1896,13 @@ int write_buf_check_n_flush(int logical_channel) {
                 info.max_latency_us = lat;
             }
             
-            if(info.prev_flushed) {
+            if(shm_conn_info->prev_flushed) {
                 // TODO: write avg stats here?
-                info.write_sequential = 1;
+                shm_conn_info->write_sequential = 1;
             } else {
-                info.write_sequential++;
+                shm_conn_info->write_sequential++;
             }
-            info.prev_flushed = 0;
+            shm_conn_info->prev_flushed = 0;
             shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
 
             struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];

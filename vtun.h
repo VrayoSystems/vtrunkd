@@ -538,9 +538,7 @@ struct phisical_status { // A.K.A. "info"
     int eff_len;
     int send_q_limit_threshold;
     int exact_rtt;
-    int prev_flushed; // PBL/PSL flag
     int flush_sequential; // PSL
-    int write_sequential; // PBL
     int ploss_event_flag; /** flag to detect PLOSS at tflush */
     int mean_latency_us;
     int max_latency_us;
@@ -593,6 +591,8 @@ struct conn_info {
     struct frame_seq fast_resend_buf[MAX_TCP_PHYSICAL_CHANNELS];
     int fast_resend_buf_idx; // how many packets in fast_resend_buf
     struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
+    int write_sequential; // PBL sync by write_buf_sem
+    int prev_flushed; // PBL/PSL flagsync by write_buf_sem
     struct frame_llist wb_free_frames; /* init all elements here */ // input (to device)
     sem_t write_buf_sem; //for write buf, seq_counter
     struct _write_buf resend_buf[MAX_TCP_LOGICAL_CHANNELS]; // output
