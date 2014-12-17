@@ -1635,7 +1635,7 @@ if(drop_packet_flag) {
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
         sem_wait(&(shm_conn_info->common_sem));
-        shm_conn_info->t_model_rtt100 += ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
+        shm_conn_info->t_model_rtt100 = ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
