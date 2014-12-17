@@ -2880,6 +2880,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
 
 int lfd_linker(void)
 {
+    int tpps=0;
     memset((void *)&ag_stat, 0, sizeof(ag_stat));
     
     #ifdef TIMEWARP
@@ -4212,7 +4213,7 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->AG_flags_sem));
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
-            int tpps=(shm_conn_info->seq_counter[1] - info.tpps_old)*2;
+            tpps=(shm_conn_info->seq_counter[1] - info.tpps_old)*2;
             info.tpps_old=shm_conn_info->seq_counter[1];
             
 #if !defined(DEBUGG) && defined(JSON)
@@ -5299,6 +5300,9 @@ if(drop_packet_flag) {
                                 memcpy(char_tmp, &tmp, sizeof(uint16_t));
                                 add_json(lossLog, &lossLog_cur, "name", "\"%s\"", char_tmp);
                             }
+                            add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
+                            add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
+                            add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
                             print_json(lossLog, &lossLog_cur);
                             continue;
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
