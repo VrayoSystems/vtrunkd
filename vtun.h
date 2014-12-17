@@ -567,6 +567,8 @@ struct phisical_status { // A.K.A. "info"
     int last_sent_FLI_idx;
     int last_sent_FLLI_idx;
     int tpps_old;
+    int32_t encap_streams_bitcnt;
+    int encap_streams;
 };
 
 #define LOSS_ARRAY 80

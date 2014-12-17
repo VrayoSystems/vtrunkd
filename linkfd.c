@@ -71,6 +71,7 @@
 
 #ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 #endif
 
 #include "udp_states.h"
@@ -1480,6 +1481,7 @@ int select_devread_send(char *buf, char *out2) {
     int chan_num;
     struct my_ip *ip;
     struct tcphdr *tcp;
+    struct udphdr *udp;
     struct timeval tv;
     int new_packet = 0;
     fd_set fdset_tun;
@@ -1622,11 +1624,16 @@ if(drop_packet_flag) {
         hash += ip->ip_p;
         if (ip->ip_p == 6) { // TCP...
             tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
-            //vtun_syslog(LOG_INFO, "TCP port s %d d %d", ntohs(tcp->source), ntohs(tcp->dest));
             hash += tcp->source;
             hash += tcp->dest;
         }
+        if (ip->ip_p == 17) { // UDP...
+            udp = (struct udphdr*) (buf + sizeof(struct my_ip));
+            hash += udp->source;
+            hash += udp->dest;
+        }
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
+        info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
         sem_wait(&(shm_conn_info->common_sem));
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
@@ -4253,6 +4260,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
             add_json(js_buf, &js_cur, "tpps", "%d", tpps);
+            add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
@@ -4598,6 +4606,9 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
+
+            info.encap_streams = NumberOfSetBits(info.encap_streams_bitcnt);
+            info.encap_streams_bitcnt= 0;
 
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
@@ -5302,6 +5313,7 @@ if(drop_packet_flag) {
                             }
                             add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
+                            add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
                             print_json(lossLog, &lossLog_cur);
                             continue;
