@@ -59,12 +59,37 @@
 #include "compat.h"
 
 char process_string[100] = { 0 };
+struct conn_info* shm_conn_info = NULL;
+int shmid = 0;
 
 static volatile sig_atomic_t server_term;
-static void sig_term(int sig)
-{
-     vtun_syslog(LOG_INFO,"Terminated");
-     server_term = VTUN_SIG_TERM;
+static void sig_term(int sig) {
+    if (shmid != 0) {
+        if (shmctl(shmid, IPC_RMID, NULL ) == -1) {
+            vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
+        } else {
+            vtun_syslog(LOG_INFO, "shm destroy mark");
+        }
+    } else {
+        if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
+            vtun_syslog(LOG_ERR, "SHM buffer for key %d not found", vtun.shm_key);
+        } else {
+            if (shmctl(shmid, IPC_RMID, NULL ) == -1) {
+                vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
+            }
+        }
+    }
+    if (shm_conn_info != NULL ) {
+
+        if (shmdt(shm_conn_info) == -1) {
+            vtun_syslog(LOG_INFO, "Detach shm fail; reason %s (%d)", strerror(errno), errno);
+        } else {
+            vtun_syslog(LOG_INFO, "shm detached");
+        }
+
+    }
+    vtun_syslog(LOG_INFO, "Terminated");
+    server_term = VTUN_SIG_TERM;
 }
 
 void connection(int sock)
@@ -172,9 +197,7 @@ void listener(void)
      set_title("waiting for connections on port %d", vtun.bind_addr.port);
      
      // now init everything...
-     int shmid;
      key_t key;
-     struct conn_info* shm_conn_info;
      /*
      * We'll name our shared memory segment
      * defaul is 567888
