@@ -133,7 +133,7 @@ struct my_ip {
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define CUBIC_T_DIV 50
 #define CUBIC_T_MAX 200
-
+#define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
@@ -1635,6 +1635,7 @@ if(drop_packet_flag) {
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
         sem_wait(&(shm_conn_info->common_sem));
+        shm_conn_info->t_model_rtt100 += ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
         sem_post(&(shm_conn_info->common_sem));
@@ -4248,6 +4249,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
+            add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
             add_json(js_buf, &js_cur, "buf_len", "%d", (int)my_miss_packets_max);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)miss_packets_max);
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
@@ -5311,7 +5313,7 @@ if(drop_packet_flag) {
                                 memcpy(char_tmp, &tmp, sizeof(uint16_t));
                                 add_json(lossLog, &lossLog_cur, "name", "\"%s\"", char_tmp);
                             }
-                            add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
+                            add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->t_model_rtt100/100); 
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
                             add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
