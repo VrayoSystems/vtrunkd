@@ -5317,6 +5317,14 @@ if(drop_packet_flag) {
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
                             add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
+                            int ch=0;
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if (chan_mask & (1 << i)){
+                                        ch++;
+                                }
+                            }
+                            add_json(lossLog, &lossLog_cur, "pamt", "%d", ch);
+
                             print_json(lossLog, &lossLog_cur);
                             continue;
                         } else if (flag_var == FRAME_CHANNEL_INFO) {
