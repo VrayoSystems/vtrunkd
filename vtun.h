@@ -656,7 +656,7 @@ struct conn_info {
         int sum;
     } eff_len; /**< Session hash for remote machine sync by @see common_sem*/
     int t_model_rtt100; // RTT multiplied by 100, in ms, for tcp model, calculated as toata avg rtt
-    char streams[32];
+    unsigned char streams[32];
     int single_stream;
 };
 
