@@ -1634,6 +1634,7 @@ if(drop_packet_flag) {
         }
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
+        if(shm_conn_info->streams[hash%31] < 255) shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
         sem_wait(&(shm_conn_info->common_sem));
         shm_conn_info->t_model_rtt100 = ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
@@ -4611,6 +4612,20 @@ int lfd_linker(void)
 
             info.encap_streams = NumberOfSetBits(info.encap_streams_bitcnt);
             info.encap_streams_bitcnt= 0;
+            int stsum = 0;
+            int stmax=0;
+            for(int i=0;i<32;i++) {//   WARN unsync but seems dont care
+                stsum+=shm_conn_info->streams[i];
+                if(stmax<shm_conn_info->streams[i]) {
+                    stmax = shm_conn_info->streams[i];
+                }
+                shm_conn_info->streams[i]=0;
+            }
+            if((stsum-stmax) > (stmax/15)) {
+                shm_conn_info->single_stream=0;
+            } else {
+                shm_conn_info->single_stream=1;
+            }
 
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
@@ -5316,6 +5331,7 @@ if(drop_packet_flag) {
                             add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->t_model_rtt100/100); 
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
                             add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
+                            add_json(lossLog, &lossLog_cur, "i_sstrm", "%d", shm_conn_info->single_stream);
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
                             int ch=0;
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
