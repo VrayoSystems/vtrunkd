@@ -4621,7 +4621,7 @@ int lfd_linker(void)
                 }
                 shm_conn_info->streams[i]=0;
             }
-            if((stsum-stmax) > (stmax/15)) {
+            if((stsum-stmax) > (stmax/20)) {
                 shm_conn_info->single_stream=0;
             } else {
                 shm_conn_info->single_stream=1;
