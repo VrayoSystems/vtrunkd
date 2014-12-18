@@ -4229,6 +4229,7 @@ int lfd_linker(void)
             start_json(js_buf, &js_cur);
             add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
             add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
+            add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl_recv);
             add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
             add_json(js_buf, &js_cur, "super", "%d", super);
             super = 0;
@@ -5322,11 +5323,24 @@ if(drop_packet_flag) {
                                 add_json(lossLog, &lossLog_cur, "name", "\"%s\"", lfd_host->host);
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
-                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t));
-                                uint16_t tmp = ntohs(tmp_h);
+                                uint16_t tmp16_n;
+                                memcpy(&tmp16_n, buf + sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t));
+                                uint16_t tmp = ntohs(tmp16_n);
                                 char char_tmp[3] = { 0 };
                                 memcpy(char_tmp, &tmp, sizeof(uint16_t));
                                 add_json(lossLog, &lossLog_cur, "name", "\"%s\"", char_tmp);
+                                sem_wait(&(shm_conn_info->stats_sem));
+                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                        if (strncmp(shm_conn_info->stats[i].name + strlen(shm_conn_info->stats[i].name) - 2, char_tmp, 2) == 0) {
+                                            shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
+                                            add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
+                                            break;
+                                        }
+
+                                    }
+                                }
+                                sem_post(&(shm_conn_info->stats_sem));
                             }
                             add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->t_model_rtt100/100); 
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
