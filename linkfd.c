@@ -4176,7 +4176,7 @@ int lfd_linker(void)
             
             sem_wait(&(shm_conn_info->stats_sem));
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp;
-            set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
+            //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
 
