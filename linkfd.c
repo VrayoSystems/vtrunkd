@@ -2237,6 +2237,31 @@ int set_max_chan(uint32_t chan_mask) {
     shm_conn_info->max_chan = max_chan;
 }
 
+int check_plp_ok(int pnum, int32_t chan_mask) {
+    #define PBL_THRESH 2500 // PBL after which chan is ok to use for normal OP
+    int chali = 0;
+    int pmax =0;
+    int imax=-1;
+    // 1. set chan thresh
+    // 2. check all other chans for thresh. if no chans are OK -> use chan with highest PBL
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+            if(shm_conn_info->stats[i].l_pbl > PBL_THRESH) {
+                chali++;
+            }
+            if(pmax < shm_conn_info->stats[i].l_pbl) {
+                pmax = shm_conn_info->stats[i].l_pbl;
+                imax=i;
+            }
+        }
+    }
+    if(chali) {
+        return (shm_conn_info->stats[pnum].l_pbl > PBL_THRESH);
+    } else {
+       return (pnum == imax);
+    }
+}
+
 int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is only used to change head!
     int fixed = 0;
     int Ch = 0;
@@ -2286,41 +2311,10 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         shm_conn_info->last_switch_time = info.current_time; // nothing bad in this..
         shm_conn_info->last_switch_time.tv_sec += immune_sec;
     } else {
-        // this code works only if not idling!
-        // This is ALL-mode algorithm, almost useless
-        if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && (shm_conn_info->stats[max_chan].ACK_speed/100) > 0) {
-                int min_Ch = 1000000;
-                int min_Ch_chan = 1000000;
-                int min_Cs = 1000000;
-                int min_Cs_chan = 1000000;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((chan_mask & (1 << i))
-                        && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                        if(shm_conn_info->stats[i].ACK_speed/100 == 0) continue;
-                        Ch = 100*shm_conn_info->stats[i].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                        Cs = shm_conn_info->stats[max_chan].ACK_speed/(shm_conn_info->stats[i].ACK_speed/100);
-                        if(Ch < min_Ch) {
-                            min_Ch = Ch;
-                            min_Ch_chan = i;
-                        }
-                        if(Cs < min_Cs) {
-                            min_Cs = Cs;
-                            min_Cs_chan = i;
-                        }
-                    }
-                }
-                if(min_Cs < CS_THRESH && min_Ch < CH_THRESH && min_Cs_chan == min_Ch_chan) {
-                    vtun_syslog(LOG_INFO, "CS/CH: Need changing HEAD to %d with Cs %d Ch %d", min_Ch_chan, min_Cs, min_Ch);
-                    //shm_conn_info->max_chan = min_Ch_chan;
-                    max_chan_CS = min_Ch_chan; // is result here!
-                }
-
-        }
-
         // ---> ACS == and rtt
         min_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
+            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) && check_plp_ok(i, chan_mask) ) {
                 if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 15% corridor to consider speeds the same
                     // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
                     // now choose best rtt2 from all chans that have same speed!
@@ -2340,7 +2334,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         // TODO: what to do if these two methods disagree? Is it possible?
         
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) ) {
+            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) && check_plp_ok(i, chan_mask)) {
                 if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
                          && ( shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed )) { // 15% corridor to consider speeds the same
                     max_chan_H = i;

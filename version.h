@@ -1,1 +1,1 @@
-#define VERSION "v0.1411-23-g43dd-dirty-1411"
+#define VERSION "v0.1411-25-g6f66-dirty"
