@@ -4354,6 +4354,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
             add_json(js_buf, &js_cur, "lalsn[1]", "%lu", info.channel[1].packet_seq_num_acked);
+            add_json(js_buf, &js_cur, "ver", "\"%s\"", VERSION);
             
             print_json(js_buf, &js_cur);
 #endif
