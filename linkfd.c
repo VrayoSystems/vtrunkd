@@ -3430,6 +3430,7 @@ int lfd_linker(void)
     info.fast_pcs_ts = info.current_time;
     int pump_adj = 0;
     int temp_sql_copy =0;
+    int temp_acs_copy =0;
 
     struct timeval wb_1ms_time = { 0, 1000 };
     struct timeval wb_1ms_timer = info.current_time;
@@ -3859,6 +3860,7 @@ int lfd_linker(void)
                                              / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
             }
             temp_sql_copy = info.send_q_limit; 
+            temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
             rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
                                         * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
@@ -4260,9 +4262,10 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
-            add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
+            add_json(js_buf, &js_cur, "ACS_ll", "%d", max_ACS2);
+            //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
-            add_json(js_buf, &js_cur, "ACS2", "%d", max_ACS2);
+            add_json(js_buf, &js_cur, "ACS2", "%d", temp_acs_copy );
             add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
             add_json(js_buf, &js_cur, "PCS_fast", "%u", (unsigned int)info.channel[1].packet_download); // TMP REMOVE
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
