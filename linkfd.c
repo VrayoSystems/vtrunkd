@@ -3895,6 +3895,9 @@ int lfd_linker(void)
             t = t / CUBIC_T_DIV;
             t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
             set_W_unsync(t);
+            
+            pump_adj = (int) d_pump_adj;
+            rtt_shift = (int) d_rtt_shift;
         }
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
         
