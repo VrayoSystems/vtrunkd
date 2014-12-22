@@ -3883,6 +3883,7 @@ int lfd_linker(void)
             } else if (d_rsr > RSR_TOP) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP");
             }
+            if(d_rsr < SEND_Q_LIMIT_MINIMAL) d_rsr = SEND_Q_LIMIT_MINIMAL;
             info.rsr = d_rsr;
             
             //if(info.send_q_limit < info.send_q_limit_threshold) {
