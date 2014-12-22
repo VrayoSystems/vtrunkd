@@ -3839,89 +3839,65 @@ int lfd_linker(void)
             info.rsr = info.send_q_limit_cubic;
             info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
         } else {
-            if (shm_conn_info->stats[max_chan].ACK_speed < 1000) {
-                shm_conn_info->stats[max_chan].ACK_speed = 1000;
-            }
-            
-            if (shm_conn_info->stats[info.process_num].ACK_speed < 1000) {
-                shm_conn_info->stats[info.process_num].ACK_speed = 1000;
-            }
-            
-            
-            //info.send_q_limit = (RSR_TOP * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
             rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
-            // WARNING: TODO: speeds over 10MB/s will still cause overflow here!
-            if(rsr_top > 500000) {
-                info.send_q_limit = ( (rsr_top / 1000) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-                                             / (shm_conn_info->stats[        max_chan].ACK_speed / 1000) * 1000;
-            } else {
-                info.send_q_limit = (rsr_top * (shm_conn_info->stats[info.process_num].ACK_speed / 1000))
-                                             / (shm_conn_info->stats[        max_chan].ACK_speed / 1000);
-            }
+            
+            // copy all vars used to their 'double' reprs
+            double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed;
+            double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed;
+            double d_rsr_top = shm_conn_info->stats[max_chan].rsr;
+            double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt;
+            d_rtt_h = d_rtt_h / 1000.0; // ms
+            double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
+            d_rtt = d_rtt / 1000.0; // ms
+            double d_frtt = shm_conn_info->forced_rtt;
+            double d_rsr = info.rsr;
+            
+            
+            double d_sql = d_rsr_top * ( d_ACS / d_ACS_h );
+            info.send_q_limit = (int) d_sql; // TODO IS IT NEEDED REMOVE
+            
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
-            rtt_shift = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) // dt in ms..
-                                        * (shm_conn_info->stats[max_chan].ACK_speed / 1000); // convert spd from mp/s to mp/ms
+            double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h;
+            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - (d_rtt - d_rtt_h));
+            if(d_pump_adj < 0) d_pump_adj = 0;
             
-            pump_adj=( (MAX_LATENCY_DROP_USEC/1000 + shm_conn_info->forced_rtt) - (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) ) * (shm_conn_info->stats[info.process_num].ACK_speed / 1000);
-            if (pump_adj < 0) {
-                pump_adj = 0;
-            }
-
-            if(rtt_shift < info.send_q_limit) {
-                info.send_q_limit -= rtt_shift;
+            if(d_rtt_shift < d_sql) {
+                d_sql -= d_rtt_shift;
             } else {
-                info.send_q_limit = 0;
+                d_sql = SEND_Q_LIMIT_MINIMAL;
             }
-
-            info.send_q_limit += pump_adj;
-
-            if (info.send_q_limit < SEND_Q_LIMIT_MINIMAL) {
-                info.send_q_limit = SEND_Q_LIMIT_MINIMAL-1;
-            }
-            if (info.send_q_limit > RSR_TOP) {
-                info.send_q_limit = RSR_TOP;
-            }
-
-            if(info.send_q_limit < info.send_q_limit_threshold) {
-                info.send_q_limit = info.send_q_limit_threshold - 1;
-            }
-               
+            
+            d_sql += d_pump_adj;
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
-            if(ms_passed > RSR_SMOOTH_GRAN) {
-                if(ms_passed > RSR_SMOOTH_FULL) {
-                    ms_passed = RSR_SMOOTH_FULL;
-                }
-                int rsr_shift;
-                if( ((info.send_q_limit - info.rsr) >= (INT32_MAX/ms_passed-100)) || ( (info.send_q_limit - info.rsr) <= (-INT32_MAX/ms_passed+100) )) {
-                    rsr_shift = ((info.send_q_limit - info.rsr) > 0 ? info.send_q_limit : -info.send_q_limit );
-                } else {
-                    rsr_shift = (info.send_q_limit - info.rsr) * ms_passed / RSR_SMOOTH_FULL;
-                }
-                info.rsr += rsr_shift;
-                //vtun_syslog(LOG_INFO, "pnum %d, rsr += send_q_limit %d - info.rsr %d * ms_passed %d / 3000 ( = %d )",
-                //           info.process_num, info.send_q_limit, info.rsr, ms_passed, rsr_shift);
+            if(ms_passed > RSR_SMOOTH_GRAN) { // 10 ms intvl, 500ms full
+                d_rsr = 7.0/8.0 * d_rsr + 1.0/8.0 * d_sql;
                 info.cycle_last = info.current_time;
             }
+            if(d_rsr < 0) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0");
+            } else if (d_rsr > RSR_TOP) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP");
+            }
+            info.rsr = d_rsr;
             
-            //vtun_syslog(LOG_INFO, "rsr %"PRIu32" rtt_shift %"PRId32" info.send_q_limit %"PRIu32" rtt 0 - %d rtt my - %d speed 0 - %"PRId32" my - %"PRId32"", rsr, rtt_shift, info.send_q_limit, shm_conn_info->stats[0].rtt_phys_avg, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[0].ACK_speed, shm_conn_info->stats[info.process_num].ACK_speed);
-        }
-
-        // uint32_t tflush_counter_recv = shm_conn_info->tflush_counter_recv; // yes? it is transferred??
-        
-        if(!info.head_channel) {
+            //if(info.send_q_limit < info.send_q_limit_threshold) {
+            //    info.send_q_limit = info.send_q_limit_threshold - 1;
+            //}
+            
+            // now compute W
             timersub(&(info.current_time), &loss_time, &t_tv);
             int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
             t = t / CUBIC_T_DIV;
             t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
             set_W_unsync(t);
         }
-
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
+        
 
         int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
