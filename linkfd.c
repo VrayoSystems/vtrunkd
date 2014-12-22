@@ -4175,10 +4175,19 @@ int lfd_linker(void)
 
             // calc ACS2 and DDS detect
             int max_ACS2=0;
+            int Hchan=-1;
             for(int i=0; i<info.channel_amount; i++) {
                 info.channel[i].ACS2 = (info.channel[i].packet_seq_num_acked - info.channel[i].old_packet_seq_num_acked) * 2 * info.eff_len;
                 info.channel[i].old_packet_seq_num_acked = info.channel[i].packet_seq_num_acked;
-                if(max_ACS2 < info.channel[i].ACS2) max_ACS2 = info.channel[i].ACS2;
+                if(max_ACS2 < info.channel[i].ACS2) { 
+                    max_ACS2 = info.channel[i].ACS2;
+                    Hchan = i;
+                }
+            }
+            
+            if(max_ACS2 != info.channel[1].ACS2) {
+                vtun_syslog(LOG_ERR,"ERROR: ACS2 on chan 1 not highest!: %d, ch: %d", max_ACS2, Hchan);
+                max_ACS2 = info.channel[1].ACS2;
             }
             
             // now put max_ACS2 and PCS2 to SHM:
