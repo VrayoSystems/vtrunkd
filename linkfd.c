@@ -5425,6 +5425,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
+                            //Для чего нужен подсчет значения потерь через info.channel[chan_num].packet_loss ( возможно ложное срабатывание в дальнейшем
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
@@ -5452,10 +5453,11 @@ if(drop_packet_flag) {
                                 }
                                 t = 0;
                                 info.max_send_q = 0;
+                                //waste Cubic recalc
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 set_W_unsync(t);
                                 sem_post(&(shm_conn_info->stats_sem));
-
+                                //waste Cubic recalc end
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
