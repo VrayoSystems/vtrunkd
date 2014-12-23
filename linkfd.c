@@ -2236,7 +2236,7 @@ int set_max_chan(uint32_t chan_mask) {
     shm_conn_info->max_chan = max_chan;
 }
 
-int check_plp_ok(int pnum, int32_t chan_mask) {
+int check_plp_ok(int pnum, int32_t chan_mask) { // TODO TCP model => remove
     #define PBL_THRESH 2500 // PBL after which chan is ok to use for normal OP
     int chali = 0;
     int pmax =0;
@@ -3923,6 +3923,7 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
+                           || ( shm_conn_info->stats[info.process_num].l_pbl_recv < (shm_conn_info->stats[max_chan].l_pbl_recv / 7) ) // TODO: TCP model => remove
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
