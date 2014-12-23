@@ -3837,6 +3837,8 @@ int lfd_linker(void)
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
             info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
+            temp_sql_copy = info.send_q_limit; 
+            temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
         } else {
             rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
