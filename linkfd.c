@@ -2241,6 +2241,7 @@ int check_plp_ok(int pnum, int32_t chan_mask) { // TODO TCP model => remove
     int chali = 0;
     int pmax =0;
     int imax=-1;
+    int rtt_min = INT32_MAX;
     // 1. set chan thresh
     // 2. check all other chans for thresh. if no chans are OK -> use chan with highest PBL
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -2252,12 +2253,19 @@ int check_plp_ok(int pnum, int32_t chan_mask) { // TODO TCP model => remove
                 pmax = shm_conn_info->stats[i].l_pbl;
                 imax=i;
             }
+            if(rtt_min > shm_conn_info->stats[i].exact_rtt){
+                rtt_min = shm_conn_info->stats[i].exact_rtt;
+            }
         }
     }
-    if(chali) {
-        return (shm_conn_info->stats[pnum].l_pbl > PBL_THRESH);
+    if((shm_conn_info->stats[pnum].exact_rtt - rtt_min) > MAX_LATENCY_DROP_USEC/1000) { // TODO remove when FRTT theory will kick in
+        return 0;
     } else {
-       return (pnum == imax);
+        if(chali) {
+            return (shm_conn_info->stats[pnum].l_pbl > PBL_THRESH);
+        } else {
+           return (pnum == imax);
+        }
     }
 }
 
