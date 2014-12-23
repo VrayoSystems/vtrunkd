@@ -288,6 +288,7 @@ struct {
     int D;
     int CL;
     int DL;
+    int PL;
 } ag_stat;
 
 struct mini_path_desc
@@ -3942,6 +3943,7 @@ int lfd_linker(void)
         // logging part
         if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
+        if ( shm_conn_info->stats[info.process_num].l_pbl_recv < (shm_conn_info->stats[max_chan].l_pbl_recv / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if(channel_dead) ag_stat.D = 1;
         if(!check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
@@ -4293,6 +4295,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "D", "%d", ag_stat.D);
             add_json(js_buf, &js_cur, "CL", "%d", ag_stat.CL);
             add_json(js_buf, &js_cur, "DL", "%d", ag_stat.DL);
+            add_json(js_buf, &js_cur, "PL", "%d", ag_stat.PL);
             add_json(js_buf, &js_cur, "Xi", "%d", !shm_conn_info->stats[info.process_num].brl_ag_enabled);
             memset((void *)&ag_stat, 0, sizeof(ag_stat));
             skip=0;
