@@ -185,7 +185,7 @@ char *js_buf_fl;
 int js_cur, js_cur_fl;
 
 
-#define PUSH_TO_TOP 0
+#define PUSH_TO_TOP 5 // push Nth packet, 0 to disable
 #define SEND_Q_LOG
 
 #ifdef SEND_Q_LOG
@@ -198,7 +198,7 @@ int lossLog_cur = 0;
 
 // flags:
 uint8_t time_lag_ready;
-
+int ptt_allow_once = 0; // allow to push-to-top single packet
 int skip=0;
 int forced_rtt_reached=1;
 
@@ -1303,9 +1303,10 @@ int retransmit_send(char *out2, int n_to_send) {
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             // WARNING! disabled push-to-top policy!
-            if(PUSH_TO_TOP && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
+            if(PUSH_TO_TOP && ptt_allow_once && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
+                ptt_allow_once = 0;
             } else {
                 if(check_delivery_time(SKIP_SENDING_CLD_DIV)) { // TODO: head always passes! 
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
@@ -1412,6 +1413,9 @@ int retransmit_send(char *out2, int n_to_send) {
             return BREAK_ERROR;
         }
         info.channel[i].local_seq_num++;
+        if(PUSH_TO_TOP && (info.channel[i].local_seq_num % PUSH_TO_TOP == 0)) {
+            ptt_allow_once = 1;
+        }
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         statb.packet_sent_rmit += 1000;
@@ -4838,7 +4842,7 @@ int lfd_linker(void)
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
                     // WARNING! disabled push-to-top policy!
-                    if( !((!info.head_channel) && PUSH_TO_TOP && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                    if( !((!info.head_channel) && PUSH_TO_TOP && ptt_allow_once && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
                     } else {
                         need_retransmit = 1; 
