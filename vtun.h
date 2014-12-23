@@ -192,7 +192,7 @@ struct vtun_host {
 
    uint16_t start_port;
    uint16_t end_port;
-   int shmid;
+
    /* Persist mode */
    int  persist;
 
