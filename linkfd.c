@@ -4484,7 +4484,9 @@ int lfd_linker(void)
                     }
                     shm_conn_info->l_loss[shm_conn_info->l_loss_idx].timestamp = info.current_time;
                     shm_conn_info->l_loss[shm_conn_info->l_loss_idx].psl = need_send_loss_FCI_flag;
-                    shm_conn_info->l_loss[shm_conn_info->l_loss_idx].pbl = shm_conn_info->stats[info.process_num].l_pbl;
+                    shm_conn_info->l_loss[shm_conn_info->l_loss_idx].pbl = shm_conn_info->stats[info.process_num].pbl_lossed_cnt;
+                    shm_conn_info->stats[info.process_num].pbl_lossed = shm_conn_info->stats[info.process_num].pbl_lossed_cnt;
+                    shm_conn_info->stats[info.process_num].pbl_lossed_cnt = 0;
                     memcpy(&shm_conn_info->l_loss[shm_conn_info->l_loss_idx].name, lfd_host->host + strlen(lfd_host->host) - 2, 2);
                     need_send_loss_FCI_flag = 0;
                     if(lrs) shm_conn_info->write_buf[i].last_received_seq[info.process_num] = lrs; // TODO: this seems unessessary
@@ -5315,8 +5317,10 @@ if(drop_packet_flag) {
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
                                         if (strncmp(shm_conn_info->stats[i].name + strlen(shm_conn_info->stats[i].name) - 2, char_tmp, 2) == 0) {
-                                            shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
-                                            shm_conn_info->stats[i].l_pbl_tmp = 0;
+                                            if(shm_conn_info->stats[i].l_pbl_recv != ntohl(tmp_h)) {
+                                                shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
+                                                shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
+                                            }
                                             add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
                                             break;
                                         }
@@ -5656,6 +5660,7 @@ if(drop_packet_flag) {
                     gettimeofday(&info.current_time, NULL);
                     info.channel[chan_num].down_packets++; // accumulate number of packets
                     PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
+                    shm_conn_info->stats[info.process_num].pbl_lossed_cnt++;
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
