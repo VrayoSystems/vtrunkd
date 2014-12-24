@@ -402,6 +402,7 @@ struct conn_stats {
     int l_pbl;
     int l_pbl_recv;
     int brl_ag_enabled;
+    int l_pbl_tmp; 
 };
 /**
  * Structure for garbage statistic and information
