@@ -695,7 +695,7 @@ enable_option_checking
 enable_o3
 enable_mark
 enable_syslog
-enable_lowmem
+enable_low_mem
 enable_json
 enable_debugg
 enable_self_testing
@@ -2177,9 +2177,9 @@ else
 fi
 
 
-# Check whether --enable-lowmem was given.
-if test "${enable_lowmem+set}" = set; then :
-  enableval=$enable_lowmem; LOW_MEM=$enableval
+# Check whether --enable-low-mem was given.
+if test "${enable_low_mem+set}" = set; then :
+  enableval=$enable_low_mem; LOW_MEM=$enableval
 else
   LOW_MEM=no
 
