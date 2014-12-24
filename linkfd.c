@@ -1420,6 +1420,7 @@ int retransmit_send(char *out2, int n_to_send) {
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         statb.packet_sent_rmit += 1000;
+        shm_conn_info->stats[info.process_num].l_pbl_tmp++;
         info.channel[i].up_len += len_ret;
         statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
@@ -1755,6 +1756,7 @@ if(drop_packet_flag) {
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     statb.packet_sent_ag += 1000;
+    shm_conn_info->stats[info.process_num].l_pbl_tmp++;
     info.channel[chan_num].up_len += len_ret;
     statb.byte_sent_ag_full += len_ret;
     info.channel[chan_num].up_packets++;
@@ -5654,7 +5656,6 @@ if(drop_packet_flag) {
                     gettimeofday(&info.current_time, NULL);
                     info.channel[chan_num].down_packets++; // accumulate number of packets
                     PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
-                    shm_conn_info->stats[info.process_num].l_pbl_tmp++;
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
