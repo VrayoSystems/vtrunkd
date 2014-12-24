@@ -186,7 +186,7 @@ char *js_buf_fl;
 int js_cur, js_cur_fl;
 
 
-#define PUSH_TO_TOP 0
+#define PUSH_TO_TOP 5 // push Nth packet, 0 to disable
 #define SEND_Q_LOG
 
 #ifdef SEND_Q_LOG
@@ -199,7 +199,7 @@ int lossLog_cur = 0;
 
 // flags:
 uint8_t time_lag_ready;
-
+int ptt_allow_once = 0; // allow to push-to-top single packet
 int skip=0;
 int forced_rtt_reached=1;
 
@@ -290,6 +290,7 @@ struct {
     int D;
     int CL;
     int DL;
+    int PL;
 } ag_stat;
 
 struct mini_path_desc
@@ -1346,9 +1347,10 @@ int retransmit_send(char *out2, int n_to_send) {
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
             if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             // WARNING! disabled push-to-top policy!
-            if(PUSH_TO_TOP && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
+            if(PUSH_TO_TOP && ptt_allow_once && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
                 get_unconditional = 1;
+                ptt_allow_once = 0;
             } else {
                 if(check_delivery_time(SKIP_SENDING_CLD_DIV)) { // TODO: head always passes! 
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
@@ -1455,6 +1457,9 @@ int retransmit_send(char *out2, int n_to_send) {
             return BREAK_ERROR;
         }
         info.channel[i].local_seq_num++;
+        if(PUSH_TO_TOP && (info.channel[i].local_seq_num % PUSH_TO_TOP == 0)) {
+            ptt_allow_once = 1;
+        }
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         statb.packet_sent_rmit += 1000;
@@ -2396,11 +2401,12 @@ int set_max_chan(uint32_t chan_mask) {
     shm_conn_info->max_chan = max_chan;
 }
 
-int check_plp_ok(int pnum, int32_t chan_mask) {
+int check_plp_ok(int pnum, int32_t chan_mask) { // TODO TCP model => remove
     #define PBL_THRESH 2500 // PBL after which chan is ok to use for normal OP
     int chali = 0;
     int pmax =0;
     int imax=-1;
+    int rtt_min = INT32_MAX;
     // 1. set chan thresh
     // 2. check all other chans for thresh. if no chans are OK -> use chan with highest PBL
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -2412,12 +2418,19 @@ int check_plp_ok(int pnum, int32_t chan_mask) {
                 pmax = shm_conn_info->stats[i].l_pbl;
                 imax=i;
             }
+            if(rtt_min > shm_conn_info->stats[i].exact_rtt){
+                rtt_min = shm_conn_info->stats[i].exact_rtt;
+            }
         }
     }
-    if(chali) {
-        return (shm_conn_info->stats[pnum].l_pbl > PBL_THRESH);
+    if((shm_conn_info->stats[pnum].exact_rtt - rtt_min) > MAX_LATENCY_DROP_USEC/1000) { // TODO remove when FRTT theory will kick in
+        return 0;
     } else {
-       return (pnum == imax);
+        if(chali) {
+            return (shm_conn_info->stats[pnum].l_pbl > PBL_THRESH);
+        } else {
+           return (pnum == imax);
+        }
     }
 }
 
@@ -2651,40 +2664,15 @@ int get_slope(struct _smalldata *sd) {
     return (int) (c1 * 100.0);
 }
 
-int plp_add_pbl(int l_pbl, struct timeval *current_time) {
-    if(info.pbl_cnt >= PLP_BUF_SIZE) {
-        info.pbl_cnt = 0;
-    }
-    info.plp_buf[info.pbl_cnt].pbl = l_pbl;
-    info.plp_buf[info.pbl_cnt].ts = *current_time;
-    //info.pbl_cnt++;
-}
 
-
-int plp_avg_pbl(int l_pbl_cur) {
-    /*
-    struct timeval tv_tmp;
-    int pbl_acc = 0;
-    int pbl_cnt = 0;
-    for(int i=0; i<PLP_BUF_SIZE;i++) {
-        timersub(&info.current_time, &info.plp_buf[i].ts, &tv_tmp);
-        if(tv2ms(&tv_tmp) < PLP_BUF_TIMEOUT_MS) {
-            pbl_acc+=info.plp_buf[i].pbl;
-            pbl_cnt++;
-        }
+int plp_avg_pbl(int pnum) {
+    if(shm_conn_info->stats[pnum].l_pbl_tmp > shm_conn_info->stats[pnum].l_pbl_recv) {
+        shm_conn_info->stats[pnum].l_pbl = shm_conn_info->stats[pnum].l_pbl_tmp;
+        return shm_conn_info->stats[pnum].l_pbl_tmp;
+    } else {
+        shm_conn_info->stats[pnum].l_pbl = shm_conn_info->stats[pnum].l_pbl_recv;
+        return shm_conn_info->stats[pnum].l_pbl_recv;
     }
-    // now add current if it is greater than mean
-    if((pbl_cnt > 0) && (info.l_pbl > (pbl_acc / pbl_cnt))) {
-        pbl_acc += info.l_pbl;
-        pbl_cnt++;
-    }
-    if(pbl_cnt == 0) return INT32_MAX;
-    return pbl_acc / pbl_cnt;
-    */
-    if(l_pbl_cur > info.plp_buf[0].pbl) {
-        return l_pbl_cur;
-    }
-    return info.plp_buf[0].pbl;
 }
 
 int fill_path_descs_unsync(struct mini_path_desc *path_descs, uint32_t chan_mask) {
@@ -2856,7 +2844,7 @@ int lossed_count() {
 int lossed_latency_drop(unsigned int *last_received_seq) {
     // finish waiting for packets by latency; should be called by FCI process
     vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
-    lossed_print_debug();
+    //lossed_print_debug();
     int loss = lossed_count();
     info.lossed_complete_received = info.lossed_last_received;
     *last_received_seq = info.lossed_loop_data[info.lossed_last_received].local_seq_num;
@@ -2906,7 +2894,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
-        lossed_print_debug();
+        //lossed_print_debug();
         // now check if it is dup or LATE
         if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
             vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
@@ -2919,7 +2907,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
-        lossed_print_debug();
+        //lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = 0;
@@ -2932,7 +2920,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(s_shift >= LOSSED_BACKLOG_SIZE) {
-        lossed_print_debug();
+        //lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = new_idx;
@@ -2955,7 +2943,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         info.lossed_complete_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
-        lossed_print_debug();
+        //lossed_print_debug();
         return reordering;
     }
     
@@ -2998,7 +2986,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     //         3
     
     // add data to its position
-    lossed_print_debug();
+    //lossed_print_debug();
     vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
     info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
     info.lossed_loop_data[new_idx].seq_num = seq_num;
@@ -3023,7 +3011,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         }
         
         if(info.lossed_complete_received == info.lossed_last_received) {
-            lossed_print_debug();
+            //lossed_print_debug();
             vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
             return 0;
         }
@@ -3511,7 +3499,8 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    info.C = C_LOW;
+    //info.C = C_LOW;
+    info.C = C_LOW/8.0; // 2x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
@@ -3615,7 +3604,7 @@ int lfd_linker(void)
     while( !linker_term ) {
         errno = 0;
         super++;
-        
+        plp_avg_pbl(info.process_num);
         gettimeofday(&info.current_time, NULL);
         timersub(&info.current_time, &wb_1ms_timer, &tv_tmp);
         if (timercmp(&tv_tmp, &wb_1ms_time, >)) {
@@ -4002,6 +3991,8 @@ int lfd_linker(void)
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
             info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
+            temp_sql_copy = info.send_q_limit; 
+            temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
         } else {
             rsr_top = shm_conn_info->stats[max_chan].rsr;
             info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
@@ -4086,12 +4077,14 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
+                           || ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
         if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
+        if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if(channel_dead) ag_stat.D = 1;
         if(!check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
@@ -4312,10 +4305,10 @@ int lfd_linker(void)
                 info.r_lost = 0;
             }
             
-            int cur_plp = plp_avg_pbl(info.l_pbl);
+            int cur_plp = plp_avg_pbl(info.process_num);
             
             sem_wait(&(shm_conn_info->stats_sem));
-            shm_conn_info->stats[info.process_num].l_pbl = cur_plp;
+            shm_conn_info->stats[info.process_num].l_pbl = cur_plp; // absolutely unnessessary (done at loop )
             //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
             shm_conn_info->stats[info.process_num].packet_speed_rmit = statb.packet_sent_rmit / json_ms;
@@ -4378,7 +4371,7 @@ int lfd_linker(void)
             start_json(js_buf, &js_cur);
             add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
             add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
-            add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl_recv);
+            add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
             add_json(js_buf, &js_cur, "super", "%d", super);
             super = 0;
@@ -4394,7 +4387,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
             add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
-            add_json(js_buf, &js_cur, "plp", "%d", info.i_plp);
+            add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
@@ -4443,6 +4436,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "D", "%d", ag_stat.D);
             add_json(js_buf, &js_cur, "CL", "%d", ag_stat.CL);
             add_json(js_buf, &js_cur, "DL", "%d", ag_stat.DL);
+            add_json(js_buf, &js_cur, "PL", "%d", ag_stat.PL);
             add_json(js_buf, &js_cur, "Xi", "%d", !shm_conn_info->stats[info.process_num].brl_ag_enabled);
             memset((void *)&ag_stat, 0, sizeof(ag_stat));
             skip=0;
@@ -4790,8 +4784,8 @@ int lfd_linker(void)
                 }
             }
 
-            if(idle) {
-                shm_conn_info->idle = 0;    
+            if(!idle) {
+                shm_conn_info->idle = 0; 
             }
             
             sem_post(&(shm_conn_info->stats_sem));
@@ -4992,7 +4986,7 @@ int lfd_linker(void)
             for (int i = 1; i < info.channel_amount; i++) {
                 if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
                     // WARNING! disabled push-to-top policy!
-                    if( !((!info.head_channel) && PUSH_TO_TOP && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
+                    if( !((!info.head_channel) && PUSH_TO_TOP && ptt_allow_once && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
                     } else {
                         need_retransmit = 1; 
@@ -5594,6 +5588,7 @@ if(drop_packet_flag) {
                                     if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
                                         if (strncmp(shm_conn_info->stats[i].name + strlen(shm_conn_info->stats[i].name) - 2, char_tmp, 2) == 0) {
                                             shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
+                                            shm_conn_info->stats[i].l_pbl_tmp = 0;
                                             add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
                                             break;
                                         }
@@ -5692,10 +5687,7 @@ if(drop_packet_flag) {
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 info.p_lost++;
-                                plp_add_pbl(info.l_pbl, &info.current_time);
-                                info.l_pbl = 0;
                                 sem_wait(&(shm_conn_info->stats_sem));
-                                shm_conn_info->stats[info.process_num].l_pbl = plp_avg_pbl(info.l_pbl);
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
                                 sem_post(&(shm_conn_info->stats_sem));
                                 if(info.head_channel) {
@@ -5936,7 +5928,7 @@ if(drop_packet_flag) {
                     gettimeofday(&info.current_time, NULL);
                     info.channel[chan_num].down_packets++; // accumulate number of packets
                     PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
-                    info.l_pbl++;
+                    shm_conn_info->stats[info.process_num].l_pbl_tmp++;
                     last_net_read = info.current_time.tv_sec;
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
@@ -6585,7 +6577,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_max_send_q = 0;
     max_reorder_byte = 0;
     last_channels_mask = 0;
-    info.C = C_LOW;
     info.B = 0.2;
     /*Variables for the exact way of measuring speed*/
     send_q_read_timer = (struct timeval) {0, 0};
