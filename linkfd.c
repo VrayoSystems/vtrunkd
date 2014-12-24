@@ -3334,7 +3334,8 @@ int lfd_linker(void)
         info.head_channel = 0;
         info.C = C_LOW/2;
     }*/
-    info.C = C_LOW;
+    //info.C = C_LOW;
+    info.C = C_LOW/8.0; // 2x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
@@ -6294,7 +6295,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     my_max_send_q = 0;
     max_reorder_byte = 0;
     last_channels_mask = 0;
-    info.C = C_LOW;
     info.B = 0.2;
     /*Variables for the exact way of measuring speed*/
     send_q_read_timer = (struct timeval) {0, 0};
