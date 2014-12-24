@@ -4222,7 +4222,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
             add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
-            add_json(js_buf, &js_cur, "plp", "%d", info.i_plp);
+            add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
