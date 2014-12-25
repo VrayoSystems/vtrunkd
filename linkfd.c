@@ -4633,6 +4633,8 @@ int lfd_linker(void)
 
             if(!idle) {
                 shm_conn_info->idle = 0; 
+            } else {
+                shm_conn_info->idle = 1;
             }
             
             sem_post(&(shm_conn_info->stats_sem));
