@@ -3486,10 +3486,24 @@ int lfd_linker(void)
                 memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
                 tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
                 memcpy(buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
-                if (proto_write(service_channel, buf, ((5*sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                    vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
-                    close(prio_s);
-                    return 0;
+
+                fd_set fdset2;
+                tv_tmp.tv_sec = 0;
+                tv_tmp.tv_usec = 0;
+                FD_ZERO(&fdset2);
+                FD_SET(service_channel, &fdset2);
+                if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
+                    if (proto_write(service_channel, buf, ((5 * sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        close(prio_s);
+                        return 0;
+                    }
+                } else {
+                    info.last_sent_FLI_idx--;
+                    if (info.last_sent_FLI_idx < 0) {
+                        info.last_sent_FLI_idx = LOSS_ARRAY - 1;
+                    }
+                    break;
                 }
             } else
                 break;
@@ -3513,10 +3527,24 @@ int lfd_linker(void)
                 memcpy(buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
                 uint16_t tmp_16_h = htons(shm_conn_info->l_loss[info.last_sent_FLLI_idx].name);
                 memcpy(buf + sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp_16_h, sizeof(uint16_t));
-                if (proto_write(service_channel, buf, ((5*sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                    vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
-                    close(prio_s);
-                    return 0;
+
+                fd_set fdset2;
+                tv_tmp.tv_sec = 0;
+                tv_tmp.tv_usec = 0;
+                FD_ZERO(&fdset2);
+                FD_SET(service_channel, &fdset2);
+                if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
+                    if (proto_write(service_channel, buf, ((5 * sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        close(prio_s);
+                        return 0;
+                    }
+                } else {
+                    info.last_sent_FLLI_idx--;
+                    if (info.last_sent_FLLI_idx < 0) {
+                        info.last_sent_FLLI_idx = LOSS_ARRAY - 1;
+                    }
+                    break;
                 }
             } else
                 break;
