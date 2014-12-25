@@ -693,6 +693,7 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 enable_o3
+enable_sum_send
 enable_mark
 enable_syslog
 enable_low_mem
@@ -1331,6 +1332,7 @@ Optional Features:
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
 --disable-o3     	   Compile without -O3 optimization
+--disable-sum-send      Disable redundancy code sending
 --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25
 --disable-syslog          Disable syslog output
 --enable-low-mem         Compile for low ram device
@@ -2157,6 +2159,14 @@ else
 
 fi
 
+
+# Check whether --enable-sum-send was given.
+if test "${enable_sum_send+set}" = set; then :
+  enableval=$enable_sum_send; SUM_SEND=$enableval
+else
+  SUM_SEND=yes
+
+fi
 
 
 # Check whether --enable-mark was given.
@@ -4945,6 +4955,10 @@ fi
 
 if test "$SYSLOG" = "yes"; then
           CFLAGS="$CFLAGS -DSYSLOG=1"
+fi
+
+if test "$SUM_SEND" = "yes"; then
+          CFLAGS="$CFLAGS -DSUM_SEND=1"
 fi
 
 if test "$DEBUGG" = "yes"; then

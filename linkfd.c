@@ -1687,11 +1687,14 @@ if(drop_packet_flag) {
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
 
-        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
 
         // packet code section
+#ifdef SUM_SEND
+        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+
         int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
         int packet_code_ready = 0;
+
         if (tmp_seq_counter == SEQ_START_VAL + 1) {
             struct timeval redund_code_timer_time = REDUNDANT_CODE_TIMER_TIME;
             for (int i = 0; i < SELECTION_NUM; i++) {
@@ -1710,7 +1713,9 @@ if(drop_packet_flag) {
         shm_conn_info->packet_code[current_selection][chan_num].current_seq = tmp_seq_counter;
 //        print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "redund code\0", 0, shm_conn_info->packet_code[chan_num].len_sum);
         vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+#endif
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
+#ifdef SUM_SEND
         if (packet_code_ready) {
 //            print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "send redund code", tmp_seq_counter + 1 - REDUNDANCY_CODE_LAG, shm_conn_info->packet_code[chan_num].len_sum);
 
@@ -1755,6 +1760,9 @@ if(drop_packet_flag) {
         } else {
             sem_post(&(shm_conn_info->common_sem));
         }
+#else
+        sem_post(&(shm_conn_info->common_sem));
+#endif
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
@@ -5004,6 +5012,7 @@ int lfd_linker(void)
         
 
         //check redundancy code packet's timer
+#ifdef SUM_SEND
         gettimeofday(&info.current_time, NULL );
         for (int i = 1; i <= info.channel_amount; i++) {
             for (int selection = 0; selection < SELECTION_NUM; selection++) {
@@ -5043,6 +5052,7 @@ int lfd_linker(void)
                 flag = 0;
             }
         }
+#endif
                     /*
                      *
                         _____         .__                   
