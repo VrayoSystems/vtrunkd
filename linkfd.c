@@ -2434,6 +2434,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
+    vtun_syslog(LOG_INFO, "t_from_W = %d", (int)(cbrt(B * M / C) + cbrt( (W - M) / C )));
     return cbrt(B * M / C) + cbrt( (W - M) / C );
 }
 
@@ -2444,6 +2445,7 @@ int set_W_unsync(int t) {
     info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
 
+    vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
     return 1;
 }
 
@@ -2455,6 +2457,7 @@ int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
     struct timeval new_lag;
     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
     timersub(&info.current_time, &new_lag, loss_time); // set new loss time back in time
+    vtun_syslog(LOG_INFO, "set W to, sq=%d", send_q);
     set_W_unsync(t);
 }
 
@@ -5473,7 +5476,7 @@ if(drop_packet_flag) {
                                     }
                                     sem_post(&(shm_conn_info->stats_sem));
                                 }
-                                ms2tv(&loss_tv, info.rtt);
+                                ms2tv(&loss_tv, info.exact_rtt);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if(info.head_channel) {
                                     info.send_q_limit_cubic_max = info.max_send_q; // fast-converge to flow (head now always converges!)
