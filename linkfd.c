@@ -1420,7 +1420,8 @@ int retransmit_send(char *out2, int n_to_send) {
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
         statb.packet_sent_rmit += 1000;
-        shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+        if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
+            shm_conn_info->stats[info.process_num].l_pbl_tmp++;
         info.channel[i].up_len += len_ret;
         statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
@@ -1756,7 +1757,8 @@ if(drop_packet_flag) {
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
     statb.packet_sent_ag += 1000;
-    shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+    if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
+        shm_conn_info->stats[info.process_num].l_pbl_tmp++;
     info.channel[chan_num].up_len += len_ret;
     statb.byte_sent_ag_full += len_ret;
     info.channel[chan_num].up_packets++;
@@ -3424,6 +3426,9 @@ int lfd_linker(void)
 
     struct timeval wb_1ms_time = { 0, 1000 };
     struct timeval wb_1ms_timer = info.current_time;
+    
+    // init pbl
+    shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
 
 /**
  *
