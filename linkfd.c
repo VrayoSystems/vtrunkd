@@ -2450,15 +2450,10 @@ int set_W_unsync(int t) {
 }
 
 int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
-    int new_cubic = (int32_t)info.send_q_limit_cubic - ((int32_t)info.send_q_limit_cubic - send_q) / slowness;
-    int t = (int) t_from_W( new_cubic, info.send_q_limit_cubic_max, info.B, info.C);
-    // No logs here: it will always be trying to converge here
-    //vtun_syslog(LOG_INFO,"Down converging from %d to %d s_q_e %d", (int32_t)info.send_q_limit_cubic, new_cubic, send_q_eff);
-    struct timeval new_lag;
-    ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
-    timersub(&info.current_time, &new_lag, loss_time); // set new loss time back in time
-    vtun_syslog(LOG_INFO, "set W to, sq=%d", send_q);
-    set_W_unsync(t);
+    *loss_time = info.current_time;
+    //vtun_syslog(LOG_INFO, "set W to, sq=%d", send_q);
+    info.send_q_limit_cubic_max = send_q;
+    set_W_unsync(0);
 }
 
 // returns max value for send_q (NOT index) at which weight is > 0.7
@@ -4061,19 +4056,7 @@ int lfd_linker(void)
             int slope = 1; // disable by now
             if(slope > -100000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
-                    // calculate old t
-                    timersub(&(info.current_time), &loss_time, &t_tv);
-                    int old_t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-                    old_t = old_t / CUBIC_T_DIV;
-                    old_t = old_t > CUBIC_T_MAX ? CUBIC_T_MAX : old_t; // 400s limit
-
-                    t = (int) t_from_W( send_q_eff + 2000, info.send_q_limit_cubic_max, info.B, info.C);
-                    struct timeval new_lag;
-                    //vtun_syslog(LOG_INFO,"Converging W to encap flow: W+1=%d, Wmax=%d, old t=%d, new t=%d, slope=%d/100", send_q_eff + 2000, info.send_q_limit_cubic_max, old_t, t, slope); // this log is MESS!
-                    ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
-                    timersub(&info.current_time, &new_lag, &loss_time); // set new loss time back in time
-                    // now, we rely only on head_dropping in detection of congestion/speed reached AND switching on AG
-                    set_W_unsync(t);
+                    set_W_to(send_q_eff + 2000, 1, &loss_time);
             } else {
                 vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
                 // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
