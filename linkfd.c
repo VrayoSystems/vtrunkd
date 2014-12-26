@@ -124,7 +124,7 @@ struct my_ip {
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
-#define MAX_REORDER_PERPATH 4
+#define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
