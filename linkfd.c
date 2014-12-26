@@ -4580,6 +4580,10 @@ int lfd_linker(void)
             //            udp_struct->rx_q, udp_struct->drops);
             //}
             cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
+            if(shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] > shm_conn_info->write_buf[1].last_received_seq[info.process_num]) {
+                vtun_syslog(LOG_INFO, "WARNING Fixing psl %d > lws %d to lws", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
+                shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
+            }
 
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
