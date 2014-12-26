@@ -132,7 +132,6 @@ struct my_ip {
 //#define SUPERLOOP_MAX_LAG_USEC 10000 // 15ms max superloop lag allowed! // cpu lag
 #define FCI_P_INTERVAL 3 // interval in packets to send ACK if ACK is not sent via payload packets
 #define CUBIC_T_DIV 50
-#define CUBIC_T_MAX 200
 #define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
 
@@ -2874,7 +2873,6 @@ int lfd_linker(void)
 {
     int tpps=0;
     memset((void *)&ag_stat, 0, sizeof(ag_stat));
-    
     #ifdef TIMEWARP
         timewarp = malloc(TW_MAX); // 10mb time-warp
         memset(timewarp, 0, TW_MAX);
@@ -3427,7 +3425,8 @@ int lfd_linker(void)
     
     // init pbl
     shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
-
+    int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
+    vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
 /**
  *
  *
@@ -3889,7 +3888,7 @@ int lfd_linker(void)
             timersub(&(info.current_time), &loss_time, &t_tv);
             int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
             t = t / CUBIC_T_DIV;
-            t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 400s limit
+            t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
             set_W_unsync(t);
             
             pump_adj = (int) d_pump_adj;
@@ -5484,7 +5483,7 @@ if(drop_packet_flag) {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
                                 t = t / CUBIC_T_DIV;
-                                t = t > CUBIC_T_MAX ? CUBIC_T_MAX : t; // 200s limit
+                                t = t > cubic_t_max ? cubic_t_max : t; // 200s limit
                             }
                             sem_wait(&(shm_conn_info->stats_sem));
                             // set_W_unsync(t); // not required to recalculate here; will be more predictable
