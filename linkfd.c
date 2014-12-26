@@ -4624,6 +4624,10 @@ int lfd_linker(void)
                 shm_conn_info->idle = 1;
             }
             
+            if(shm_conn_info->idle) {
+                shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
+            }
+            
             sem_post(&(shm_conn_info->stats_sem));
             // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) SPEED_REDETECT_TV), >=)) {
