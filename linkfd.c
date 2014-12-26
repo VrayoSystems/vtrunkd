@@ -4579,6 +4579,7 @@ int lfd_linker(void)
             //    vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
             //            udp_struct->rx_q, udp_struct->drops);
             //}
+            cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
 
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
