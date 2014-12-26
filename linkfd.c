@@ -5724,6 +5724,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
+                            //Для чего нужен подсчет значения потерь через info.channel[chan_num].packet_loss ( возможно ложное срабатывание в дальнейшем
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
@@ -5732,52 +5733,7 @@ if(drop_packet_flag) {
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
                                 sem_post(&(shm_conn_info->stats_sem));
-                                if(info.head_channel) {
-                                    sem_wait(&(shm_conn_info->stats_sem));
-                                    if(shm_conn_info->idle) {
-                                        // first check if we are really head
-                                        // find max ACS 
-                                        int ch_max_ACS = -1;
-                                        int ch_max_ACS_ch = -1;
-                                        int ch_max_ACS_W = -1;
-                                        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) { // hope this works..
-                                                if(shm_conn_info->stats[i].ACK_speed > ch_max_ACS) {
-                                                    ch_max_ACS = shm_conn_info->stats[i].ACK_speed;
-                                                    ch_max_ACS_ch = i;
-                                                    ch_max_ACS_W = shm_conn_info->stats[i].W_cubic;
-                                                }
-                                            }
-                                        }
-                                        if(ch_max_ACS != -1) {
-                                            // check if we are the best from all other
-                                            if(!percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
-                                                    && (shm_conn_info->stats[info.process_num].ACK_speed < ch_max_ACS)) {
-                                                vtun_syslog(LOG_INFO, "Head changed to %d due to ACS>ACSh: %d > %d", ch_max_ACS_ch, ch_max_ACS, shm_conn_info->stats[info.process_num].ACK_speed);
-                                                shm_conn_info->max_chan = ch_max_ACS_ch; // we found chan with better ACS (10% corridor)
-                                            } else if ( percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
-                                                    && (ch_max_ACS_W > shm_conn_info->stats[info.process_num].W_cubic)) {
-                                                // check Wh/Wi here
-                                                // our process has smaller window with same speed; assume we're not the best now
-                                                vtun_syslog(LOG_INFO, "Head changed to %d due to W>Wh: %d > %d", ch_max_ACS_ch, ch_max_ACS_W, shm_conn_info->stats[info.process_num].W_cubic);
-                                                shm_conn_info->max_chan = ch_max_ACS_ch;
-                                            } else {
-                                                vtun_syslog(LOG_INFO, "Head (real) lossing after idle");
-                                                shm_conn_info->idle = 0;
-                                                shm_conn_info->head_lossing = 1;
-                                            }
-                                        } else {
-                                            // we are the ONLY channel, drop flags
-                                            vtun_syslog(LOG_INFO, "Head (only) lossing after idle");
-                                            shm_conn_info->idle = 0;
-                                            shm_conn_info->head_lossing = 1;
-                                        }
-                                    } else {
-                                       // vtun_syslog(LOG_INFO, "Head lossing");
-                                        shm_conn_info->head_lossing = 1;
-                                    }
-                                    sem_post(&(shm_conn_info->stats_sem));
-                                }
+
                                 ms2tv(&loss_tv, info.rtt);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if(info.head_channel) {
@@ -5793,10 +5749,11 @@ if(drop_packet_flag) {
                                 }
                                 t = 0;
                                 info.max_send_q = 0;
+                                //waste Cubic recalc
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 set_W_unsync(t);
                                 sem_post(&(shm_conn_info->stats_sem));
-
+                                //waste Cubic recalc end
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
                                 t = t_tv.tv_sec * 1000 + t_tv.tv_usec / 1000;
