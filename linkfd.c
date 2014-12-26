@@ -1829,8 +1829,8 @@ int write_buf_check_n_flush(int logical_channel) {
                 if (get_udp_stats(udp_struct, 1)) {
                     sprintf(tmp, "udp stat tx_q %d rx_q %d drops %d ", udp_struct->tx_q, udp_struct->rx_q, udp_struct->drops);
                 }
-                print_flush_data();
 #endif
+                print_flush_data();
                 int loss_flag = 0;
                 if (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
