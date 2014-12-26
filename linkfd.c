@@ -5049,7 +5049,7 @@ int lfd_linker(void)
                 tv_tmp.tv_sec = tmp / 100000;
                 tv_tmp.tv_usec = (tmp % 100000) * 10;
                 sem_wait(&(shm_conn_info->common_sem));
-                memcpy(&(shm_conn_info->packet_code[selection][i].timer->timer_time), &tv_tmp, sizeof(struct timeval));
+                memcpy(&(shm_conn_info->packet_code[selection][i].timer.timer_time), &tv_tmp, sizeof(struct timeval));
                 if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
                         && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
                     vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %"PRIu32" stop %"PRIu32" len %i ", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].len_sum);
