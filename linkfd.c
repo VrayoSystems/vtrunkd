@@ -3849,7 +3849,9 @@ int lfd_linker(void)
             double d_frtt = shm_conn_info->forced_rtt;
             double d_rsr = info.rsr;
             
-            
+            if(d_ACS_h < 1) {
+                d_ACS_h = 1; // zero-protect
+            }
             double d_sql = d_rsr_top * ( d_ACS / d_ACS_h );
             info.send_q_limit = (int) d_sql; // TODO IS IT NEEDED REMOVE
             
@@ -3875,9 +3877,9 @@ int lfd_linker(void)
                 info.cycle_last = info.current_time;
             }
             if(d_rsr < 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0");
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f", d_rsr);
             } else if (d_rsr > RSR_TOP) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP");
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f", d_rsr);
             }
             if(d_rsr < SEND_Q_LIMIT_MINIMAL) d_rsr = SEND_Q_LIMIT_MINIMAL;
             info.rsr = d_rsr;
