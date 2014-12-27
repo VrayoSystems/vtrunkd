@@ -2446,7 +2446,7 @@ int set_W_unsync(int t) {
     info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
 
-    vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
+    //vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
     return 1;
 }
 
