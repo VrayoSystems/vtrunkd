@@ -138,7 +138,7 @@ struct my_ip {
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
 #define PLOSS_PSL 2 // this is '1or2'
-#define PLOSS_CHECK_PKTS 30 // how many packets to check for sequential loss to detect PLOSS TODO: find correct value. speed dependent??
+#define PLOSS_CHECK_PKTS 15 // how many packets to check for sequential loss to detect PLOSS TODO: find correct value. speed dependent??
 
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
@@ -892,7 +892,9 @@ int get_write_buf_wait_data(uint32_t chan_mask) {
                     // TODO TODO: NOT JUST BIGGER SEQ NUM BUT SOME RANGE TO DETECT WITHIN
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
-                    if( (shm_conn_info->stats[p].max_PCS2 <= 1) || (shm_conn_info->stats[p].max_ACS2 <= 3) || (!check_rtt_latency_drop_chan(p)) ) { // TODO: use channel_dead instead!!
+                    if(shm_conn_info->stats[p].channel_dead  
+                        || ((shm_conn_info->stats[p].exact_rtt + shm_conn_info->stats[p].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) 
+                            > ( (int32_t)(tv2ms(&max_latency_drop)*2) + shm_conn_info->forced_rtt)) { // trying to fix #359 - mul MLD by 2
                         // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
                     }
