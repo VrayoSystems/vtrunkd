@@ -2322,7 +2322,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
             }
         }
-        vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
+        //vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
         shm_conn_info->max_chan = min_rtt_chan;
         fixed = 1;
         shm_conn_info->last_switch_time = info.current_time; // nothing bad in this..
@@ -2435,7 +2435,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
-    vtun_syslog(LOG_INFO, "t_from_W = %d", (int)(cbrt(B * M / C) + cbrt( (W - M) / C )));
+    //vtun_syslog(LOG_INFO, "t_from_W = %d", (int)(cbrt(B * M / C) + cbrt( (W - M) / C )));
     return cbrt(B * M / C) + cbrt( (W - M) / C );
 }
 
