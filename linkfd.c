@@ -6067,7 +6067,7 @@ if(drop_packet_flag) {
                             tv_tmp.tv_sec = ntohl(tmp_h);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             tv_tmp.tv_usec = ntohl(tmp_h);
-                            add_json(lossLog, &lossLog_cur, "ts", "%d", tv2ms(&tv_tmp));
+                            add_json(lossLog, &lossLog_cur, "ts", "%u", tv2ms(&tv_tmp));
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
                             if (flag_var == FRAME_LOSS_INFO) {
                                 add_json(lossLog, &lossLog_cur, "psl", "%d", ntohl(tmp_h));
