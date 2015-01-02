@@ -1912,15 +1912,18 @@ int write_buf_check_n_flush(int logical_channel) {
                 timersub(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp_tmp_tmp);
                 lat = tv2ms(&tv_tmp_tmp_tmp);
                if(lat > 200)  { // packet lag no more than 200 ms allowed in stats
-                lat = 0; 
+                //lat = 0; 
                }
             }
+            shm_conn_info->frtt_ms = lat;
+            /*
             if(lat > shm_conn_info->frtt_ms) {
                 shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/3;
             } else {
                 shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/50;
             }
             shm_conn_info->frtt_local_applied = shm_conn_info->frtt_ms;
+            */
             if(shm_conn_info->prev_flushed) {
                 // TODO: write avg stats here?
                 shm_conn_info->write_sequential = 1;
@@ -2869,6 +2872,29 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     return -1;
 }
+
+int set_rttlag() {
+    if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
+        shm_conn_info->max_rtt_lag = 0;
+    } else {
+        int min_rtt = INT32_MAX;
+        int max_rtt = 0;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+                if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                    min_rtt = shm_conn_info->stats[i].exact_rtt;
+                }
+
+                if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                    max_rtt = shm_conn_info->stats[i].exact_rtt;
+                }
+            }
+        }
+        shm_conn_info->max_rtt_lag = max_rtt - min_rtt;
+        shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
+    }
+}
+
 
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
@@ -3964,6 +3990,16 @@ int lfd_linker(void)
         if(!check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         //ag_flag_local = R_MODE;
+
+        if(ag_flag_local == AG_MODE) {
+            shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
+        } else {
+            shm_conn_info->ag_mask &= ~(1 << info.process_num); // set bin mask to zero
+        }
+        if(ag_flag_local_prev != ag_flag_local) {
+            need_send_FCI = 1; // TODO WARNING FCI may be LOST!! need transport
+        }
+
         // now see if we are actually good enough to kick in AG?
         // see our RTT diff from head_channel
         // TODO: use max_ACS thru all chans
@@ -4038,7 +4074,7 @@ int lfd_linker(void)
                     if(check_drop_period_unsync()) { // Remember to have large txqueue!
                         if(!shm_conn_info->hold_mask) drop_packet_flag = 1; // ^^ drop exactly one packet
                     } else {
-                        hold_mode = 1;
+                        hold_mode = 1; // TODO WARNING here is where infinite looping occurs
                     }
                     //vtun_syslog(LOG_INFO, "AG_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d (  %d)", send_q_eff, info.rsr, send_q_limit_cubic_apply,info.send_q_limit_cubic );
                 }
@@ -4149,6 +4185,7 @@ int lfd_linker(void)
         timersub(&info.current_time, &json_timer, &tv_tmp_tmp_tmp);
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
+            set_rttlag();
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -4242,6 +4279,7 @@ int lfd_linker(void)
             was_hold_mode = 0; // TODO: remove
             //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
             add_json(js_buf, &js_cur, "agag", "%d", agag);
+            add_json(js_buf, &js_cur, "agm_rcv", "%d", NumberOfSetBits(shm_conn_info->ag_mask_recv));
             add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
             //add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
@@ -4464,6 +4502,8 @@ int lfd_linker(void)
                 sem_post(write_buf_sem);
                 tmp16_n = htons(tmp16); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
+                tmp32_n = htonl(shm_conn_info->ag_mask);
+                memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_t, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -4472,7 +4512,7 @@ int lfd_linker(void)
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -4541,6 +4581,8 @@ int lfd_linker(void)
                     sem_post(write_buf_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
+                    tmp32_n = htonl(shm_conn_info->ag_mask);
+                    memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_t, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
@@ -4550,7 +4592,7 @@ int lfd_linker(void)
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 3 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
                     if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -5428,6 +5470,12 @@ if(drop_packet_flag) {
                                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             }
                             sem_post(write_buf_sem);
+                            
+                            
+                            memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
+                            shm_conn_info->ag_mask_recv = ntohl(tmp32_n);
+                            set_rttlag();
+
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
                             info.channel[chan_num].send_q =
@@ -6235,6 +6283,7 @@ if(drop_packet_flag) {
     shm_conn_info->channels_mask &= ~(1 << info.process_num); // del channel num from binary mask
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
     shm_conn_info->hold_mask &= ~(1 << info.process_num); // set bin mask to zero (send not allowed)
+    shm_conn_info->ag_mask &= ~(1 << info.process_num); // set bin mask to zero
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
     vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);

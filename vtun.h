@@ -664,6 +664,8 @@ struct conn_info {
     struct timeval last_written_recv_ts;
     int frtt_ms;
     int frtt_local_applied;
+    uint32_t ag_mask; // unsynced
+    uint32_t ag_mask_recv; // unsynced
 };
 
 struct resent_chk {
