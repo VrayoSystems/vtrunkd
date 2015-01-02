@@ -1903,15 +1903,21 @@ int write_buf_check_n_flush(int logical_channel) {
                 }
             }
             // mean latency experiment
-            int lat = tv2ms(&tv_tmp)*1000 - shm_conn_info->forced_rtt;
-            info.mean_latency_us += (lat - info.mean_latency_us)/50;
-            if(lat > info.frtt_us) {
-                info.frtt_us += (lat - info.frtt_us)/3;
+            int lat=0;
+            struct timeval tv_tmp_tmp_tmp;
+            if(timercmp(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, <=)) {
+               lat = 0; 
             } else {
-                info.frtt_us += (lat - info.frtt_us)/50;
+                timersub(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp_tmp_tmp);
+                lat = tv2ms(&tv_tmp_tmp_tmp);
+               if(lat > 200)  { // packet lag no more than 200 ms allowed in stats
+                lat = 0; 
+               }
             }
-            if(lat > info.max_latency_us) {
-                info.max_latency_us = lat;
+            if(lat > shm_conn_info->frtt_ms) {
+                shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/3;
+            } else {
+                shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/50;
             }
             
             if(shm_conn_info->prev_flushed) {
@@ -1957,6 +1963,7 @@ int write_buf_check_n_flush(int logical_channel) {
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
+            shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
 
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
@@ -4248,7 +4255,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
-            add_json(js_buf, &js_cur, "frtt_Pus", "%d", info.frtt_us);
+            add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);

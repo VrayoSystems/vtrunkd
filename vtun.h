@@ -546,7 +546,6 @@ struct phisical_status { // A.K.A. "info"
     int ploss_event_flag; /** flag to detect PLOSS at tflush */
     int mean_latency_us;
     int max_latency_us;
-    int frtt_us;
     int frtt_us_applied;
     int PCS2_recv; // through FRAME_CHANNEL_INFO
     
@@ -662,6 +661,8 @@ struct conn_info {
     int t_model_rtt100; // RTT multiplied by 100, in ms, for tcp model, calculated as toata avg rtt
     unsigned char streams[32];
     int single_stream;
+    struct timeval last_written_recv_ts;
+    int frtt_ms;
 };
 
 struct resent_chk {
