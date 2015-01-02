@@ -666,6 +666,7 @@ struct conn_info {
     int frtt_local_applied;
     uint32_t ag_mask; // unsynced
     uint32_t ag_mask_recv; // unsynced
+    int max_rtt_lag;
 };
 
 struct resent_chk {

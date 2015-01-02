@@ -2874,6 +2874,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
 }
 
 int set_rttlag() {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
     if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
         shm_conn_info->max_rtt_lag = 0;
     } else {
@@ -4503,7 +4504,7 @@ int lfd_linker(void)
                 tmp16_n = htons(tmp16); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(shm_conn_info->ag_mask);
-                memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_t, sizeof(uint32_t)); //forced_rtt
+                memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -4582,7 +4583,7 @@ int lfd_linker(void)
                     tmp16_n = htons(tmp16); //forced_rtt here
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                     tmp32_n = htonl(shm_conn_info->ag_mask);
-                    memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_t, sizeof(uint32_t)); //forced_rtt
+                    memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
