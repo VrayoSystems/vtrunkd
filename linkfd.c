@@ -808,11 +808,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
     int cnt = 0;
     int max_wait = 0, rtt_fix;
     struct timeval tv_tmp, rtt_fix_tv, max_wait_tv = {0,0};
+    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
     
-    if(shm_conn_info->forced_rtt_recv == 0) return 1;
+    if(full_rtt == 0) return 1;
 
     while(i > -1) {
-        rtt_fix = shm_conn_info->forced_rtt_recv - shm_conn_info->frames_buf[i].current_rtt;
+        rtt_fix = full_rtt - shm_conn_info->frames_buf[i].current_rtt;
         rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
         ms2tv(&rtt_fix_tv, rtt_fix);
         timersub(&info.current_time, &shm_conn_info->frames_buf[i].time_stamp, &tv_tmp);
@@ -831,7 +832,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
         cnt++;
         if(cnt > 200) break; // do not look too deep?
     }
-    ms2tv(&tv_tmp, shm_conn_info->forced_rtt_recv);
+    ms2tv(&tv_tmp, full_rtt);
     return timercmp(&max_wait_tv, &tv_tmp, >=);
 }
 
@@ -1919,7 +1920,7 @@ int write_buf_check_n_flush(int logical_channel) {
             } else {
                 shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/50;
             }
-            
+            shm_conn_info->frtt_local_applied = shm_conn_info->frtt_ms;
             if(shm_conn_info->prev_flushed) {
                 // TODO: write avg stats here?
                 shm_conn_info->write_sequential = 1;
@@ -3770,10 +3771,6 @@ int lfd_linker(void)
                 }
             }
             */
-            if(0 && shm_conn_info->stats[max_chan].rttvar > FORCE_RTT_JITTER_THRESH_MS) {
-                vtun_syslog(LOG_INFO, "Setting rttvar to %d", shm_conn_info->stats[max_chan].rttvar);
-                info.frtt_us_applied = shm_conn_info->stats[max_chan].rttvar;
-            }
             // <<< END forced_rtt calc
             
 

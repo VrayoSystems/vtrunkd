@@ -663,6 +663,7 @@ struct conn_info {
     int single_stream;
     struct timeval last_written_recv_ts;
     int frtt_ms;
+    int frtt_local_applied;
 };
 
 struct resent_chk {
