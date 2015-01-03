@@ -1907,7 +1907,7 @@ int write_buf_check_n_flush(int logical_channel) {
             int lat=0;
             struct timeval tv_tmp_tmp_tmp;
             if(timercmp(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, <=)) {
-               lat = 0; 
+               //lat = 0; 
             } else {
                 timersub(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp_tmp_tmp);
                 lat = tv2ms(&tv_tmp_tmp_tmp);
@@ -4292,7 +4292,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
-            add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
+            //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
+            add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
