@@ -2891,7 +2891,7 @@ int set_rttlag() {
                 }
             }
         }
-        shm_conn_info->max_rtt_lag = max_rtt - min_rtt;
+        shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only
         shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
     }
 }
