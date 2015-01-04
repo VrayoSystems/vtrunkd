@@ -360,6 +360,7 @@ struct speed_chan_data_struct {
  */
 struct conn_stats {
     char name[SESSION_NAME_SIZE];
+    int hsnum; /* session name hash - identical between prodesses */
     int pid; /* current pid */
     int pid_remote; // pid from another side
     long int weight; /* bandwith-delay product */

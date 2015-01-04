@@ -2443,6 +2443,48 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     return fixed;
 }
 
+int hsnum2pnum(int hsnum) {
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if(hsnum == shm_conn_info->stats[i].hsnum) {
+            return i;
+        }
+    }
+    vtun_syslog(LOG_ERR, "ASSERT FAILED: hsnum not found: %d", hsnum);
+    return -1;
+}
+
+int name2hsnum(char *name) {
+    int i = 0;
+    char ch = name[0];
+    int sum = 0;
+    while(ch != 0) {
+        ch = name[i];
+        sum += ch;
+        i++;
+    }
+    return sum % (MAX_TCP_PHYSICAL_CHANNELS-1);
+}
+
+uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
+    uint32_t hsag_mask = 0;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if(ag_mask & (1 << i)) {
+            hsag_mask |= (1 << shm_conn_info->stats[i].hsnum); // set bin mask to 1
+        }
+    }
+    return hsag_mask;
+}
+
+uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
+    uint32_t ag_mask = 0;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if(hsag_mask & (1 << i)) {
+            ag_mask |= (1 << hsnum2pnum(i)); // set bin mask to 1
+        }
+    }
+    return ag_mask;
+}
+
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
@@ -2880,6 +2922,7 @@ int set_rttlag() {
     } else {
         int min_rtt = INT32_MAX;
         int max_rtt = 0;
+        int chamt = 0;
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
                 if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
@@ -2889,9 +2932,14 @@ int set_rttlag() {
                 if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
                     max_rtt = shm_conn_info->stats[i].exact_rtt;
                 }
+                chamt++;
             }
         }
-        shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only
+        if(chamt > 1) {
+            shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only
+        } else {
+            shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
+        }
     }
 }
 
@@ -2919,6 +2967,8 @@ int lfd_linker(void)
         int send_q_min = 999999999;
         int send_q_eff_min = 999999999;
     #endif
+    // set up hash name
+    shm_conn_info->stats[info.process_num].hsnum = name2hsnum(shm_conn_info->stats[info.process_num].name);
     
     js_buf = malloc(JS_MAX);
     memset(js_buf, 0, JS_MAX);
@@ -4272,6 +4322,7 @@ int lfd_linker(void)
             start_json(js_buf, &js_cur);
             add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
             add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
+            add_json(js_buf, &js_cur, "hsnum", "%d", shm_conn_info->stats[info.process_num].hsnum);
             add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
             add_json(js_buf, &js_cur, "super", "%d", super);
@@ -4280,7 +4331,8 @@ int lfd_linker(void)
             was_hold_mode = 0; // TODO: remove
             //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
             add_json(js_buf, &js_cur, "agag", "%d", agag);
-            add_json(js_buf, &js_cur, "agm_rcv", "%d", NumberOfSetBits(shm_conn_info->ag_mask_recv));
+            add_json(js_buf, &js_cur, "agm_rcv", "%d", shm_conn_info->ag_mask_recv);
+            add_json(js_buf, &js_cur, "agm", "%d", shm_conn_info->ag_mask);
             add_json(js_buf, &js_cur, "rtt", "%d", info.rtt);
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
             //add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
@@ -4504,7 +4556,7 @@ int lfd_linker(void)
                 sem_post(write_buf_sem);
                 tmp16_n = htons(tmp16); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
-                tmp32_n = htonl(shm_conn_info->ag_mask);
+                tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
@@ -4583,7 +4635,7 @@ int lfd_linker(void)
                     sem_post(write_buf_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
-                    tmp32_n = htonl(shm_conn_info->ag_mask);
+                    tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
                         if(debug_trace) {
@@ -5475,7 +5527,7 @@ if(drop_packet_flag) {
                             
                             
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
-                            shm_conn_info->ag_mask_recv = ntohl(tmp32_n);
+                            shm_conn_info->ag_mask_recv = hsag_mask2ag_mask(ntohl(tmp32_n));
                             set_rttlag();
                             shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
 
