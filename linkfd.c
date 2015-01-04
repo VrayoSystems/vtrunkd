@@ -1960,10 +1960,13 @@ int write_buf_check_n_flush(int logical_channel) {
 #ifdef DEBUGG
             gettimeofday(&work_loop2, NULL );
             vtun_syslog(LOG_INFO, "dev_write time: %"PRIu32" us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
-            vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len,
-                    shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
-                    weight, shm_conn_info->frames_buf[fprev].len, logical_channel);
 #endif
+            
+            if (debug_trace) {
+                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d", buf_len, incomplete_seq_len,
+                        shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
+                        weight, shm_conn_info->frames_buf[fprev].len, logical_channel);
+            }
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
