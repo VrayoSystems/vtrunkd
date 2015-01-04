@@ -2892,7 +2892,6 @@ int set_rttlag() {
             }
         }
         shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only
-        shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
     }
 }
 
@@ -4187,6 +4186,7 @@ int lfd_linker(void)
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
+            shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -5477,6 +5477,7 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
                             shm_conn_info->ag_mask_recv = ntohl(tmp32_n);
                             set_rttlag();
+                            shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
 
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
