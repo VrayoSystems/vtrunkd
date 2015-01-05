@@ -806,25 +806,15 @@ int check_rtt_latency_drop_chan(int chan_num) {
 static inline int check_force_rtt_max_wait_time(int chan_num) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     int cnt = 0;
-    int max_wait = 0, rtt_fix;
-    struct timeval tv_tmp, rtt_fix_tv, max_wait_tv = {0,0};
+    struct timeval tv_tmp, rtt_fix_tv, max_wait_tv = {INT32_MAX, 0};
     int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
     
     if(full_rtt == 0) return 1;
 
     while(i > -1) {
-        rtt_fix = full_rtt - shm_conn_info->frames_buf[i].current_rtt;
-        rtt_fix = rtt_fix < 0 ? 0 : rtt_fix;
-        ms2tv(&rtt_fix_tv, rtt_fix);
-        timersub(&info.current_time, &shm_conn_info->frames_buf[i].time_stamp, &tv_tmp);
-        if ( timercmp(&tv_tmp, &max_wait_tv, >=) ) {
-            max_wait_tv = tv_tmp;
+        if ( timercmp(&shm_conn_info->frames_buf[i].flush_time, &max_wait_tv, <=) ) {
+            max_wait_tv = shm_conn_info->frames_buf[i].flush_time;
         }
-
-        // TODO: code with rtt in account - is much more heavier than just oldest packet
-//        if ( timercmp(&shm_conn_info->frames_buf[i].time_stamp, &max_wait_tv, >=) ) {
-//            max_wait_tv = shm_conn_info->frames_buf[i].time_stamp;
-//        }
 
         n = shm_conn_info->frames_buf[i].rel_next;
         i = n;
@@ -832,8 +822,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num) {
         cnt++;
         if(cnt > 200) break; // do not look too deep?
     }
-    ms2tv(&tv_tmp, full_rtt);
-    return timercmp(&max_wait_tv, &tv_tmp, >=);
+    return timercmp(&max_wait_tv, &info.current_time, <=);
 }
 
 int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
@@ -1785,6 +1774,7 @@ int write_buf_check_n_flush(int logical_channel) {
     forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
+    int buf_len = shm_conn_info->write_buf[logical_channel].frames.len;
 
     // first select tun
     fd_set fdset2;
@@ -2122,6 +2112,16 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
+    struct timeval t_rtt, t_frtt, tv_tmp;
+    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    if(info.exact_rtt < full_rtt) {
+        ms2tv(&t_rtt, info.exact_rtt);
+        ms2tv(&t_frtt, full_rtt);
+        timersub(&t_frtt, &t_rtt, &tv_tmp);
+        timeradd(&info.current_time, &tv_tmp, &shm_conn_info->frames_buf[newf].flush_time);
+    } else {
+        shm_conn_info->frames_buf[newf].flush_time = info.current_time;
+    }
     shm_conn_info->write_buf[conn_num].frames.len++;
     if(i<0) {
         // expensive op; may be optimized!
