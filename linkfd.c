@@ -900,13 +900,15 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     // means we received a local loss with this global seq
                     // and write buf says it is likely a loss
                     // TODO: we have a slight chance of doing this by mistake
-                    //.    think how to deal with..
+                    //.    think how to deal with.. UPDATE: it is already dealt with by writing late packets
                     // TODO TODO: NOT JUST BIGGER SEQ NUM BUT SOME RANGE TO DETECT WITHIN
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
                     if(shm_conn_info->stats[p].channel_dead  
-                        || ((shm_conn_info->stats[p].exact_rtt + shm_conn_info->stats[p].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) 
-                            > ( (int32_t)(tv2ms(&max_latency_drop)*2) + shm_conn_info->forced_rtt)) { // trying to fix #359 - mul MLD by 2
+                        || (((shm_conn_info->stats[p].exact_rtt + shm_conn_info->stats[p].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) 
+                            > ( (int32_t)(tv2ms(&max_latency_drop)*2) + shm_conn_info->forced_rtt))
+                        || !(shm_conn_info->ag_mask_recv & (1 << p))
+                      ) { // trying to fix #359 - mul MLD by 2
                         // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
                     }
@@ -920,6 +922,14 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
             //info.least_rx_seq[i] = any_lrx;
             info.least_rx_seq[i] = 0; // do not detect any loss
+            // init least_rx_seq with max value of current chans
+            for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+                if ((chan_mask & (1 << p)) && (!shm_conn_info->stats[p].channel_dead)) {
+                    if (shm_conn_info->write_buf[i].last_received_seq[p] > info.least_rx_seq[i]) {
+                        info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
+                    }
+                }
+            }
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
