@@ -919,7 +919,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
-            vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
+            //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
             //info.least_rx_seq[i] = any_lrx;
             info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
