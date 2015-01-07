@@ -907,7 +907,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     if(shm_conn_info->stats[p].channel_dead  
                         || (((shm_conn_info->stats[p].exact_rtt + shm_conn_info->stats[p].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) 
                             > ( (int32_t)(tv2ms(&max_latency_drop)*2) + shm_conn_info->forced_rtt))
-                        || !(shm_conn_info->ag_mask_recv & (1 << p))
+                        //|| !(shm_conn_info->ag_mask_recv & (1 << p)) // this is TODO #395
                       ) { // trying to fix #359 - mul MLD by 2
                         // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
@@ -923,6 +923,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             //info.least_rx_seq[i] = any_lrx;
             info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
+            /* // TODO for #395
             for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
                 if ((chan_mask & (1 << p)) && (!shm_conn_info->stats[p].channel_dead)) {
                     if (shm_conn_info->write_buf[i].last_received_seq[p] > info.least_rx_seq[i]) {
@@ -930,6 +931,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     }
                 }
             }
+            */
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
