@@ -668,6 +668,10 @@ struct conn_info {
     uint32_t ag_mask; // unsynced
     uint32_t ag_mask_recv; // unsynced
     int max_rtt_lag;
+    int APCS_cnt; // counter for coming packets with AG mode
+    int APCS; // speed for packets per seconf in AG mode coming to WB
+    int tokens;
+    struct timeval tokens_lastadd_tv;
 };
 
 struct resent_chk {

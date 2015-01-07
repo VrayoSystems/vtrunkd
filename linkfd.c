@@ -802,27 +802,48 @@ int check_rtt_latency_drop_chan(int chan_num) {
 }
 
 
-// TODO: this MUST be heavily optimized! vvv
-static inline int check_force_rtt_max_wait_time(int chan_num) {
-    int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
-    int cnt = 0;
-    struct timeval tv_tmp, rtt_fix_tv, max_wait_tv = {INT32_MAX, 0};
+static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
-    
-    if(full_rtt == 0) return 1;
-
-    while(i > -1) {
-        if ( timercmp(&shm_conn_info->frames_buf[i].flush_time, &max_wait_tv, <=) ) {
-            max_wait_tv = shm_conn_info->frames_buf[i].flush_time;
-        }
-
-        n = shm_conn_info->frames_buf[i].rel_next;
-        i = n;
-        
-        cnt++;
-        if(cnt > 200) break; // do not look too deep?
+    if(full_rtt == 0) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
     }
-    return timercmp(&max_wait_tv, &info.current_time, <=);
+           
+    int max_buf_len = shm_conn_info->APCS * full_rtt / 1000;
+    if(max_buf_len < 20) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
+    
+    int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
+    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
+    if(buf_len >= max_buf_len) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
+    
+    // now do add some tokens ?
+    
+    struct timeval passed_tv;
+    timersub(&info.current_time, &shm_conn_info->tokens_lastadd_tv, &passed_tv);
+    int ms_passed = tv2ms(&passed_tv);
+    int tokens_to_add = shm_conn_info->APCS * ms_passed / 1000;
+    
+    if(tokens_to_add > 0) shm_conn_info->tokens_lastadd_tv = info.current_time;
+    shm_conn_info->tokens += tokens_to_add;
+    // WARNING HERE: TODO need to calculate correct time for select to wait
+    // AND USE__ it!!!
+    // if no tokens left ...
+    
+    if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
+        shm_conn_info->tokens--;
+        return 1;
+    } else {
+        int ms_for_token = 1000 / shm_conn_info->APCS; 
+        if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
+        *next_token_ms = ms_for_token;
+        return 0;
+    }
 }
 
 int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
@@ -846,9 +867,10 @@ int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
     return 0;
 }
 
-int get_write_buf_wait_data(uint32_t chan_mask) {
+int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
+    // TODO WARNING i do not know why we are still checking packets if we see no rel_head
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
     int any_lrx, seq_loss = 0;
@@ -900,7 +922,7 @@ int get_write_buf_wait_data(uint32_t chan_mask) {
             info.least_rx_seq[i] = 0; // do not detect any loss
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            forced_rtt_reached=check_force_rtt_max_wait_time(i);
+            forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
@@ -916,6 +938,8 @@ int get_write_buf_wait_data(uint32_t chan_mask) {
             } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
                 return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
             }
+        } else {
+            shm_conn_info->write_buf[i].frames.len = 0; // fix if it becomes broken for any reason
         }
     }
     return 0;
@@ -1778,7 +1802,8 @@ int write_buf_check_n_flush(int logical_channel) {
     int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
     struct timeval tv;
-    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel);
+    int ts;
+    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, ts);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
     int buf_len = shm_conn_info->write_buf[logical_channel].frames.len;
@@ -2130,6 +2155,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->frames_buf[newf].flush_time = info.current_time;
     }
     shm_conn_info->write_buf[conn_num].frames.len++;
+    shm_conn_info->APCS_cnt++;
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
@@ -4247,6 +4273,8 @@ int lfd_linker(void)
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
             shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
+            shm_conn_info->APCS = shm_conn_info->APCS_cnt * 2;
+            shm_conn_info->APCS_cnt = 0;
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -5011,9 +5039,11 @@ int lfd_linker(void)
             info.max_latency_drop.tv_sec = 0;
             info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
         }
+        int next_token_ms;
+        next_token_ms = 0;
 
         FD_ZERO(&fdset_w);
-        if (get_write_buf_wait_data(chan_mask) || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
+        if (get_write_buf_wait_data(chan_mask, &next_token_ms) || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
             FD_SET(info.tun_device, pfdset_w);
         } else {
@@ -5027,10 +5057,18 @@ int lfd_linker(void)
         if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
-            tv.tv_usec = SELECT_SLEEP_USEC;
+            if(next_token_ms == 0) {
+                tv.tv_usec = SELECT_SLEEP_USEC;
+            } else {
+                tv.tv_usec = next_token_ms * 1000;
+            }
         } else {
             tv.tv_sec = get_info_time.tv_sec;
-            tv.tv_usec = get_info_time.tv_usec;
+            if(next_token_ms == 0) {
+                tv.tv_usec = get_info_time.tv_usec;
+            } else {
+                tv.tv_usec = next_token_ms * 1000;
+            }
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "tun read select skip");
             vtun_syslog(LOG_INFO, "debug: HOLD_MODE");
