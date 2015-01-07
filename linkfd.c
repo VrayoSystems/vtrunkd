@@ -2499,16 +2499,16 @@ int hsnum2pnum(int hsnum) {
     return -1;
 }
 
-int name2hsnum(char *name) {
+uint32_t name2hsnum(char *name) {
     int i = 0;
-    char ch = name[0];
-    int sum = 0;
+    unsigned char ch = name[0];
+    uint32_t sum = 0;
     while(ch != 0) {
         ch = name[i];
         sum += ch;
         i++;
     }
-    return sum % (MAX_TCP_PHYSICAL_CHANNELS-1);
+    return sum % 31;
 }
 
 uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
@@ -3013,8 +3013,6 @@ int lfd_linker(void)
         int send_q_min = 999999999;
         int send_q_eff_min = 999999999;
     #endif
-    // set up hash name
-    shm_conn_info->stats[info.process_num].hsnum = name2hsnum(shm_conn_info->stats[info.process_num].name);
     
     js_buf = malloc(JS_MAX);
     memset(js_buf, 0, JS_MAX);
@@ -3170,6 +3168,8 @@ int lfd_linker(void)
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
     strcpy(shm_conn_info->stats[info.process_num].name, lfd_host->host);
+    // set up hash name
+    shm_conn_info->stats[info.process_num].hsnum = name2hsnum(shm_conn_info->stats[info.process_num].name);
     sem_post(&(shm_conn_info->stats_sem));    
 #ifdef CLIENTONLY
     info.srv = 0;
