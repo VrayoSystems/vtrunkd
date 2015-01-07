@@ -670,6 +670,7 @@ struct conn_info {
     int max_rtt_lag;
     int APCS_cnt; // counter for coming packets with AG mode
     int APCS; // speed for packets per seconf in AG mode coming to WB
+    struct timeval APCS_tick_tv;
     int tokens;
     struct timeval tokens_lastadd_tv;
 };

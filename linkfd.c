@@ -4283,8 +4283,6 @@ int lfd_linker(void)
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
             shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
-            shm_conn_info->APCS = shm_conn_info->APCS_cnt * 2;
-            shm_conn_info->APCS_cnt = 0;
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -4307,6 +4305,13 @@ int lfd_linker(void)
             int cur_plp = plp_avg_pbl(info.process_num);
             
             sem_wait(&(shm_conn_info->stats_sem));
+            timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
+            if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=)) {
+                shm_conn_info->APCS = shm_conn_info->APCS_cnt * tv2ms(&tv_tmp) / 1000;
+                shm_conn_info->APCS_cnt = 0;
+                shm_conn_info->APCS_tick_tv = info.current_time;
+            }
+            
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp; // absolutely unnessessary (done at loop )
             //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
@@ -4411,6 +4416,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
+            add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
             add_json(js_buf, &js_cur, "ACS_ll", "%d", max_ACS2);
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
