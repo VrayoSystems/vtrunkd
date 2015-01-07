@@ -2515,7 +2515,7 @@ uint32_t name2hsnum(char *name) {
 
 uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
     uint32_t hsag_mask = 0;
-    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+    for (int i = 0; i < 32; i++) {
         if(ag_mask & (1 << i)) {
             hsag_mask |= (1 << shm_conn_info->stats[i].hsnum); // set bin mask to 1
         }
@@ -2525,7 +2525,7 @@ uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
 
 uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
     uint32_t ag_mask = 0;
-    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+    for (int i = 0; i < 32; i++) {
         if(hsag_mask & (1 << i)) {
             ag_mask |= (1 << hsnum2pnum(i)); // set bin mask to 1
         }
