@@ -1813,7 +1813,7 @@ int write_buf_check_n_flush(int logical_channel) {
     struct timeval tv_tmp, rtt_fix_tv;
     struct timeval tv;
     int ts;
-    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, ts);
+    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
     int buf_len = shm_conn_info->write_buf[logical_channel].frames.len;
