@@ -1818,7 +1818,9 @@ int write_buf_check_n_flush(int logical_channel) {
     forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
-    int buf_len = shm_conn_info->write_buf[logical_channel].frames.len;
+    //int buf_len = shm_conn_info->write_buf[logical_channel].frames.len; // disabled for #400
+    int tail_idx = shm_conn_info->write_buf[logical_channel].frames.rel_tail;
+    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq;
 
     // first select tun
     fd_set fdset2;
@@ -1872,8 +1874,8 @@ int write_buf_check_n_flush(int logical_channel) {
                 if (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d", info.flush_sequential,
-                            shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len);
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d bl %d", info.flush_sequential,
+                            shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len);
                     loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
