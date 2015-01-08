@@ -810,14 +810,14 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
            
     int max_buf_len = shm_conn_info->APCS * full_rtt / 1000;
-    if(max_buf_len < 20) {
+    if(max_buf_len < 10) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
     
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-    if(buf_len >= max_buf_len) {
+    if(buf_len >= max_buf_len || buf_len > 200) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
@@ -2065,8 +2065,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     if (i == -1) {
         shm_conn_info->write_buf[conn_num].last_write_time = info.current_time;
     }
-    if (( (seq_num > shm_conn_info->write_buf[conn_num].last_written_seq) &&
-            (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq) >= STRANGE_SEQ_FUTURE ) ||
+    int tail_idx = shm_conn_info->write_buf[conn_num].frames.rel_tail;
+    if (( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
+            (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num ) >= STRANGE_SEQ_FUTURE ) ||
             ( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST )) { // this ABS comparison makes checks in MRB unnesesary...
         vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq));
