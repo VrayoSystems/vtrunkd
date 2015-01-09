@@ -1067,7 +1067,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
         }
         j--;
         if (j == -1) {
-            j = RESEND_BUF_SIZE;
+            j = RESEND_BUF_SIZE - 1;
         }
     }
 
@@ -1116,7 +1116,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
         }
         j--;
         if (j == -1) {
-            j = RESEND_BUF_SIZE;
+            j = RESEND_BUF_SIZE - 1;
         }
     }
 
