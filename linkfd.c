@@ -5055,12 +5055,14 @@ int lfd_linker(void)
         chan_mask = shm_conn_info->channels_mask;
         sem_post(&shm_conn_info->AG_flags_sem);
         sem_wait(write_buf_sem);
+        /*
         if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
             ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at FCI recv
         } else {
             info.max_latency_drop.tv_sec = 0;
             info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
         }
+        */
         int next_token_ms;
         next_token_ms = 0;
 
@@ -5587,12 +5589,14 @@ if(drop_packet_flag) {
                             
                             sem_wait(write_buf_sem);
                             shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n);
+                            /*
                             if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
                                 ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select
                             } else {
                                 info.max_latency_drop.tv_sec = 0;
                                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
                             }
+                            */
                             sem_post(write_buf_sem);
                             
                             
