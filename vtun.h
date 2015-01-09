@@ -581,6 +581,8 @@ struct timed_loss {
     uint16_t name;
     int pbl;
     int psl;
+    uint32_t sqn;
+    int16_t who_lost;
 };
 
 /** @struct conn_info

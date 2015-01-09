@@ -482,7 +482,7 @@ int update_prev_flushed(int logical_channel, int fprev) {
 
 // return who is lagging. 
 // NOTE: Need to ensure that we have a missing packet at LWS+1 prior to calling this!
-int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mask) {
+int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mask, int *who_lost_pnum) {
     // we let that next seq_num to LWS is lost
     int lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
     int lrq = 0;
@@ -493,12 +493,14 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
             if( (status == WHO_LAGGING) && ( (shm_conn_info->write_buf[logical_channel].last_received_seq[i]) < lost_seq_num)) {
                 if( (shm_conn_info->write_buf[logical_channel].last_received_seq[i]) > lrq) { // we find the most recent one that fulfills the conditions
                     strcpy(pname, shm_conn_info->stats[i].name); 
+                    *who_lost_pnum = i;
                     lrq = shm_conn_info->write_buf[logical_channel].last_received_seq[i];
                 }
             }
             if( (status == WHO_LOST) && (lost_seq_num <= shm_conn_info->write_buf[logical_channel].possible_seq_lost[i])) {
                 if(shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] > lrq) {
                     strcpy(pname, shm_conn_info->stats[i].name); 
+                    *who_lost_pnum = i;
                     lrq = shm_conn_info->write_buf[logical_channel].possible_seq_lost[i];
                 }
             }
@@ -524,6 +526,7 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
             if (chan_mask & (1 << i)) {
                 if( (status == WHO_LOST) && shm_conn_info->write_buf[logical_channel].packet_lost_state[i]) {
                     strcpy(pname+1, shm_conn_info->stats[i].name);
+                    *who_lost_pnum = i;
                     lagging++;
                 }
             }
@@ -539,6 +542,7 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
                 if(shm_conn_info->write_buf[logical_channel].possible_seq_lost[i] > highest_psl) {
                     highest_psl = shm_conn_info->write_buf[logical_channel].possible_seq_lost[i];
                     strcpy(pname+1, shm_conn_info->stats[i].name);
+                    *who_lost_pnum = i;
                     lagging++;
                 }
             }
@@ -1281,6 +1285,26 @@ int check_fast_resend() {
     return 1;
 }
 
+int send_packet(int chan_num, char *buf, int len) {
+     
+    // TODO: add select() here!
+    // TODO: optimize here
+    uint32_t tmp_seq_counter;
+    uint32_t local_seq_num_p;
+    uint16_t tmp_flag;
+    uint16_t sum;
+    len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+    len = pack_packet(chan_num, out_buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
+    
+    // send DATA
+    int len_ret = udp_write(info.channel[chan_num].descriptor, out_buf, len);
+    if (len && (len_ret < 0)) {
+        vtun_syslog(LOG_INFO, "error retransmit to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+        return BREAK_ERROR;
+    }
+    info.channel[chan_num].local_seq_num++;
+    // TODO: all the stats here??
+}
 
 /*
           _                                 _ _                            _ 
@@ -1871,15 +1895,16 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
                 print_flush_data();
                 int loss_flag = 0;
+                int who_lost_pnum = -1;
                 if (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
-                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d bl %d", info.flush_sequential,
                             shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len);
                     loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
-                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO,
                             "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
@@ -1889,7 +1914,7 @@ int write_buf_check_n_flush(int logical_channel) {
 
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
-                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
@@ -1898,7 +1923,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
-                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask);
+                    r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
@@ -1937,6 +1962,8 @@ int write_buf_check_n_flush(int logical_channel) {
                     gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
                     shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
                     shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
+                    shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = shm_conn_info->stats[who_lost_pnum].hsnum;
+                    shm_conn_info->loss[shm_conn_info->loss_idx].sqn = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
                 }
             }
             // mean latency experiment
@@ -3621,6 +3648,10 @@ int lfd_linker(void)
                 memcpy(buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
                 tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
                 memcpy(buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                tmp_h = htonl(shm_conn_info->loss[info.last_sent_FLI_idx].sqn);
+                memcpy(buf + sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp_h, sizeof(uint32_t));
+                uint16_t tmp_s = htons(shm_conn_info->loss[info.last_sent_FLI_idx].who_lost);
+                memcpy(buf + sizeof(uint16_t) + 6 * sizeof(uint32_t), &tmp_s, sizeof(uint16_t));
 
                 fd_set fdset2;
                 tv_tmp.tv_sec = 0;
@@ -3628,7 +3659,7 @@ int lfd_linker(void)
                 FD_ZERO(&fdset2);
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
-                    if (proto_write(service_channel, buf, ((5 * sizeof(uint32_t) + sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                    if (proto_write(service_channel, buf, ((6 * sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
                         vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
                         return 0;
@@ -5490,6 +5521,7 @@ if(drop_packet_flag) {
                             shm_conn_info->channels_mask = ntohl(chan_mask_h);
                             sem_post(&(shm_conn_info->AG_flags_sem));
                         } else if ((flag_var == FRAME_LOSS_INFO) || (flag_var == FRAME_L_LOSS_INFO)) {
+                            int psl;
                             uint32_t tmp_h;
                             struct timeval tv_tmp;
                             start_json(lossLog, &lossLog_cur);
@@ -5502,15 +5534,64 @@ if(drop_packet_flag) {
                             tv_tmp.tv_usec = ntohl(tmp_h);
                             add_json(lossLog, &lossLog_cur, "ts", "%d", tv2ms(&tv_tmp));
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
-                            if (flag_var == FRAME_LOSS_INFO)
+                            if (flag_var == FRAME_LOSS_INFO) {
                                 add_json(lossLog, &lossLog_cur, "psl", "%d", ntohl(tmp_h));
-                            else
+                                psl = ntohl(tmp_h);
+                            } else {
                                 add_json(lossLog, &lossLog_cur, "l_psl", "%d", ntohl(tmp_h));
+                            }
 
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
                             if (flag_var == FRAME_LOSS_INFO) {
                                 add_json(lossLog, &lossLog_cur, "pbl", "%d", ntohl(tmp_h));
+                                memcpy(&tmp_h, buf + sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t));
+                                uint32_t sqn = ntohl(tmp_h);
+                                add_json(lossLog, &lossLog_cur, "sqn", "%d", sqn);
+                                add_json(lossLog, &lossLog_cur, "sqn2", "%d", sqn + 1);
                                 add_json(lossLog, &lossLog_cur, "name", "\"%s\"", lfd_host->host);
+                                uint16_t tmp_s;
+                                memcpy(&tmp_s, buf + sizeof(uint16_t) + 6 * sizeof(uint32_t), sizeof(uint16_t));
+                                int hsnum = (int)ntohs(tmp_s);
+                                int who_lost = hsnum2pnum(hsnum);
+                                add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
+                                if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) {
+                                    // now find chan with smallest RTT
+                                    int min_rtt = INT32_MAX;
+                                    int min_rtt_chan = 0;
+                                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                                            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                                                min_rtt = shm_conn_info->stats[i].exact_rtt;
+                                                min_rtt_chan = i;
+                                            }
+                                        }
+                                    }
+                                    if(min_rtt_chan == info.process_num) {
+                                        // now do retransmit
+                                        sem_wait(&(shm_conn_info->resend_buf_sem));
+                                        int mypid;
+                                        int len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
+                                        if (len == -1) {
+                                            vtun_syslog(LOG_ERR, "WARNING could not retransmit packet %lu - not found", sqn);
+                                            sem_post(&(shm_conn_info->resend_buf_sem));
+                                        } else {
+                                            memcpy(out_buf, out2, len);
+                                            sem_post(&(shm_conn_info->resend_buf_sem));
+                                           send_packet(1, out2, len);
+                                        }
+                                        sqn++; 
+                                        sem_wait(&(shm_conn_info->resend_buf_sem));
+                                        len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
+                                        if (len == -1) {
+                                            vtun_syslog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
+                                            sem_post(&(shm_conn_info->resend_buf_sem));
+                                        } else {
+                                            memcpy(out_buf, out2, len);
+                                            sem_post(&(shm_conn_info->resend_buf_sem));
+                                           send_packet(1, out2, len);
+                                        }
+                                    }
+                                }
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
                                 uint16_t tmp16_n;
