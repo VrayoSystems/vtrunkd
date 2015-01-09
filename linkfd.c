@@ -4405,6 +4405,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
+            add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
