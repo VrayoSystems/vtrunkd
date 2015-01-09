@@ -5577,6 +5577,7 @@ if(drop_packet_flag) {
                                         } else {
                                             memcpy(out_buf, out2, len);
                                             sem_post(&(shm_conn_info->resend_buf_sem));
+                                            vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
                                            send_packet(1, out2, len);
                                         }
                                         sqn++; 
@@ -5588,6 +5589,7 @@ if(drop_packet_flag) {
                                         } else {
                                             memcpy(out_buf, out2, len);
                                             sem_post(&(shm_conn_info->resend_buf_sem));
+                                            vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
                                            send_packet(1, out2, len);
                                         }
                                     }
