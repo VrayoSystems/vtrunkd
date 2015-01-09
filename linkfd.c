@@ -487,6 +487,7 @@ int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mas
     int lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
     int lrq = 0;
     int lagging = 0;
+    *who_lost_pnum = -1;
     // find possible processes
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (chan_mask & (1 << i) && (!shm_conn_info->stats[i].channel_dead) && check_rtt_latency_drop_chan(i)) {
@@ -1962,7 +1963,11 @@ int write_buf_check_n_flush(int logical_channel) {
                     gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
                     shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
                     shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
-                    shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = shm_conn_info->stats[who_lost_pnum].hsnum;
+                    if(who_lost_pnum != -1) {
+                        shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = shm_conn_info->stats[who_lost_pnum].hsnum;
+                    } else {
+                        shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = -1;
+                    }
                     shm_conn_info->loss[shm_conn_info->loss_idx].sqn = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
                 }
             }
@@ -5552,7 +5557,12 @@ if(drop_packet_flag) {
                                 uint16_t tmp_s;
                                 memcpy(&tmp_s, buf + sizeof(uint16_t) + 6 * sizeof(uint32_t), sizeof(uint16_t));
                                 int hsnum = (int)ntohs(tmp_s);
-                                int who_lost = hsnum2pnum(hsnum);
+                                int who_lost = -1;
+                                if(hsnum == -1) {
+                                    vtun_syslog(LOG_ERR, "WARNING could not detect who lost %lu - sending unconditionally", sqn);
+                                } else {
+                                    who_lost = hsnum2pnum(hsnum);
+                                }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
                                 if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) {
                                     // now find chan with smallest RTT
@@ -5580,17 +5590,19 @@ if(drop_packet_flag) {
                                             vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
                                            send_packet(1, out2, len);
                                         }
-                                        sqn++; 
-                                        sem_wait(&(shm_conn_info->resend_buf_sem));
-                                        len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
-                                        if (len == -1) {
-                                            vtun_syslog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
-                                            sem_post(&(shm_conn_info->resend_buf_sem));
-                                        } else {
-                                            memcpy(out_buf, out2, len);
-                                            sem_post(&(shm_conn_info->resend_buf_sem));
-                                            vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
-                                           send_packet(1, out2, len);
+                                        if(psl == 2) {
+                                            sqn++; 
+                                            sem_wait(&(shm_conn_info->resend_buf_sem));
+                                            len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
+                                            if (len == -1) {
+                                                vtun_syslog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
+                                                sem_post(&(shm_conn_info->resend_buf_sem));
+                                            } else {
+                                                memcpy(out_buf, out2, len);
+                                                sem_post(&(shm_conn_info->resend_buf_sem));
+                                                vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
+                                               send_packet(1, out2, len);
+                                            }
                                         }
                                     }
                                 }
