@@ -5564,7 +5564,8 @@ if(drop_packet_flag) {
                                     who_lost = hsnum2pnum(hsnum);
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
-                                if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) {
+                                //if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) { // this is for fairness model #407
+                                if(psl <= 2) {
                                     // now find chan with smallest RTT
                                     int min_rtt = INT32_MAX;
                                     int min_rtt_chan = 0;
