@@ -3910,6 +3910,9 @@ int lfd_linker(void)
             redetect_head_unsynced(chan_mask, -1);
 
             send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            if (info.max_send_q < send_q_eff_mean) {
+                info.max_send_q = send_q_eff_mean;
+            }
             info.tv_sqe_mean_added = info.current_time;
             int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
             if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
@@ -5709,9 +5712,9 @@ if(drop_packet_flag) {
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
-                            if (info.max_send_q < info.channel[chan_num].send_q) {
-                                info.max_send_q = info.channel[chan_num].send_q;
-                            }
+                            //if (info.max_send_q < info.channel[chan_num].send_q) {
+                            //    info.max_send_q = info.channel[chan_num].send_q;
+                            //}
                             //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
                             //if (info.channel[chan_num].send_q > 90000)
                             //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
@@ -6042,9 +6045,9 @@ if(drop_packet_flag) {
                     info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
-                    if(info.max_send_q < info.channel[chan_num].send_q) {
-                        info.max_send_q = info.channel[chan_num].send_q;
-                    }
+                    //if(info.max_send_q < info.channel[chan_num].send_q) {
+                    //    info.max_send_q = info.channel[chan_num].send_q;
+                    //}
                     if( (last_recv_lsn - peso_old_last_recv_lsn) > PESO_STAT_PKTS) {
                         // TODO: multi-channels broken here!
                         timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
