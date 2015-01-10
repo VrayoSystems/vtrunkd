@@ -5621,7 +5621,7 @@ if(drop_packet_flag) {
                                         if (strncmp(shm_conn_info->stats[i].name + strlen(shm_conn_info->stats[i].name) - 2, char_tmp, 2) == 0) {
                                             if(shm_conn_info->stats[i].l_pbl_recv != ntohl(tmp_h)) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
-                                                add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", l_pbl_tmp);
+                                                add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
                                             }
                                             add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
