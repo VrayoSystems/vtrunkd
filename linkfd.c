@@ -809,12 +809,13 @@ int check_rtt_latency_drop_chan(int chan_num) {
 
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    int APCS = shm_conn_info->APCS;
     if(full_rtt == 0) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
            
-    int max_buf_len = shm_conn_info->APCS * full_rtt / 1000;
+    int max_buf_len =  APCS * full_rtt / 1000;
     if(max_buf_len < 10) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
@@ -822,9 +823,14 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-    if(buf_len >= max_buf_len || buf_len > 200) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
+    if(buf_len >= max_buf_len) {
+        APCS = shm_conn_info->APCS * 2;
+    }
+    if(buf_len >= max_buf_len * 2 ) {
+        APCS = shm_conn_info->APCS * 3;
+    }
+    if(buf_len >= max_buf_len * 3) {
+        APCS = shm_conn_info->APCS * 10;
     }
     
     // now do add some tokens ?
@@ -832,19 +838,15 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     struct timeval passed_tv;
     timersub(&info.current_time, &shm_conn_info->tokens_lastadd_tv, &passed_tv);
     int ms_passed = tv2ms(&passed_tv);
-    int tokens_to_add = shm_conn_info->APCS * ms_passed / 1000;
+    int tokens_to_add = APCS * ms_passed / 1000;
     
     if(tokens_to_add > 0) shm_conn_info->tokens_lastadd_tv = info.current_time;
     shm_conn_info->tokens += tokens_to_add;
-    // WARNING HERE: TODO need to calculate correct time for select to wait
-    // AND USE__ it!!!
-    // if no tokens left ...
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
-        shm_conn_info->tokens--;
         return 1;
     } else {
-        int ms_for_token = 1000 / shm_conn_info->APCS; 
+        int ms_for_token = 1000 / APCS; 
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
         *next_token_ms = ms_for_token;
         return 0;
@@ -2035,6 +2037,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens);
             }
+            shm_conn_info->tokens--; // remove a token...
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
