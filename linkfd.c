@@ -3584,6 +3584,7 @@ int lfd_linker(void)
     timersub(&info.current_time, &new_lag, &loss_time);
     sem_wait(&(shm_conn_info->stats_sem));
     set_W_unsync(t);
+    set_W_to(RSR_TOP, 1, &loss_time); // 1 means immediately!
     sem_post(&(shm_conn_info->stats_sem));
     struct timeval peso_lrl_ts = info.current_time;
     int32_t peso_old_last_recv_lsn = 10;
@@ -5739,7 +5740,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
+                            if (!shm_conn_info->idle && info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
