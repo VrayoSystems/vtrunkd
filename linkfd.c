@@ -841,6 +841,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int tokens_to_add = APCS * ms_passed / 1000;
     
     if(tokens_to_add > 0) shm_conn_info->tokens_lastadd_tv = info.current_time;
+    if(shm_conn_info->tokens < 0) {
+        shm_conn_info->tokens = 0;
+    }
+    if(shm_conn_info->tokens > max_buf_len) {
+        shm_conn_info->tokens = max_buf_len;
+    }
     shm_conn_info->tokens += tokens_to_add;
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
