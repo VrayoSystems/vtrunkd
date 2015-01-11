@@ -573,6 +573,7 @@ struct phisical_status { // A.K.A. "info"
     int tpps_old;
     int32_t encap_streams_bitcnt;
     int encap_streams;
+    int W_cubic_copy;
 };
 
 #define LOSS_ARRAY 80

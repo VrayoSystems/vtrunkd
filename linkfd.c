@@ -4055,12 +4055,14 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "Switching head to 1 (ON)");
             }
             info.head_channel = 1;
+            info.W_cubic_copy = info.send_q_limit_cubic;
         } else {
             if(info.head_channel != 0) {
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
             }
             info.head_channel = 0;
+            info.send_q_limit_cubic = info.W_cubic_copy;
         }
 #endif
         // <<< DEAD DETECT and COPY HEAD from SHM
