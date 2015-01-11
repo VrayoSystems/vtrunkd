@@ -3930,11 +3930,12 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             // FAST TIMER HERE
-            
+            /* 
             if( (shm_conn_info->stats[info.process_num].sqe_mean > SEND_Q_EFF_WORK) 
                     || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
                 shm_conn_info->idle = 0; 
             }
+            */
             
             // FAST speed counter
             timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
@@ -5757,7 +5758,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (!shm_conn_info->idle && info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
+                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
