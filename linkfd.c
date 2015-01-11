@@ -1008,6 +1008,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     int top_seq_num = shm_conn_info->seq_counter[chan_num];
     struct timeval expiration_date;
     struct timeval max_latency;
+    struct timeval hold_period;
+    int expnum = INT32_MAX;
 
     int mrl_ms, drtt_ms, expiration_ms_fromnow;
 
@@ -1028,8 +1030,12 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     ms2tv(&max_latency, expiration_ms_fromnow);
     
     timersub(&info.current_time, &max_latency, &expiration_date);
-    //TODO: compute expiration packet number
-    int expnum = MAX_LATENCY_DROP_USEC / 1000 / 2 * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
+    timersub(&info.current_time, &info.hold_time, &hold_period);
+    if((hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
+        // TODO: need info.ACK_speed_correct flag
+        // this will work just because hold is not likely to kick in before ACS is recalculated
+        expnum = MAX_LATENCY_DROP_USEC / 1000 / 2 * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
+    }
     
     //find start point
     j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
@@ -4305,6 +4311,9 @@ int lfd_linker(void)
             shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
         }
         // << END HOLD/DROP setup
+        if(hold_mode) {
+            info.hold_time = info.current_time;
+        }
         
         
         // fast convergence to underlying encap flow >>> 
