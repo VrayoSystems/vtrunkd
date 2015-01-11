@@ -4345,6 +4345,10 @@ int lfd_linker(void)
             if(buf != save_buf) {
                 vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
             }
+            if(shm_conn_info->idle) {
+                shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
+                set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
+            }
             
             // compute perceived loss probability
             if(info.p_lost > 0 && info.r_lost > 0) {
