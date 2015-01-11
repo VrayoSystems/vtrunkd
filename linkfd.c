@@ -2602,6 +2602,34 @@ int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
     set_W_unsync(0);
 }
 
+int set_IDLE() {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    struct timeval tv_tmp_tmp_tmp;
+   
+    sem_wait(&(shm_conn_info->stats_sem));
+    timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
+    int idle = 1;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+            if( (shm_conn_info->stats[i].sqe_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[i].ACK_speed > ACS_NOT_IDLE) ) {
+                idle = 0;
+            }
+        }
+    }
+
+    if(!idle) {
+        shm_conn_info->idle = 0; 
+    } else {
+        shm_conn_info->idle = 1;
+    }
+    
+    if(shm_conn_info->idle) {
+        shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
+    }
+    
+    sem_post(&(shm_conn_info->stats_sem));
+    return 0;
+}
 // returns max value for send_q (NOT index) at which weight is > 0.7
 int set_smalldata_weights( struct _smalldata *sd, int *pts) {
     struct timeval tv_tmp;
@@ -3903,6 +3931,11 @@ int lfd_linker(void)
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             // FAST TIMER HERE
             
+            if( (shm_conn_info->stats[info.process_num].sqe_mean > SEND_Q_EFF_WORK) 
+                    || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
+                shm_conn_info->idle = 0; 
+            }
+            
             // FAST speed counter
             timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
             int time_passed = tv2ms(&tv_tmp_tmp_tmp);
@@ -4852,29 +4885,9 @@ int lfd_linker(void)
             } else {
                 shm_conn_info->single_stream=1;
             }
-
-            sem_wait(&(shm_conn_info->stats_sem));
-            timersub(&info.current_time, &shm_conn_info->last_switch_time, &tv_tmp_tmp_tmp);
-            int idle = 1;
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
-                        idle = 0;
-                    }
-                }
-            }
-
-            if(!idle) {
-                shm_conn_info->idle = 0; 
-            } else {
-                shm_conn_info->idle = 1;
-            }
             
-            if(shm_conn_info->idle) {
-                shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
-            }
-            
-            sem_post(&(shm_conn_info->stats_sem));
+            set_IDLE();
+
             // head detect code
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) SPEED_REDETECT_TV), >=)) {
                 sem_wait(&(shm_conn_info->stats_sem));
