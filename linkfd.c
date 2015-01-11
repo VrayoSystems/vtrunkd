@@ -4393,6 +4393,7 @@ int lfd_linker(void)
             if(shm_conn_info->idle) {
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
+                info.W_cubic_copy = info.send_q_limit_cubic;
             }
             
             // compute perceived loss probability
