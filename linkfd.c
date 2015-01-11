@@ -4755,7 +4755,11 @@ int lfd_linker(void)
                     //if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
                     vtun_syslog(LOG_INFO, "sedning loss %hd lrs %d, llrs %d", need_send_loss_FCI_flag, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv);
 
-                    tmp16_n = htons(need_send_loss_FCI_flag); // amt of pkts lost till this moment
+                    if(shm_conn_info->stats[info.process_num].pbl_lossed_cnt < 100) {
+                        tmp16_n = htons(need_send_loss_FCI_flag + 10000); // dumbass method of telling that loss is unrecoverable
+                    } else {
+                        tmp16_n = htons(need_send_loss_FCI_flag); // amt of pkts lost till this moment
+                    }
 
                     // inform here that we detected loss -->
                     sem_wait(&(shm_conn_info->write_buf_sem));
@@ -5771,7 +5775,8 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) {
+                            if (info.channel[chan_num].packet_loss > 2 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
+                                // TODO: need to get L_PBL somehow here - see dumbass method at FCI send
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
