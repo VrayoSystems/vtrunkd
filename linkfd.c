@@ -3075,7 +3075,6 @@ int set_rttlag() {
 
 int lfd_linker(void)
 {
-    int select_len = 0;
     int tpps=0;
     memset((void *)&ag_stat, 0, sizeof(ag_stat));
     #ifdef TIMEWARP
@@ -5178,7 +5177,6 @@ int lfd_linker(void)
         gettimeofday(&work_loop1, NULL );
 #endif
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
-        select_len = len;
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
@@ -6503,7 +6501,7 @@ if(drop_packet_flag) {
         sem_post(&shm_conn_info->hard_sem);
 
             //Check time interval and ping if need.
-        if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) && (select_len <= 0) ) {
+        if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) ) {
 				gettimeofday(&info.current_time, NULL); // WTF?
 
 				// ping ALL channels! this is required due to 120-sec limitation on some NATs
