@@ -2899,6 +2899,12 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     if(new_idx >= LOSSED_BACKLOG_SIZE) {
         new_idx = new_idx - LOSSED_BACKLOG_SIZE;
     }
+    
+    if(new_idx >= LOSSED_BACKLOG_SIZE) {
+        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        new_idx = 0;
+    }
+    
     if(new_idx < 0) {
         new_idx = LOSSED_BACKLOG_SIZE - new_idx;
     }
@@ -3018,6 +3024,11 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     while(1) {
         next_missed = info.lossed_complete_received + 1;
         if(next_missed >= LOSSED_BACKLOG_SIZE) next_missed = next_missed - LOSSED_BACKLOG_SIZE;
+        //TODO here: protect from double overflow
+        if(next_missed >= LOSSED_BACKLOG_SIZE) { 
+            next_missed = 0;
+            vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW next_missed is %d, lsn: %d; last lsn: %d, sqn: %d", next_missed, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        }
         
         if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
             info.lossed_complete_received = next_missed;
