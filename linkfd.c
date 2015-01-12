@@ -5786,7 +5786,7 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
-                            if (info.channel[chan_num].packet_loss > 2 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
+                            if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
                                 // TODO: need to get L_PBL somehow here - see dumbass method at FCI send
                                 vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
