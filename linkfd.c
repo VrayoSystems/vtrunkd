@@ -2120,17 +2120,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             ( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST )) { // this ABS comparison makes checks in MRB unnesesary...
         vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq));
-        shm_conn_info->write_buf[conn_num].broken_cnt++;
-        if(shm_conn_info->write_buf[conn_num].broken_cnt > 3) {
-            // fix lws
-            shm_conn_info->write_buf[conn_num].last_written_seq = seq_num-1;
-            vtun_syslog(LOG_INFO, "Broken is perm , Applying permanent fix...");
-        } else {
-            *succ_flag = -2;
-            return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-        }
     }
-    shm_conn_info->write_buf[conn_num].broken_cnt = 0;
 
     if ( (seq_num <= shm_conn_info->write_buf[conn_num].last_written_seq)) {
         //check for oldest dups

@@ -312,7 +312,6 @@ struct _write_buf {
 
     struct timeval last_write_time; // into device
     int buf_len;
-    int broken_cnt;
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
     uint16_t complete_seq_quantity;
@@ -622,7 +621,6 @@ struct conn_info {
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
 
-    //int broken_cnt;
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
