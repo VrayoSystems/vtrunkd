@@ -3945,7 +3945,7 @@ int lfd_linker(void)
             */
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-                shm_conn_info->frtt_local_applied = 7 * shm_conn_info->frtt_local_applied / 8 + shm_conn_info->max_rtt_lag / 8;
+                shm_conn_info->frtt_local_applied = 14 * shm_conn_info->frtt_local_applied / 15 + shm_conn_info->max_rtt_lag / 15;
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + shm_conn_info->frtt_local_applied*1000 + shm_conn_info->forced_rtt_recv*1000;
                 shm_conn_info->frtt_smooth_tick = info.current_time;
             }
