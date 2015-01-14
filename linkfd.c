@@ -1031,7 +1031,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     
     timersub(&info.current_time, &max_latency, &expiration_date);
     timersub(&info.current_time, &info.hold_time, &hold_period);
-    if((hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
+    if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
         // TODO: need info.ACK_speed_correct flag
         // this will work just because hold is not likely to kick in before ACS is recalculated
         expnum = MAX_LATENCY_DROP_USEC / 1000 / 2 * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
