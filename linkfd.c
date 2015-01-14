@@ -3963,8 +3963,9 @@ int lfd_linker(void)
                     vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
                         shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
                     if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
-                        shm_conn_info->forced_rtt = shm_conn_info->drtt;
-                        need_send_FCI = 1;
+                        //shm_conn_info->forced_rtt = shm_conn_info->drtt;
+                        //need_send_FCI = 1;
+                        vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
                     }
                 }
             }
