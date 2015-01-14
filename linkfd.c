@@ -4099,9 +4099,11 @@ int lfd_linker(void)
             double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed;
             double d_rsr_top = shm_conn_info->stats[max_chan].rsr;
             double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt;
+            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;
             d_rtt_h = d_rtt_h / 1000.0; // ms
             double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
             d_rtt = d_rtt / 1000.0; // ms
+            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;
             double d_frtt = shm_conn_info->forced_rtt;
             double d_rsr = info.rsr;
             
@@ -4115,7 +4117,7 @@ int lfd_linker(void)
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
             double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h;
-            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - (d_rtt - d_rtt_h));
+            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - ((d_rtt + d_rtt_var) - (d_rtt_h - d_rtt_h_var)));
             if(d_pump_adj < 0) d_pump_adj = 0;
             
             if(d_rtt_shift < d_sql) {
