@@ -363,6 +363,7 @@ struct speed_chan_data_struct {
  */
 struct conn_stats {
     char name[SESSION_NAME_SIZE];
+    int hsnum; /* session name hash - identical between prodesses */
     int pid; /* current pid */
     int pid_remote; // pid from another side
     long int weight; /* bandwith-delay product */
@@ -406,6 +407,8 @@ struct conn_stats {
     int l_pbl_recv;
     int brl_ag_enabled;
     int l_pbl_tmp; 
+    int pbl_lossed;
+    int pbl_lossed_cnt;
 };
 /**
  * Structure for garbage statistic and information
@@ -481,7 +484,7 @@ struct phisical_status { // A.K.A. "info"
     int tun_device; /**< /dev/tun descriptor */
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
     int head_channel;
-#define LOSSED_BACKLOG_SIZE 20
+#define LOSSED_BACKLOG_SIZE 100
     struct {
         unsigned int seq_num;
         unsigned int local_seq_num;
@@ -546,7 +549,6 @@ struct phisical_status { // A.K.A. "info"
     int ploss_event_flag; /** flag to detect PLOSS at tflush */
     int mean_latency_us;
     int max_latency_us;
-    int frtt_us;
     int frtt_us_applied;
     int PCS2_recv; // through FRAME_CHANNEL_INFO
     
@@ -573,6 +575,8 @@ struct phisical_status { // A.K.A. "info"
     int tpps_old;
     int32_t encap_streams_bitcnt;
     int encap_streams;
+    int W_cubic_copy;
+    struct timeval hold_time;
 };
 
 #define LOSS_ARRAY 80
@@ -581,6 +585,8 @@ struct timed_loss {
     uint16_t name;
     int pbl;
     int psl;
+    uint32_t sqn;
+    int16_t who_lost;
 };
 
 /** @struct conn_info
@@ -667,6 +673,17 @@ struct conn_info {
     struct packet_sum packet_code_recived[MAX_TCP_LOGICAL_CHANNELS][BULK_BUFFER_PACKET_CODE];// sync by common_sem
     int packet_code_bulk_counter;
     struct packet_sum test_packet_code[MAX_TCP_LOGICAL_CHANNELS];
+    struct timeval last_written_recv_ts;
+    int frtt_ms;
+    int frtt_local_applied;
+    uint32_t ag_mask; // unsynced
+    uint32_t ag_mask_recv; // unsynced
+    int max_rtt_lag;
+    int APCS_cnt; // counter for coming packets with AG mode
+    int APCS; // speed for packets per seconf in AG mode coming to WB
+    struct timeval APCS_tick_tv;
+    int tokens;
+    struct timeval tokens_lastadd_tv;
 };
 
 struct resent_chk {

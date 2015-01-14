@@ -38,6 +38,7 @@ struct frame_seq {
     int chan_num;
     int physical_channel_num;
     struct timeval time_stamp;
+    struct timeval flush_time;
     int current_rtt;
 };
 
