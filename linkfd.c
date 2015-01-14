@@ -3937,33 +3937,35 @@ int lfd_linker(void)
         if(shm_conn_info->stats[info.process_num].packet_upload_cnt > 50) {
             timersub(&info.current_time, &shm_conn_info->stats[info.process_num].packet_upload_tv, &tv_tmp_tmp_tmp);
             int ms_passed = tv2ms(&tv_tmp_tmp_tmp);
-            shm_conn_info->stats[info.process_num].packet_upload_spd = shm_conn_info->stats[info.process_num].packet_upload_cnt * 1000 / ms_passed;
-            shm_conn_info->stats[info.process_num].packet_upload_cnt = 0;
-            shm_conn_info->stats[info.process_num].packet_upload_tv = info.current_time;
-            
-            int max_pups = 0;
-            int max_pups_chan = 0;
-            int min_rtt = INT32_MAX;
-            int min_rtt_chan = 0;
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                        min_rtt = shm_conn_info->stats[i].exact_rtt;
-                        min_rtt_chan = i;
-                    }
-                    if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
-                        max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
-                        max_pups_chan = i;
+            if(ms_passed > 5) {
+                shm_conn_info->stats[info.process_num].packet_upload_spd = shm_conn_info->stats[info.process_num].packet_upload_cnt * 1000 / ms_passed;
+                shm_conn_info->stats[info.process_num].packet_upload_cnt = 0;
+                shm_conn_info->stats[info.process_num].packet_upload_tv = info.current_time;
+                
+                int max_pups = 0;
+                int max_pups_chan = 0;
+                int min_rtt = INT32_MAX;
+                int min_rtt_chan = 0;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                            min_rtt = shm_conn_info->stats[i].exact_rtt;
+                            min_rtt_chan = i;
+                        }
+                        if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
+                            max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
+                            max_pups_chan = i;
+                        }
                     }
                 }
-            }
-            if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt_chan) {
-                shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt_chan;
-                vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
-                    shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
-                if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
-                    shm_conn_info->forced_rtt = shm_conn_info->drtt;
-                    need_send_FCI = 1;
+                if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt_chan) {
+                    shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt_chan;
+                    vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
+                        shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
+                    if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
+                        shm_conn_info->forced_rtt = shm_conn_info->drtt;
+                        need_send_FCI = 1;
+                    }
                 }
             }
         }
