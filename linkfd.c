@@ -112,7 +112,7 @@ struct my_ip {
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
-#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 5 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 
