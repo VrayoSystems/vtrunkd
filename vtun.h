@@ -405,6 +405,9 @@ struct conn_stats {
     int l_pbl_tmp; 
     int pbl_lossed;
     int pbl_lossed_cnt;
+    int packet_upload_cnt;
+    int packet_upload_spd;
+    struct timeval packet_upload_tv;
 };
 /**
  * Structure for garbage statistic and information
@@ -666,6 +669,7 @@ struct conn_info {
     int single_stream;
     struct timeval last_written_recv_ts;
     int frtt_ms;
+    int drtt;
     int frtt_local_applied;
     struct timeval frtt_smooth_tick;
     uint32_t ag_mask; // unsynced

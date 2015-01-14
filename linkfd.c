@@ -808,7 +808,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
 
 
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
-    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     if(full_rtt == 0) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
@@ -1492,6 +1492,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
         statb.packet_sent_rmit += 1000;
         if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
             shm_conn_info->stats[info.process_num].l_pbl_tmp++;
@@ -1829,6 +1830,7 @@ if(drop_packet_flag) {
 #endif
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
     statb.packet_sent_ag += 1000;
     if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
         shm_conn_info->stats[info.process_num].l_pbl_tmp++;
@@ -2197,7 +2199,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
     struct timeval t_rtt, t_frtt, tv_tmp;
-    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     if(info.exact_rtt < full_rtt) {
         ms2tv(&t_rtt, info.exact_rtt);
         ms2tv(&t_frtt, full_rtt);
@@ -3932,6 +3934,39 @@ int lfd_linker(void)
             shm_conn_info->drop_time = info.current_time;
             shm_conn_info->dropping = 1;
         }
+        if(shm_conn_info->stats[info.process_num].packet_upload_cnt > 50) {
+            timersub(&info.current_time, &shm_conn_info->stats[info.process_num].packet_upload_tv, &tv_tmp_tmp_tmp);
+            int ms_passed = tv2ms(&tv_tmp_tmp_tmp);
+            shm_conn_info->stats[info.process_num].packet_upload_spd = shm_conn_info->stats[info.process_num].packet_upload_cnt * 1000 / ms_passed;
+            shm_conn_info->stats[info.process_num].packet_upload_cnt = 0;
+            shm_conn_info->stats[info.process_num].packet_upload_tv = info.current_time;
+            
+            int max_pups = 0;
+            int max_pups_chan = 0;
+            int min_rtt = INT32_MAX;
+            int min_rtt_chan = 0;
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                        min_rtt = shm_conn_info->stats[i].exact_rtt;
+                        min_rtt_chan = i;
+                    }
+                    if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
+                        max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
+                        max_pups_chan = i;
+                    }
+                }
+            }
+            if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt_chan) {
+                shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt_chan;
+                vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
+                    shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
+                if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
+                    shm_conn_info->forced_rtt = shm_conn_info->drtt;
+                    need_send_FCI = 1;
+                }
+            }
+        }
 
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
@@ -3946,7 +3981,8 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 shm_conn_info->frtt_local_applied = 14 * shm_conn_info->frtt_local_applied / 15 + shm_conn_info->max_rtt_lag / 15;
-                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + shm_conn_info->frtt_local_applied*1000 + shm_conn_info->forced_rtt_recv*1000;
+                int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
+                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
                 shm_conn_info->frtt_smooth_tick = info.current_time;
             }
             
@@ -3983,46 +4019,7 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
-                
-            // calculate forced rtt >>>
-            // TODO: full FRTT/xhi support!
-            /*
-            int max_rttvar = 0; // ms
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) { // hope this works..
-                    if(shm_conn_info->stats[i].rttvar)
-                }
-            }
-            */
-            // <<< END forced_rtt calc
-            
-
-            // push up forced_rtt
-            sem_wait(write_buf_sem);
-            // TODO: need a smooth down-shift for frtt_us_applied; currently we just drop to zero
-            if ( (info.frtt_us_applied >= shm_conn_info->forced_rtt) && ((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
-                if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
-                    shm_conn_info->forced_rtt_start_grow = info.current_time;
-                }
-                struct timeval tmp_tv;
-                timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
-                // TODO: overflow here! ^^^
-                //time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
-                time = time > info.frtt_us_applied ? info.frtt_us_applied : time;
-                //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
-                if(shm_conn_info->forced_rtt != time) {
-                    shm_conn_info->forced_rtt = time;
-                    //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
-                    need_send_FCI = 1; // force immediate FCI send!
-                }
-            } else {
-                shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
-                shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
-                shm_conn_info->forced_rtt = 0;
-            }
-            sem_post(write_buf_sem);
-
+                    
         }
         // << END AVERAGE (MEAN) SEND_Q_EFF calculation
 
@@ -4390,7 +4387,8 @@ int lfd_linker(void)
             set_rttlag();
             if(shm_conn_info->max_rtt_lag > shm_conn_info->frtt_local_applied) {
                 shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
-                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + shm_conn_info->frtt_local_applied*1000 + shm_conn_info->forced_rtt_recv*1000;
+                int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
+                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
             }
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
@@ -4402,7 +4400,10 @@ int lfd_linker(void)
             if(shm_conn_info->idle) {
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
-                info.W_cubic_copy = info.send_q_limit_cubic;
+                //info.W_cubic_copy = info.send_q_limit_cubic;
+            }
+            if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
+                shm_conn_info->forced_rtt = shm_conn_info->drtt;
             }
             
             // compute perceived loss probability
@@ -4542,6 +4543,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%u", (unsigned int)shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
+            add_json(js_buf, &js_cur, "pupload", "%d", shm_conn_info->stats[info.process_num].packet_upload_spd);
             //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
@@ -4745,6 +4747,7 @@ int lfd_linker(void)
                 }
                 info.channel[i].packet_recv_counter = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                 info.channel[0].up_len += len_ret;
             }
 
@@ -4829,6 +4832,7 @@ int lfd_linker(void)
                     }
                     info.channel[i].packet_recv_counter = 0;
                     shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                     info.channel[0].up_len += len_ret;                    
                 }
             }
@@ -4858,6 +4862,7 @@ int lfd_linker(void)
                     linker_term = TERM_NONFATAL;
                 }
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                 info.channel[i].up_len += len_ret;
             }
         } // for each chan_num loop end ([i])
@@ -5017,6 +5022,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL; //?????
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[0].up_len += len_ret;
                     }
                 }
@@ -5058,6 +5064,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[i].up_len += len_ret;
                     }
                 }
@@ -5251,6 +5258,7 @@ if(drop_packet_flag) {
                                  break;
                              }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[i].up_len += len_ret;
                          }
                          last_action = info.current_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
@@ -5962,6 +5970,7 @@ if(drop_packet_flag) {
                             break;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[chan_num].up_len += len_ret;
                         continue;
                     }
@@ -6343,6 +6352,7 @@ if(drop_packet_flag) {
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[chan_num_virt].up_len += len_ret;
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
@@ -6551,6 +6561,7 @@ if(drop_packet_flag) {
 						break;
 					}
 					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
 					info.channel[i].up_len += len_ret;
 				}
 			}
