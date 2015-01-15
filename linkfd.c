@@ -5326,7 +5326,6 @@ int lfd_linker(void)
                     flag = 1;
 
                 }
-                vtun_syslog(LOG_INFO, "REDUNDANT_CODE_TIMER_TIME selection %i start %"PRIu32" stop %"PRIu32" sec %u usec %u sum len %i chan_num %i",selection,shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].timer.tmp.tv_sec, shm_conn_info->packet_code[selection][i].timer.tmp.tv_usec, shm_conn_info->packet_code[selection][i].len_sum,i);
 
                 sem_post(&(shm_conn_info->common_sem));
                 if (flag) {
