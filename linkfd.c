@@ -1017,11 +1017,18 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     // drtt should be equal in AG mode as we balance the buffers, only takes place in PING-like mode
     //drtt_ms = shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg;
     drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
+    if(drtt_ms < 0) {
+        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt + shm_conn_info->stats[max_chan].rttvar);
+    } else {
+        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt + shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[max_chan].rttvar);
+    }
     //sem_post(&(shm_conn_info->stats_sem));
 
     // MRL is allowed time to lag
     // WARNING : do we use MRL correctly here? may be use MLD?
-    mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
+    //mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
+    // MRL unused - TODO
+    mrl_ms = MAX_LATENCY_DROP_USEC / 1000;
     expiration_ms_fromnow = mrl_ms - drtt_ms;
     if(expiration_ms_fromnow < 0) { 
         // we can get no frames; handle this above
@@ -1034,7 +1041,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
         // TODO: need info.ACK_speed_correct flag
         // this will work just because hold is not likely to kick in before ACS is recalculated
-        expnum = MAX_LATENCY_DROP_USEC / 1000 / 2 * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
+        expnum = (mrl_ms - drtt_ms) * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
     }
     
     //find start point
