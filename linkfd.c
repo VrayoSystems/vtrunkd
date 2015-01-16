@@ -427,32 +427,64 @@ int percent_delta_equal(int A, int B, int percent) {
     return 0;
 }
 
-int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_seq *flist, struct packet_sum *packet_sum) {
-    int index = l->rel_head;
+int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist *l_jw, struct frame_seq *flist, struct packet_sum *packet_sum) {
+    int index = l_jw->rel_head;
+    int prevIndex = -1;
+
+    uint32_t lostSeq = packet_sum->start_seq;
+
+    //search start_seq or bigger
+    uint32_t curSeq = packet_sum->start_seq;
+    while (index > -1) {
+        if (packet_sum->start_seq >= flist[index].seq_num) {
+            packet_sum->lostAmount = flist[index].seq_num - curSeq;
+            if (flist[index].seq_num != curSeq) {
+                lostSeq = flist[index].seq_num - 1;
+            }
+            curSeq = flist[index].seq_num;
+            break;
+        }
+        prevIndex = index;
+        index = flist[index].rel_next;
+    }
+    //search lost packlet in wb_just_write_frames
+    while (index > -1) {
+        if((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
+            packet_sum->lostAmount += flist[index].seq_num - (curSeq + 1);
+            curSeq = flist[index].seq_num;
+        } else {
+            break;
+        }
+        prevIndex = index;
+        index = flist[index].rel_next;
+    }
+
+    index = l->rel_head;
     if (index <= -1) {
         return 0;
     }
-    packet_sum->lostAmount = (packet_sum->stop_seq - packet_sum->start_seq) + 1;
 
     if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
         packet_sum->lostAmount--;
     } else {
-        return 0;
+        return lostSeq;
     }
-    int prevIndex = index;
+    prevIndex = index;
     index = flist[index].rel_next;
-    uint32_t lostSeq = -1;
     while (index > -1) {
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
         } else {
             break;
         }
-        if ((flist[index].seq_num - flist[prevIndex].seq_num) == 1) {
+        if ((flist[index].seq_num - flist[prevIndex].seq_num) != 1) {
             lostSeq = flist[index].seq_num - 1;
         }
         prevIndex = index;
         index = flist[index].rel_next;
+    }
+    if ((packet_sum->stop_seq - flist[index].seq_num) != 0) {
+        lostSeq = flist[index].seq_num - 1;
     }
     return lostSeq;
 }
@@ -5348,7 +5380,7 @@ int lfd_linker(void)
                 memcpy(&(shm_conn_info->packet_code[selection][i].timer.timer_time), &tv_tmp, sizeof(struct timeval));
                 if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
                         && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
-                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %"PRIu32" stop %"PRIu32" len %i ", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].len_sum);
+                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&shm_conn_info->packet_code[selection][i].timer.cur_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
                     shm_conn_info->packet_code[selection][i].stop_seq = shm_conn_info->packet_code[selection][i].current_seq;
                     len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[selection][i],
                             shm_conn_info->packet_code[selection][i].stop_seq, selection, FRAME_REDUNDANCY_CODE);
@@ -5624,7 +5656,7 @@ if(drop_packet_flag) {
                             vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
                             continue;
                         } else if (flag_var == FRAME_REDUNDANCY_CODE) {
-                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,*((uint32_t *)(buf)));
+                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,ntohl(*((uint32_t *)(buf))));
                          //   print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
@@ -5633,7 +5665,7 @@ if(drop_packet_flag) {
                             sem_wait(write_buf_sem);
                             int sumIndex = shm_conn_info->packet_code_bulk_counter;
                             add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
-                            uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
+                            uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
                                 vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
@@ -5981,7 +6013,7 @@ if(drop_packet_flag) {
                                             memcpy(out_buf, out2, len);
                                             sem_post(&(shm_conn_info->resend_buf_sem));
                                             vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
-                                           send_packet(1, out2, len);
+                                           //send_packet(1, out2, len);
                                         }
                                         if(psl == 2) {
                                             sqn++; 
@@ -5994,7 +6026,7 @@ if(drop_packet_flag) {
                                                 memcpy(out_buf, out2, len);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
                                                 vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
-                                               send_packet(1, out2, len);
+                                               //send_packet(1, out2, len);
                                             }
                                         }
                                     }
