@@ -98,6 +98,15 @@ int check_bulk_packet_code(struct packet_sum* sum, uint32_t seq_num, int selecti
     return -1;
 }
 
+/**
+ *
+ * @param sum
+ * @param wb_written
+ * @param wb
+ * @param buf
+ * @param seq_num - repaired seqNum
+ * @return -1 if error or seqNum if success
+ */
 int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_written, struct frame_llist* wb, struct frame_seq buf[], uint32_t seq_num) {
     int selection = (seq_num - (SEQ_START_VAL + 1)) % SELECTION_NUM;
     int sum_index = check_bulk_packet_code(sum, seq_num, selection);

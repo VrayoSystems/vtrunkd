@@ -34,6 +34,7 @@ struct packet_sum {
     uint32_t current_seq;
     char sum[1500];
     struct timer_obj timer;
+    int lostAmount;
 };
 
 void sum_init(struct packet_sum* sum, uint32_t start_seq, uint32_t stop_seq, int my_selection_num, size_t packet_len);

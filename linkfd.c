@@ -427,6 +427,36 @@ int percent_delta_equal(int A, int B, int percent) {
     return 0;
 }
 
+int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_seq *flist, struct packet_sum *packet_sum) {
+    int index = l->rel_head;
+    if (index <= -1) {
+        return 0;
+    }
+    packet_sum->lostAmount = (packet_sum->stop_seq - packet_sum->start_seq) + 1;
+
+    if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
+        packet_sum->lostAmount--;
+    } else {
+        return 0;
+    }
+    int prevIndex = index;
+    index = flist[index].rel_next;
+    uint32_t lostSeq = -1;
+    while (index > -1) {
+        if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
+            packet_sum->lostAmount--;
+        } else {
+            break;
+        }
+        if ((flist[index].seq_num - flist[prevIndex].seq_num) == 1) {
+            lostSeq = flist[index].seq_num - 1;
+        }
+        prevIndex = index;
+        index = flist[index].rel_next;
+    }
+    return lostSeq;
+}
+
 int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
     int len = 0;
     *size = 0;
@@ -5601,8 +5631,23 @@ if(drop_packet_flag) {
                        //     len -= 3 * sizeof(uint32_t);
                             len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
                             sem_wait(write_buf_sem);
+                            int sumIndex = shm_conn_info->packet_code_bulk_counter;
                             add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
+                            uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
+                                    shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
+                            if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
+                                vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
+                                int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
+                                        &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
+                                        shm_conn_info->frames_buf, lostSeq);
+                                if (packet_index > -1) {
+                                    write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
+                                            shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
+                                            info.pid, &succ_flag);
+                                }
+                            }
                             sem_post(write_buf_sem);
+
                             vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE local seq num %"PRIu32"", local_seq_num);
                             // rtt calculation
                             if ((info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
