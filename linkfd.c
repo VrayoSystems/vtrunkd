@@ -636,8 +636,7 @@ static void sig_usr1(int sig)
  * колличество отставших пакетов
  * buf[] - номера пакетов
  */
-int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
-    return 0; // disabled!
+int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t seq_limit) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     uint32_t isq,nsq, k;
     int idx=0;
@@ -669,7 +668,6 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
             break;
         }
     }
-    acnt = 0;
     while(i > -1) {
         n = shm_conn_info->frames_buf[i].rel_next;
         //vtun_syslog(LOG_INFO, "MRB: scan1");
@@ -677,6 +675,9 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 
             isq = shm_conn_info->frames_buf[i].seq_num;
             nsq = shm_conn_info->frames_buf[n].seq_num;
+            if(nsq > seq_limit) {
+                break;
+            }
             //vtun_syslog(LOG_INFO, "MRB: scan2 %"PRIu32" > %"PRIu32" +1 ?", nsq, isq);
             if(nsq > (isq+1)) {
                 //vtun_syslog(LOG_INFO, "MRB: scan2 yes!");
@@ -695,9 +696,6 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
         }
         i = n;
         blen++;
-#ifdef DEBUGG
-        if(assert_cnt(1)) break;
-#endif
     }
     //vtun_syslog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
     *buf_len = blen;
@@ -1985,7 +1983,8 @@ int write_buf_check_n_flush(int logical_channel) {
                 vtun_syslog(LOG_INFO, wb_1ms_str);
                 memset(wb_1ms_str, '\0', 5000);
 #endif
-                if (loss_flag) {
+                if (loss_flag && !lost_buf_exists(shm_conn_info->write_buf[logical_channel].last_written_seq)) {
+                    // TODO: check if there is no such entry (this sqn) in the list
                     shm_conn_info->loss_idx++;
                     if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                         shm_conn_info->loss_idx = 0;
@@ -2166,7 +2165,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_INFO, "drop dup pkt seq_num %"PRIu32" lws %"PRIu32"", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
 #endif
         *succ_flag = -2;
-        return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
     // now check if we can find it in write buf current .. inline!
     // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
@@ -2178,7 +2177,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                 vtun_syslog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
 #endif
                 //return -3;
-                return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+                return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
             }
             i = shm_conn_info->frames_buf[i].rel_next;
 #ifdef DEBUGG
@@ -2193,7 +2192,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                            &newf) < 0) {
         // try a fix
         vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted");
-        return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf();
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
@@ -2230,7 +2229,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->write_buf[conn_num].frames.rel_head = shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
         //*buf_len = 1;
         //return  ((seq_num == (shm_conn_info->write_buf.last_written_seq+1)) ? 0 : 1);
-        mlen = missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         //vtun_syslog(LOG_INFO, "write: add to head!");
         *succ_flag=0;
         return mlen;
@@ -2284,7 +2283,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         }
     }
 
-    mlen = missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+    mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
 
     *succ_flag= 0;
     return mlen;
@@ -3086,6 +3085,39 @@ int set_rttlag() {
     }
 }
 
+int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
+    // Search write_buf for lost seq_num
+    int ms_token;
+    int buf_len;
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    get_write_buf_wait_data(chan_mask, &ms_token);
+    // now that least_rx_seq calculated, see if we have direct loss detected
+    // TODO: speculative loss detection
+    //      speculative loss is less effective here though as waiting for 20+ packets is crucial time
+    int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, buf_len, info.least_rx_seq[1]);    
+    if(incomplete_seq_len <= 2) {
+        for(int i=0; i<incomplete_seq_len; i++) {
+            shm_conn_info->loss_idx++;
+            if (shm_conn_info->loss_idx == LOSS_ARRAY) {
+                shm_conn_info->loss_idx = 0;
+            }
+            gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
+            shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
+            shm_conn_info->loss[shm_conn_info->loss_idx].psl = 1;
+            // TODO: who_lost
+            shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = -1;
+            shm_conn_info->loss[shm_conn_info->loss_idx].sqn = incomplete_seq_buf[i];
+        }
+    }
+}
+int lost_buf_exists(uint32_t seq_num) {
+    for(int i=0;i<LOSS_ARRAY;i++) {
+        if((shm_conn_info->loss[i].sqn == seq_num) || (shm_conn_info->loss[i].sqn == (seq_num + 1))) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
@@ -4855,6 +4887,7 @@ int lfd_linker(void)
                     shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
                     shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                     info.channel[0].up_len += len_ret;                    
+                    infer_lost_seq_num(incomplete_seq_buf);
                 }
             }
 
