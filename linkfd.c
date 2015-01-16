@@ -3094,7 +3094,7 @@ int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
     // now that least_rx_seq calculated, see if we have direct loss detected
     // TODO: speculative loss detection
     //      speculative loss is less effective here though as waiting for 20+ packets is crucial time
-    int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, buf_len, info.least_rx_seq[1]);    
+    int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, &buf_len, info.least_rx_seq[1]);    
     if(incomplete_seq_len <= 2) {
         for(int i=0; i<incomplete_seq_len; i++) {
             shm_conn_info->loss_idx++;
