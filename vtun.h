@@ -300,6 +300,7 @@ struct vtun_host {
 #define FLUSHED_PACKET_ARRAY_SIZE 1000
 
 #define SESSION_NAME_SIZE 50
+#define CHECK_SZ 256 // size of bit check field
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */
@@ -597,6 +598,7 @@ struct timed_loss {
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
+    sem_t hard_sem;
     sem_t tun_device_sem;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
@@ -634,7 +636,7 @@ struct conn_info {
     uint32_t need_to_exit; // sync by AG_flags_sem
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
-    sem_t hard_sem;
+    char check[CHECK_SZ]; // check-buf. TODO: fill with pattern "170" aka 10101010
     int head_process;
     int tflush_counter, tflush_counter_recv;
     struct timeval chanel_info_time;

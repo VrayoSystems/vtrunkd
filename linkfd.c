@@ -318,6 +318,13 @@ int assert_cnt(int where) {
     return 0;
 }
 
+int check_check() {
+    for(int i=0; i<CHECK_SZ; i++) {
+        if(shm_conn_info->check[i] != 170) {
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d", i);
+        }
+    }
+}
 /* convert ms(milliseconds) to timeval struct */
 void ms2tv(struct timeval *result, unsigned long interval_ms) {
     result->tv_sec = (interval_ms / 1000);
@@ -3650,6 +3657,7 @@ int lfd_linker(void)
     shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
     int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
     vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
+    memset(shm_conn_info->check, 170, CHECK_SZ);
 /**
  *
  *
@@ -4897,6 +4905,7 @@ int lfd_linker(void)
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            check_check();
             udp_struct->lport = info.channel[1].lport;
             udp_struct->rport = info.channel[1].rport;
             //if (get_udp_stats(udp_struct, 1)) {
