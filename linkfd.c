@@ -3097,6 +3097,7 @@ int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
     int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, &buf_len, info.least_rx_seq[1]);    
     if(incomplete_seq_len <= 2) {
         for(int i=0; i<incomplete_seq_len; i++) {
+            vtun_syslog(LOG_INFO, "Fast requesting packet %lu", incomplete_seq_buf[i]);
             shm_conn_info->loss_idx++;
             if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                 shm_conn_info->loss_idx = 0;
