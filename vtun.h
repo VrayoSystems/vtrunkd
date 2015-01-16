@@ -636,7 +636,7 @@ struct conn_info {
     uint32_t need_to_exit; // sync by AG_flags_sem
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
-    char check[CHECK_SZ]; // check-buf. TODO: fill with pattern "170" aka 10101010
+    unsigned char check[CHECK_SZ]; // check-buf. TODO: fill with pattern "170" aka 10101010
     int head_process;
     int tflush_counter, tflush_counter_recv;
     struct timeval chanel_info_time;

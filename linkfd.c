@@ -321,7 +321,7 @@ int assert_cnt(int where) {
 int check_check() {
     for(int i=0; i<CHECK_SZ; i++) {
         if(shm_conn_info->check[i] != 170) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d value %d != 170", i, shm_conn_info->check[i]);
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d value %du != 170", i, shm_conn_info->check[i]);
         }
     }
 }
