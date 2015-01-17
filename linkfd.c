@@ -808,7 +808,9 @@ int check_rtt_latency_drop_chan(int chan_num) {
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ( (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt)) {
+    int rtt_diff = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+    int cur_mld = (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt;
+    if( rtt_diff > cur_mld ) {
         return 0;
     }
     return 1;
@@ -4192,7 +4194,7 @@ int lfd_linker(void)
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
-            double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h;
+            double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
             double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - ((d_rtt + d_rtt_var) - (d_rtt_h - d_rtt_h_var)));
             if(d_pump_adj < 0) d_pump_adj = 0;
             
