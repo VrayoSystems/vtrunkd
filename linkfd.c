@@ -4261,7 +4261,7 @@ int lfd_linker(void)
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
-        if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
+        if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
         if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if(channel_dead) ag_stat.D = 1;
