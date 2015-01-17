@@ -281,14 +281,17 @@ struct {
     int v_max;
 } v_mma;
 
-struct {
+struct _ag_stat {
     int WT;
     int RT;
     int D;
     int CL;
     int DL;
     int PL;
-} ag_stat;
+};
+
+struct _ag_stat ag_stat;
+struct _ag_stat ag_stat_copy;
 
 struct mini_path_desc
 {
@@ -3120,6 +3123,30 @@ int lost_buf_exists(uint32_t seq_num) {
     return 0;
 }
 
+int print_ag_drop_reason() {
+    char *reason = "Dropping AG due to";
+    if(ag_stat.WT == 1 && ag_stat_copy.WT != ag_stat.WT) {
+        vtun_syslog(LOG_INFO,  "%s WT", reason);
+    }
+    if(ag_stat.RT == 1 && ag_stat_copy.RT != ag_stat.RT) {
+        vtun_syslog(LOG_INFO,  "%s RT", reason);
+    }
+    if(ag_stat.D == 1 && ag_stat_copy.D != ag_stat.D) {
+        vtun_syslog(LOG_INFO,  "%s D", reason);
+    }
+    if(ag_stat.CL == 1 && ag_stat_copy.CL != ag_stat.CL) {
+        vtun_syslog(LOG_INFO,  "%s CL", reason);
+    }
+    if(ag_stat.DL == 1 && ag_stat_copy.DL != ag_stat.DL) {
+        vtun_syslog(LOG_INFO,  "%s DL", reason);
+    }
+    if(ag_stat.PL == 1 && ag_stat_copy.PL != ag_stat.PL) {
+        vtun_syslog(LOG_INFO,  "%s PL", reason);
+    }
+    ag_stat_copy = ag_stat; 
+    return 0;
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -4238,6 +4265,7 @@ int lfd_linker(void)
         if(channel_dead) ag_stat.D = 1;
         if(!check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
+        print_ag_drop_reason();
         //ag_flag_local = R_MODE;
 
         if(ag_flag_local == AG_MODE) {
