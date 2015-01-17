@@ -43,7 +43,7 @@ struct frame_seq {
 struct frame_llist{
 	int rel_head;
 	int rel_tail;
-	int len;
+	int length;
 };
 
 

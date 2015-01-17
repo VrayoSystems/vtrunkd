@@ -969,7 +969,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
             }
         } else {
-            shm_conn_info->write_buf[i].frames.len = 0; // fix if it becomes broken for any reason
+            shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
         }
     }
     return 0;
@@ -1471,7 +1471,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
+        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, length);
 #endif
         if(debug_trace) {
             vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
@@ -1740,12 +1740,12 @@ if(drop_packet_flag) {
 
         new_packet = 1;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
+        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, length);
 #endif
     }
 #ifdef DEBUGG
     else {
-        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, len, tmp_seq_counter, idx);
+        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, length, tmp_seq_counter, idx);
     }
 #endif
     
@@ -1781,8 +1781,8 @@ if(drop_packet_flag) {
 
 
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
-    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, len);
+    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
+    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
 #endif
     if(debug_trace) {
         vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
@@ -2073,7 +2073,7 @@ int write_buf_check_n_flush(int logical_channel) {
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
             frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
-            shm_conn_info->write_buf[logical_channel].frames.len--;
+            shm_conn_info->write_buf[logical_channel].frames.length--;
             return 1;
         } else {
             return 0;
@@ -2099,7 +2099,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     char *ptr;
     int mlen = 0;
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
+    vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", length, seq_num, conn_num);
 #endif
     if(debug_trace) {
         vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
@@ -2221,7 +2221,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     } else {
         shm_conn_info->frames_buf[newf].flush_time = info.current_time;
     }
-    shm_conn_info->write_buf[conn_num].frames.len++;
+    shm_conn_info->write_buf[conn_num].frames.length++;
     shm_conn_info->APCS_cnt++;
     if(i<0) {
         // expensive op; may be optimized!
@@ -3722,7 +3722,7 @@ int lfd_linker(void)
                     start_print = 0;
                 }
             }
-            wb_1ms[wb_1ms_idx] = shm_conn_info->write_buf[1].frames.len;
+            wb_1ms[wb_1ms_idx] = shm_conn_info->write_buf[1].frames.length;
         }
         sem_wait(&shm_conn_info->write_buf_sem);
         for (;;)
@@ -5267,7 +5267,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", len);
+        vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", length);
 }
 #endif
 
@@ -5424,7 +5424,7 @@ if(drop_packet_flag) {
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, length);
 #endif
                 if(debug_trace) {
                     vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
@@ -6319,7 +6319,7 @@ if(drop_packet_flag) {
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
 if(drop_packet_flag) {
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, length, (int16_t)info.channel[chan_num].packet_loss_counter);
 }
 #endif
                     if(debug_trace) {
