@@ -3135,7 +3135,7 @@ int print_ag_drop_reason() {
         vtun_syslog(LOG_INFO,  "%s D", reason);
     }
     if(ag_stat.CL == 1 && ag_stat_copy.CL != ag_stat.CL) {
-        vtun_syslog(LOG_INFO,  "%s CL", reason);
+        vtun_syslog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d - rtt_maxchan %d > MLD %d + frtt %d", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt);
     }
     if(ag_stat.DL == 1 && ag_stat_copy.DL != ag_stat.DL) {
         vtun_syslog(LOG_INFO,  "%s DL", reason);
