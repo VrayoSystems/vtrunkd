@@ -112,7 +112,8 @@ struct my_ip {
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
-#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+//#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+#define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 
@@ -4165,12 +4166,10 @@ int lfd_linker(void)
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
-            info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
         } else {
             rsr_top = shm_conn_info->stats[max_chan].rsr;
-            info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             
             // copy all vars used to their 'double' reprs
             double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed;
@@ -4220,10 +4219,6 @@ int lfd_linker(void)
             if(d_rsr < SEND_Q_LIMIT_MINIMAL) d_rsr = SEND_Q_LIMIT_MINIMAL;
             info.rsr = d_rsr;
             
-            //if(info.send_q_limit < info.send_q_limit_threshold) {
-            //    info.send_q_limit = info.send_q_limit_threshold - 1;
-            //}
-            
             // now compute W
             timersub(&(info.current_time), &loss_time, &t_tv);
             int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
@@ -4242,15 +4237,12 @@ int lfd_linker(void)
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
 
-        // calc send_q_limit_threshold
-        if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
-            info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL-1;
-        }
         // <<< END RSR section here
 
 
         // AG DECISION >>>
-        ag_flag_local = ((    (!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
+        ag_flag_local = ((    //(!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
+            (shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER))
                            //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
@@ -4261,7 +4253,8 @@ int lfd_linker(void)
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
-        if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
+        //if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
+        if( shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER) ) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
         if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if(channel_dead) ag_stat.D = 1;
