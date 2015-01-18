@@ -3721,6 +3721,8 @@ int lfd_linker(void)
     int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
     vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
     memset(shm_conn_info->check, 170, CHECK_SZ);
+    info.head_change_tv = info.current_time;
+    info.head_change_safe = 1;
 /**
  *
  *
@@ -4100,6 +4102,10 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
+            
+            
+            timersub(&info.current_time, &info.head_change_tv, &tv_tmp_tmp_tmp);
+            info.head_change_safe = (tv2ms(&tv_tmp_tmp_tmp) > (info.exact_rtt * 2) ? 1 : 0);
                     
         }
         // << END AVERAGE (MEAN) SEND_Q_EFF calculation
@@ -4152,6 +4158,7 @@ int lfd_linker(void)
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
                 info.send_q_limit_cubic = info.W_cubic_copy;
+                info.head_change_tv = info.current_time;
             }
             info.head_channel = 0;
         }
@@ -4246,7 +4253,7 @@ int lfd_linker(void)
                            //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
-                           || ( !check_rtt_latency_drop() )
+                           || ( info.head_change_safe && !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
                            || ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
@@ -4258,7 +4265,7 @@ int lfd_linker(void)
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
         if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if(channel_dead) ag_stat.D = 1;
-        if(!check_rtt_latency_drop()) ag_stat.CL = 1;
+        if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
         //ag_flag_local = R_MODE;
