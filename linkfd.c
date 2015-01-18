@@ -4159,6 +4159,7 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
                 info.send_q_limit_cubic = info.W_cubic_copy;
                 info.head_change_tv = info.current_time;
+                info.head_change_safe = 0;
             }
             info.head_channel = 0;
         }
