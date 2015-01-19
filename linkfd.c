@@ -127,6 +127,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
+#define PLP_UNRECOVERABLE_CUTOFF 5000 // in theory about 50 mbit/s at 20ms 
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
@@ -4283,7 +4284,8 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( info.head_change_safe && !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
-                           || ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
+                           //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
+                           || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
@@ -4291,7 +4293,8 @@ int lfd_linker(void)
         //if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
         if( shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER) ) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
-        if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
+        //if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
+        if( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) ag_stat.PL = 1; // pseudo-model cut-off
         if(channel_dead) ag_stat.D = 1;
         if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
