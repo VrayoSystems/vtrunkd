@@ -4046,7 +4046,7 @@ int lfd_linker(void)
                     if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
                         //shm_conn_info->forced_rtt = shm_conn_info->drtt;
                         //need_send_FCI = 1;
-                        vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
+                        //vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
                     }
                 }
             }
