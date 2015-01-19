@@ -1514,6 +1514,8 @@ int retransmit_send(char *out2, int n_to_send) {
         statb.packet_sent_rmit += 1000;
         if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
             shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+        if(shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
+            shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
         info.channel[i].up_len += len_ret;
         statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
@@ -1852,6 +1854,8 @@ if(drop_packet_flag) {
     statb.packet_sent_ag += 1000;
     if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
         shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+    if(shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
+        shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
     info.channel[chan_num].up_len += len_ret;
     statb.byte_sent_ag_full += len_ret;
     info.channel[chan_num].up_packets++;
@@ -2642,6 +2646,7 @@ int set_IDLE() {
     
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
+        shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -2705,6 +2710,14 @@ int plp_avg_pbl(int pnum) {
     } else {
         shm_conn_info->stats[pnum].l_pbl = shm_conn_info->stats[pnum].l_pbl_recv;
         return shm_conn_info->stats[pnum].l_pbl_recv;
+    }
+}
+
+int plp_avg_pbl_unrecoverable(int pnum) {
+    if(shm_conn_info->stats[pnum].l_pbl_tmp_unrec > shm_conn_info->stats[pnum].l_pbl_unrec) {
+        return shm_conn_info->stats[pnum].l_pbl_tmp_unrec;
+    } else {
+        return shm_conn_info->stats[pnum].l_pbl_unrec;
     }
 }
 
@@ -4516,6 +4529,7 @@ int lfd_linker(void)
             }
             
             int cur_plp = plp_avg_pbl(info.process_num);
+            int cur_plp_unrec = plp_avg_pbl_unrecoverable(info.process_num);
             
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
@@ -4607,6 +4621,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
             add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
+            add_json(js_buf, &js_cur, "plp2u", "%d", cur_plp_unrec);
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
@@ -5711,6 +5726,7 @@ if(drop_packet_flag) {
                                 psl = ntohl(tmp_h);
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_psl", "%d", ntohl(tmp_h));
+                                psl = ntohl(tmp_h);
                             }
 
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
@@ -5790,6 +5806,11 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
                                                 add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
+                                                if(psl > 2) {
+                                                    // unrecoverable loss
+                                                    shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
+                                                    shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
+                                                }
                                             }
                                             add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
                                             break;

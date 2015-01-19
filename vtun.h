@@ -404,6 +404,8 @@ struct conn_stats {
     int l_pbl_recv;
     int brl_ag_enabled;
     int l_pbl_tmp; 
+    int l_pbl_unrec;
+    int l_pbl_tmp_unrec; 
     int pbl_lossed;
     int pbl_lossed_cnt;
     int packet_upload_cnt;
