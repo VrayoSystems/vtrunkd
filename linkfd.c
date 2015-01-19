@@ -4169,7 +4169,7 @@ int lfd_linker(void)
     
 
         // RSR section here >>>
-        int32_t rtt_shift;
+        int rtt_shift;
         int rsr_top;
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
@@ -4201,10 +4201,14 @@ int lfd_linker(void)
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
-            double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
-            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - ((d_rtt + d_rtt_var) - (d_rtt_h - d_rtt_h_var)));
+            double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
+            double d_mld_ms = MAX_LATENCY_DROP_USEC;
+            d_mld_ms /= 1000000.0;
+            d_mld_ms += d_frtt;
+            double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
             if(d_pump_adj < 0) d_pump_adj = 0;
             
+            double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
             if(d_rtt_shift < d_sql) {
                 d_sql -= d_rtt_shift;
             } else {
@@ -4608,7 +4612,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
-            add_json(js_buf, &js_cur, "rtt_shift", "%d", (int)rtt_shift);
+            add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
             add_json(js_buf, &js_cur, "W_cubic_copy", "%d", info.W_cubic_copy);
             add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
