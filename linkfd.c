@@ -4181,17 +4181,20 @@ int lfd_linker(void)
             rsr_top = shm_conn_info->stats[max_chan].rsr;
             
             // copy all vars used to their 'double' reprs
-            double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed;
-            double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed;
-            double d_rsr_top = shm_conn_info->stats[max_chan].rsr;
-            double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt;
-            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;
-            d_rtt_h = d_rtt_h / 1000.0; // ms
-            double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
-            d_rtt = d_rtt / 1000.0; // ms
-            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;
-            double d_frtt = shm_conn_info->forced_rtt;
-            double d_rsr = info.rsr;
+            double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed; // bytes/s
+            double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed; // bytes/s
+            double d_rsr_top = shm_conn_info->stats[max_chan].rsr; // bytes
+            double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt; // ms
+            d_rtt_h = d_rtt_h / 1000.0; // ms->s
+            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;// ms
+            d_rtt_h_var /= 1000.0; // ms->s
+            double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;// ms
+            d_rtt = d_rtt / 1000.0; // ms->s
+            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;// ms
+            d_rtt_var /= 1000.0; // ms->s
+            double d_frtt = shm_conn_info->forced_rtt;// ms
+            d_frtt /= 1000.0; // ms->s
+            double d_rsr = info.rsr; // bytes
             
             if(d_ACS_h < 1) {
                 d_ACS_h = 1; // zero-protect
