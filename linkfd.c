@@ -2784,6 +2784,17 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
     return xhi;
 }
 
+double xhi_function(int rtt_ms, int pbl) {
+    double rtt = rtt_ms;
+    rtt /= 1000.0;
+    double plp = pbl;
+    plp = 1.0 / plp;
+    
+    double maxwin = 1.17 * pow( rtt / plp, 3.0/4.0 );
+    int xhi = (int) round( maxwin / rtt );
+    return xhi;
+}
+
 int print_xhi_data(struct mini_path_desc *path_descs, int count) {
     for (int i=0; i< count; i++ ) {
         vtun_syslog(LOG_INFO, "XHI: pnum=%d rtt=%d, pbl=%d, ACS=%d, ENB=%d", path_descs[i].process_num, 
@@ -4673,6 +4684,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num)));
 
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
