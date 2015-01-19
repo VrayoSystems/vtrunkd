@@ -219,7 +219,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-int buf_len, incomplete_seq_len = 0, rtt_shift=0;
+int buf_len, incomplete_seq_len = 0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
@@ -3711,6 +3711,7 @@ int lfd_linker(void)
     info.fast_pcs_ts = info.current_time;
     int pump_adj = 0;
     int temp_sql_copy =0;
+    int temp_sql_copy2 =0;
     int temp_acs_copy =0;
 
     struct timeval wb_1ms_time = { 0, 1000 };
@@ -4201,6 +4202,7 @@ int lfd_linker(void)
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
+            // TODO: rtt_shift and pump_adj are essentially the same - we should join them one day...
             double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
             double d_mld_ms = MAX_LATENCY_DROP_USEC;
             d_mld_ms /= 1000000.0;
@@ -4216,6 +4218,7 @@ int lfd_linker(void)
             }
             
             d_sql += d_pump_adj;
+            temp_sql_copy2 = (int) d_sql; 
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
@@ -4228,7 +4231,11 @@ int lfd_linker(void)
             } else if (d_rsr > RSR_TOP) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f", d_rsr);
             }
-            if(d_rsr < SEND_Q_LIMIT_MINIMAL) d_rsr = SEND_Q_LIMIT_MINIMAL;
+            if(d_rsr <= SEND_Q_LIMIT_MINIMAL) {
+                d_rsr = SEND_Q_LIMIT_MINIMAL;
+                vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+            }
+                
             info.rsr = d_rsr;
             
             // now compute W
@@ -4611,6 +4618,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
+            add_json(js_buf, &js_cur, "sql2", "%d", temp_sql_copy2);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
             add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
@@ -6765,7 +6773,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     hold_mode = 0; // 1 - hold 0 - normal
     force_hold_mode = 1;
     incomplete_seq_len = 0;
-    rtt_shift=0;
     my_miss_packets_max = 0; // in ms; calculated here
     miss_packets_max = 0; // get from another side
     proto_err_cnt = 0;
