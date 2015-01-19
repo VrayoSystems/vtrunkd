@@ -6649,6 +6649,26 @@ if(drop_packet_flag) {
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = info.current_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = info.current_time.tv_usec;
                     }
+                    int sumIndex = get_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, seq_num);
+                    if (sumIndex != -1) {
+                        shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount--;
+                        if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
+                            uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
+                                    &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf,
+                                    &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
+                            vtun_syslog(LOG_INFO, "packet after sum Uniq lostSeq %u found", lostSeq);
+                            int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
+                                    &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
+                                    shm_conn_info->frames_buf, lostSeq);
+                            if (packet_index > -1) {
+                                print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
+                                        shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
+                                        shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
+                                        info.pid, &succ_flag);
+                            }
+                        }
+                    }
                     sem_post(write_buf_sem);
 #ifdef DEBUGG
                     gettimeofday(&work_loop2, NULL );

@@ -45,5 +45,6 @@ int pack_redundancy_packet_code(char *buf, struct packet_sum* sum, uint32_t seq_
 int check_bulk_packet_code(struct packet_sum* sum, uint32_t seq_num, int selection);
 int repair_packet_code(struct packet_sum* sum, char* packet, uint32_t seq_num, size_t packet_len);
 int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_written, struct frame_llist* wb, struct frame_seq buf[], uint32_t seq_num);
+int get_packet_code(struct packet_sum* sum, int *bulk_counter, uint32_t seq_num);
 
 #endif /* PACKET_CODE_H_ */

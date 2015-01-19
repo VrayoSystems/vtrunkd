@@ -165,4 +165,22 @@ int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_wr
     }
     return sum_index;
 }
-
+/**
+ *
+ * @param sum
+ * @param bulk_counter
+ * @param seq_num
+ * @return index or -1 if not found
+ */
+int get_packet_code(struct packet_sum* sum, int *bulk_counter, uint32_t seq_num) {
+    int index = *bulk_counter;
+    for (int counter = BULK_BUFFER_PACKET_CODE; counter >= 0; counter--) {
+        if ((seq_num >= sum[index].start_seq) && (seq_num <= sum[index].stop_seq)) {
+            return index;
+        }
+        if (--index < 0) {
+            index = BULK_BUFFER_PACKET_CODE - 1;
+        }
+    }
+    return -1;
+}
