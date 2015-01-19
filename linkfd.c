@@ -431,60 +431,43 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
     int index = l_jw->rel_head;
     int prevIndex = -1;
 
-    uint32_t lostSeq = packet_sum->start_seq;
+    packet_sum->lostAmount = packet_sum->stop_seq - packet_sum->start_seq + 1;
 
-    //search start_seq or bigger
-    uint32_t curSeq = packet_sum->start_seq;
-    while (index > -1) {
-        if (packet_sum->start_seq >= flist[index].seq_num) {
-            packet_sum->lostAmount = flist[index].seq_num - curSeq;
-            if (flist[index].seq_num != curSeq) {
-                lostSeq = flist[index].seq_num - 1;
-            }
-            curSeq = flist[index].seq_num;
-            break;
-        }
-        prevIndex = index;
-        index = flist[index].rel_next;
-    }
-    //search lost packlet in wb_just_write_frames
-    while (index > -1) {
-        if((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
-            packet_sum->lostAmount += flist[index].seq_num - (curSeq + 1);
-            curSeq = flist[index].seq_num;
-        } else {
-            break;
-        }
-        prevIndex = index;
-        index = flist[index].rel_next;
-    }
+    uint32_t nextSeq = packet_sum->start_seq;
+    uint32_t lostSeq = 0;
 
-    index = l->rel_head;
-    if (index <= -1) {
-        return 0;
-    }
-
-    if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
-        packet_sum->lostAmount--;
-    } else {
-        return lostSeq;
-    }
-    prevIndex = index;
-    index = flist[index].rel_next;
+    //search lost packet in wb_just_write_frames
     while (index > -1) {
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
-        } else {
-            break;
+            if (nextSeq != flist[index].seq_num) {
+                lostSeq = nextSeq;
+                nextSeq = flist[index].seq_num + 1;
+            } else {
+                nextSeq++;
+            }
+
+        } else if (flist[index].seq_num > packet_sum->stop_seq) {
+            return lostSeq;
         }
-        if ((flist[index].seq_num - flist[prevIndex].seq_num) != 1) {
-            lostSeq = flist[index].seq_num - 1;
-        }
-        prevIndex = index;
         index = flist[index].rel_next;
     }
-    if ((packet_sum->stop_seq - flist[index].seq_num) != 0) {
-        lostSeq = flist[index].seq_num - 1;
+
+    //search lost packet in write buf
+    index = l->rel_head;
+    while (index > -1) {
+        if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
+            packet_sum->lostAmount--;
+            if (nextSeq != flist[index].seq_num) {
+                lostSeq = nextSeq;
+                nextSeq = flist[index].seq_num + 1;
+            } else {
+                nextSeq++;
+            }
+        } else if (flist[index].seq_num > packet_sum->stop_seq) {
+            return lostSeq;
+        }
+        index = flist[index].rel_next;
     }
     return lostSeq;
 }
@@ -1823,7 +1806,7 @@ if(drop_packet_flag) {
         shm_conn_info->t_model_rtt100 = ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-
+        print_head_of_packet(buf, "add to sum ", tmp_seq_counter, len);
 
         // packet code section
 #ifdef SUM_SEND
@@ -5673,6 +5656,7 @@ if(drop_packet_flag) {
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                         shm_conn_info->frames_buf, lostSeq);
                                 if (packet_index > -1) {
+                                    print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
