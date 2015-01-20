@@ -113,7 +113,7 @@ struct my_ip {
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
-#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 5 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 
@@ -320,6 +320,13 @@ int assert_cnt(int where) {
     return 0;
 }
 
+int check_check() {
+    for(int i=0; i<CHECK_SZ; i++) {
+        if(shm_conn_info->check[i] != 170) {
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d value %du != 170", i, shm_conn_info->check[i]);
+        }
+    }
+}
 /* convert ms(milliseconds) to timeval struct */
 void ms2tv(struct timeval *result, unsigned long interval_ms) {
     result->tv_sec = (interval_ms / 1000);
@@ -678,8 +685,7 @@ static void sig_usr1(int sig)
  * колличество отставших пакетов
  * buf[] - номера пакетов
  */
-int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
-    return 0; // disabled!
+int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t seq_limit) {
     int i = shm_conn_info->write_buf[chan_num].frames.rel_head, n;
     uint32_t isq,nsq, k;
     int idx=0;
@@ -711,7 +717,6 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
             break;
         }
     }
-    acnt = 0;
     while(i > -1) {
         n = shm_conn_info->frames_buf[i].rel_next;
         //vtun_syslog(LOG_INFO, "MRB: scan1");
@@ -719,6 +724,9 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
 
             isq = shm_conn_info->frames_buf[i].seq_num;
             nsq = shm_conn_info->frames_buf[n].seq_num;
+            if(nsq > seq_limit) {
+                break;
+            }
             //vtun_syslog(LOG_INFO, "MRB: scan2 %"PRIu32" > %"PRIu32" +1 ?", nsq, isq);
             if(nsq > (isq+1)) {
                 //vtun_syslog(LOG_INFO, "MRB: scan2 yes!");
@@ -737,9 +745,6 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len) {
         }
         i = n;
         blen++;
-#ifdef DEBUGG
-        if(assert_cnt(1)) break;
-#endif
     }
     //vtun_syslog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
     *buf_len = blen;
@@ -857,7 +862,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
 
 
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
-    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     if(full_rtt == 0) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
@@ -1066,11 +1071,18 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     // drtt should be equal in AG mode as we balance the buffers, only takes place in PING-like mode
     //drtt_ms = shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg;
     drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
+    if(drtt_ms < 0) {
+        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt + shm_conn_info->stats[max_chan].rttvar);
+    } else {
+        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt + shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[max_chan].rttvar);
+    }
     //sem_post(&(shm_conn_info->stats_sem));
 
     // MRL is allowed time to lag
     // WARNING : do we use MRL correctly here? may be use MLD?
-    mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
+    //mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
+    // MRL unused - TODO
+    mrl_ms = MAX_LATENCY_DROP_USEC / 1000;
     expiration_ms_fromnow = mrl_ms - drtt_ms;
     if(expiration_ms_fromnow < 0) { 
         // we can get no frames; handle this above
@@ -1080,10 +1092,10 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     
     timersub(&info.current_time, &max_latency, &expiration_date);
     timersub(&info.current_time, &info.hold_time, &hold_period);
-    if((hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
+    if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
         // TODO: need info.ACK_speed_correct flag
         // this will work just because hold is not likely to kick in before ACS is recalculated
-        expnum = MAX_LATENCY_DROP_USEC / 1000 / 2 * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
+        expnum = (mrl_ms - drtt_ms) * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
     }
     
     //find start point
@@ -1547,7 +1559,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
+        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, length);
 #endif
         if(debug_trace) {
             vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
@@ -1580,6 +1592,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
     
         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
         statb.packet_sent_rmit += 1000;
         if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
             shm_conn_info->stats[info.process_num].l_pbl_tmp++;
@@ -1885,7 +1898,7 @@ if(drop_packet_flag) {
 #endif
         new_packet = 1;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, len);
+        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, length);
 #endif
     }
     else {
@@ -1894,7 +1907,7 @@ if(drop_packet_flag) {
     }
 #ifdef DEBUGG
     else {
-        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, len, tmp_seq_counter, idx);
+        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, length, tmp_seq_counter, idx);
     }
 #endif
     
@@ -1931,8 +1944,8 @@ if(drop_packet_flag) {
 
 
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
-    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, len);
+    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
+    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
 #endif
     if(debug_trace) {
         vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
@@ -1994,6 +2007,7 @@ if(drop_packet_flag) {
 #endif
 
     shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
     statb.packet_sent_ag += 1000;
     if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
         shm_conn_info->stats[info.process_num].l_pbl_tmp++;
@@ -2079,35 +2093,35 @@ int write_buf_check_n_flush(int logical_channel) {
                 if (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d bl %d", info.flush_sequential,
-                            shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len);
+                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d bl %d ts %ld.%06ld", info.flush_sequential,
+                            shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len, info.current_time);
                     loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO,
-                            "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms %s",
+                            "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bl %d lat %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), js_buf_fl);
+                            info.least_rx_seq[logical_channel], buf_len, tv2ms(&tv_tmp), info.current_time, js_buf_fl);
                     loss_flag = 1;
 
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), js_buf_fl);
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), info.current_time, js_buf_fl);
 
                     loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms %s",
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), js_buf_fl);
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), info.current_time, js_buf_fl);
                     loss_flag = 1;
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", js_buf_fl);
@@ -2134,7 +2148,8 @@ int write_buf_check_n_flush(int logical_channel) {
                 vtun_syslog(LOG_INFO, wb_1ms_str);
                 memset(wb_1ms_str, '\0', 5000);
 #endif
-                if (loss_flag) {
+                if (loss_flag && !lost_buf_exists(shm_conn_info->write_buf[logical_channel].last_written_seq)) {
+                    // TODO: check if there is no such entry (this sqn) in the list
                     shm_conn_info->loss_idx++;
                     if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                         shm_conn_info->loss_idx = 0;
@@ -2298,7 +2313,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     char *ptr;
     int mlen = 0;
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
+    vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", length, seq_num, conn_num);
 #endif
     if(debug_trace) {
         vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
@@ -2334,17 +2349,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             ( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST )) { // this ABS comparison makes checks in MRB unnesesary...
         vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->write_buf[conn_num].last_written_seq));
-        shm_conn_info->write_buf[conn_num].broken_cnt++;
-        if(shm_conn_info->write_buf[conn_num].broken_cnt > 3) {
-            // fix lws
-            shm_conn_info->write_buf[conn_num].last_written_seq = seq_num-1;
-            vtun_syslog(LOG_INFO, "Broken is perm , Applying permanent fix...");
-        } else {
-            *succ_flag = -2;
-            return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-        }
     }
-    shm_conn_info->write_buf[conn_num].broken_cnt = 0;
 
     if ( (seq_num <= shm_conn_info->write_buf[conn_num].last_written_seq)) {
         //check for oldest dups
@@ -2355,7 +2360,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             int len_ret = dev_write(info.tun_device, out, len);
             gettimeofday(&work_loop2, NULL );
             timersub(&work_loop2, &work_loop1, &tmp_tv);
-            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %u", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv));
+            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time);
             if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -2374,7 +2379,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_INFO, "drop dup pkt seq_num %"PRIu32" lws %"PRIu32"", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
 #endif
         *succ_flag = -2;
-        return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
     // now check if we can find it in write buf current .. inline!
     // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
@@ -2386,7 +2391,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                 vtun_syslog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
 #endif
                 //return -3;
-                return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+                return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
             }
             i = shm_conn_info->frames_buf[i].rel_next;
 #ifdef DEBUGG
@@ -2401,7 +2406,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                            &newf) < 0) {
         // try a fix
         vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted");
-        return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf();
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
@@ -2421,7 +2426,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
     struct timeval t_rtt, t_frtt, tv_tmp;
-    int full_rtt = shm_conn_info->forced_rtt_recv + shm_conn_info->frtt_local_applied;
+    int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     if(info.exact_rtt < full_rtt) {
         ms2tv(&t_rtt, info.exact_rtt);
         ms2tv(&t_frtt, full_rtt);
@@ -2438,7 +2443,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->write_buf[conn_num].frames.rel_head = shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
         //*buf_len = 1;
         //return  ((seq_num == (shm_conn_info->write_buf.last_written_seq+1)) ? 0 : 1);
-        mlen = missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+        mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         //vtun_syslog(LOG_INFO, "write: add to head!");
         *succ_flag=0;
         return mlen;
@@ -2492,7 +2497,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         }
     }
 
-    mlen = missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+    mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
 
     *succ_flag= 0;
     return mlen;
@@ -3294,6 +3299,40 @@ int set_rttlag() {
     }
 }
 
+int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
+    // Search write_buf for lost seq_num
+    int ms_token;
+    int buf_len;
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    get_write_buf_wait_data(chan_mask, &ms_token);
+    // now that least_rx_seq calculated, see if we have direct loss detected
+    // TODO: speculative loss detection
+    //      speculative loss is less effective here though as waiting for 20+ packets is crucial time
+    int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, &buf_len, info.least_rx_seq[1]);    
+    if(incomplete_seq_len <= 2) {
+        for(int i=0; i<incomplete_seq_len; i++) {
+            vtun_syslog(LOG_INFO, "Fast requesting packet %lu", incomplete_seq_buf[i]);
+            shm_conn_info->loss_idx++;
+            if (shm_conn_info->loss_idx == LOSS_ARRAY) {
+                shm_conn_info->loss_idx = 0;
+            }
+            gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
+            shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
+            shm_conn_info->loss[shm_conn_info->loss_idx].psl = 1;
+            // TODO: who_lost
+            shm_conn_info->loss[shm_conn_info->loss_idx].who_lost = -1;
+            shm_conn_info->loss[shm_conn_info->loss_idx].sqn = incomplete_seq_buf[i];
+        }
+    }
+}
+int lost_buf_exists(uint32_t seq_num) {
+    for(int i=0;i<LOSS_ARRAY;i++) {
+        if((shm_conn_info->loss[i].sqn == seq_num) || (shm_conn_info->loss[i].sqn == (seq_num + 1))) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
@@ -3870,6 +3909,7 @@ int lfd_linker(void)
     shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
     int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
     vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
+    memset(shm_conn_info->check, 170, CHECK_SZ);
 /**
  *
  *
@@ -4161,6 +4201,42 @@ int lfd_linker(void)
             shm_conn_info->drop_time = info.current_time;
             shm_conn_info->dropping = 1;
         }
+        if(shm_conn_info->stats[info.process_num].packet_upload_cnt > 50) {
+            timersub(&info.current_time, &shm_conn_info->stats[info.process_num].packet_upload_tv, &tv_tmp_tmp_tmp);
+            int ms_passed = tv2ms(&tv_tmp_tmp_tmp);
+            if(ms_passed > 5) {
+                shm_conn_info->stats[info.process_num].packet_upload_spd = shm_conn_info->stats[info.process_num].packet_upload_cnt * 1000 / ms_passed;
+                shm_conn_info->stats[info.process_num].packet_upload_cnt = 0;
+                shm_conn_info->stats[info.process_num].packet_upload_tv = info.current_time;
+                
+                int max_pups = 0;
+                int max_pups_chan = 0;
+                int min_rtt = INT32_MAX;
+                int min_rtt_chan = 0;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                            min_rtt = shm_conn_info->stats[i].exact_rtt;
+                            min_rtt_chan = i;
+                        }
+                        if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
+                            max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
+                            max_pups_chan = i;
+                        }
+                    }
+                }
+                if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt_chan) {
+                    shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt_chan;
+                    vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
+                        shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
+                    if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
+                        //shm_conn_info->forced_rtt = shm_conn_info->drtt;
+                        //need_send_FCI = 1;
+                        vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
+                    }
+                }
+            }
+        }
 
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
@@ -4172,6 +4248,13 @@ int lfd_linker(void)
                 shm_conn_info->idle = 0; 
             }
             */
+            timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
+            if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
+                shm_conn_info->frtt_local_applied = 14 * shm_conn_info->frtt_local_applied / 15 + shm_conn_info->max_rtt_lag / 15;
+                int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
+                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
+                shm_conn_info->frtt_smooth_tick = info.current_time;
+            }
             
             // FAST speed counter
             timersub(&info.current_time, &info.fast_pcs_ts, &tv_tmp_tmp_tmp);
@@ -4206,46 +4289,7 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
-                
-            // calculate forced rtt >>>
-            // TODO: full FRTT/xhi support!
-            /*
-            int max_rttvar = 0; // ms
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != info.process_num)) { // hope this works..
-                    if(shm_conn_info->stats[i].rttvar)
-                }
-            }
-            */
-            // <<< END forced_rtt calc
-            
-
-            // push up forced_rtt
-            sem_wait(write_buf_sem);
-            // TODO: need a smooth down-shift for frtt_us_applied; currently we just drop to zero
-            if ( (info.frtt_us_applied >= shm_conn_info->forced_rtt) && ((shm_conn_info->head_lossing) || (shm_conn_info->dropping)) && info.srv) { // server only
-                if (shm_conn_info->forced_rtt_start_grow.tv_sec == 0) {
-                    shm_conn_info->forced_rtt_start_grow = info.current_time;
-                }
-                struct timeval tmp_tv;
-                timersub(&info.current_time, &shm_conn_info->forced_rtt_start_grow, &tmp_tv);
-                int time = tv2ms(&tmp_tv) / LIN_RTT_SLOWDOWN; // 15x slower time
-                // TODO: overflow here! ^^^
-                //time = time > LIN_FORCE_RTT_GROW ? LIN_FORCE_RTT_GROW : time; // max 500ms
-                time = time > info.frtt_us_applied ? info.frtt_us_applied : time;
-                //vtun_syslog(LOG_INFO, "New forced rtt: %d", time);
-                if(shm_conn_info->forced_rtt != time) {
-                    shm_conn_info->forced_rtt = time;
-                    //vtun_syslog(LOG_INFO, "Apply & send forced rtt: %d", time);
-                    need_send_FCI = 1; // force immediate FCI send!
-                }
-            } else {
-                shm_conn_info->forced_rtt_start_grow.tv_sec = 0;
-                shm_conn_info->forced_rtt_start_grow.tv_usec = 0;
-                shm_conn_info->forced_rtt = 0;
-            }
-            sem_post(write_buf_sem);
-
+                    
         }
         // << END AVERAGE (MEAN) SEND_Q_EFF calculation
 
@@ -4289,16 +4333,16 @@ int lfd_linker(void)
             if(info.head_channel != 1) {
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 1 (ON)");
+                info.W_cubic_copy = info.send_q_limit_cubic;
             }
             info.head_channel = 1;
-            info.W_cubic_copy = info.send_q_limit_cubic;
         } else {
             if(info.head_channel != 0) {
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
+                info.send_q_limit_cubic = info.W_cubic_copy;
             }
             info.head_channel = 0;
-            info.send_q_limit_cubic = info.W_cubic_copy;
         }
 #endif
         // <<< DEAD DETECT and COPY HEAD from SHM
@@ -4323,9 +4367,11 @@ int lfd_linker(void)
             double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed;
             double d_rsr_top = shm_conn_info->stats[max_chan].rsr;
             double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt;
+            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;
             d_rtt_h = d_rtt_h / 1000.0; // ms
             double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
             d_rtt = d_rtt / 1000.0; // ms
+            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;
             double d_frtt = shm_conn_info->forced_rtt;
             double d_rsr = info.rsr;
             
@@ -4339,7 +4385,7 @@ int lfd_linker(void)
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
             double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h;
-            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - (d_rtt - d_rtt_h));
+            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - ((d_rtt + d_rtt_var) - (d_rtt_h - d_rtt_h_var)));
             if(d_pump_adj < 0) d_pump_adj = 0;
             
             if(d_rtt_shift < d_sql) {
@@ -4611,8 +4657,11 @@ int lfd_linker(void)
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
-            shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
-            info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + shm_conn_info->frtt_local_applied*1000 + shm_conn_info->forced_rtt_recv*1000;
+            if(shm_conn_info->max_rtt_lag > shm_conn_info->frtt_local_applied) {
+                shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
+                int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
+                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
+            }
 
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
@@ -4623,7 +4672,10 @@ int lfd_linker(void)
             if(shm_conn_info->idle) {
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
-                info.W_cubic_copy = info.send_q_limit_cubic;
+                //info.W_cubic_copy = info.send_q_limit_cubic;
+            }
+            if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
+                shm_conn_info->forced_rtt = shm_conn_info->drtt;
             }
             
             // compute perceived loss probability
@@ -4763,6 +4815,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%u", (unsigned int)shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
+            add_json(js_buf, &js_cur, "pupload", "%d", shm_conn_info->stats[info.process_num].packet_upload_spd);
             //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
             add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
@@ -4846,6 +4899,7 @@ int lfd_linker(void)
             //int slope = get_slope(&smalldata);
             //add_json(js_buf, &js_cur, "slope", "%d", slope);
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
+            add_json(js_buf, &js_cur, "lssqn[?]", "%lu", last_sent_packet_num[1].seq_num);
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
@@ -4966,6 +5020,7 @@ int lfd_linker(void)
                 }
                 info.channel[i].packet_recv_counter = 0;
                 shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                 info.channel[0].up_len += len_ret;
             }
 
@@ -5050,7 +5105,9 @@ int lfd_linker(void)
                     }
                     info.channel[i].packet_recv_counter = 0;
                     shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret; // WTF?? no sync / futex ??
+                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                     info.channel[0].up_len += len_ret;                    
+                    infer_lost_seq_num(incomplete_seq_buf);
                 }
             }
 
@@ -5079,6 +5136,7 @@ int lfd_linker(void)
                     linker_term = TERM_NONFATAL;
                 }
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                 info.channel[i].up_len += len_ret;
             }
         } // for each chan_num loop end ([i])
@@ -5100,6 +5158,7 @@ int lfd_linker(void)
            * This is the Tick module
            */
         if ( timercmp(&tv_tmp, &timer_resolution, >=)) {
+            check_check();
             udp_struct->lport = info.channel[1].lport;
             udp_struct->rport = info.channel[1].rport;
             //if (get_udp_stats(udp_struct, 1)) {
@@ -5238,6 +5297,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL; //?????
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[0].up_len += len_ret;
                     }
                 }
@@ -5279,6 +5339,7 @@ int lfd_linker(void)
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[i].up_len += len_ret;
                     }
                 }
@@ -5470,7 +5531,7 @@ int lfd_linker(void)
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", len);
+        vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", length);
 }
 #endif
 
@@ -5517,6 +5578,7 @@ if(drop_packet_flag) {
                                  break;
                              }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[i].up_len += len_ret;
                          }
                          last_action = info.current_time.tv_sec; // TODO: clean up last_action/or/last_ping wtf.
@@ -5626,7 +5688,7 @@ if(drop_packet_flag) {
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, length);
 #endif
                 if(debug_trace) {
                     vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
@@ -6109,8 +6171,6 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
                             shm_conn_info->ag_mask_recv = hsag_mask2ag_mask(ntohl(tmp32_n));
                             set_rttlag();
-                            shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
-                            info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + shm_conn_info->frtt_local_applied*1000 + shm_conn_info->forced_rtt_recv*1000;
 
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
@@ -6317,6 +6377,7 @@ if(drop_packet_flag) {
                             break;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[chan_num].up_len += len_ret;
                         continue;
                     }
@@ -6612,7 +6673,7 @@ if(drop_packet_flag) {
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
 if(drop_packet_flag) {
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
+                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, length, (int16_t)info.channel[chan_num].packet_loss_counter);
 }
 #endif
                     if(debug_trace) {
@@ -6724,6 +6785,7 @@ if(drop_packet_flag) {
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
+                        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
                         info.channel[chan_num_virt].up_len += len_ret;
                         // TODO: introduce periodic send via each channel. On channel use stop some of resend_buf will remain locked
                         continue;
@@ -6932,6 +6994,7 @@ if(drop_packet_flag) {
 						break;
 					}
 					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
 					info.channel[i].up_len += len_ret;
 				}
 			}

@@ -303,6 +303,7 @@ struct vtun_host {
 #define FLUSHED_PACKET_ARRAY_SIZE 1000
 
 #define SESSION_NAME_SIZE 50
+#define CHECK_SZ 256 // size of bit check field
 struct _write_buf {
     struct frame_llist frames;
     //struct frame_llist free_frames; /* init all elements here */
@@ -315,7 +316,6 @@ struct _write_buf {
 
     struct timeval last_write_time; // into device
     int buf_len;
-    int broken_cnt;
     unsigned long remote_lws; // last written packet into device on remote side
     unsigned long last_lws_notified;
     uint16_t complete_seq_quantity;
@@ -409,6 +409,9 @@ struct conn_stats {
     int l_pbl_tmp; 
     int pbl_lossed;
     int pbl_lossed_cnt;
+    int packet_upload_cnt;
+    int packet_upload_spd;
+    struct timeval packet_upload_tv;
 };
 /**
  * Structure for garbage statistic and information
@@ -597,6 +600,7 @@ struct timed_loss {
 struct conn_info {
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
+    sem_t hard_sem;
     sem_t tun_device_sem;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
@@ -625,7 +629,6 @@ struct conn_info {
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
 
-    //int broken_cnt;
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
@@ -636,7 +639,7 @@ struct conn_info {
     uint32_t need_to_exit; // sync by AG_flags_sem
     uint32_t session_hash_this; /**< Session hash for this machine sync by @see AG_flags_sem*/
     uint32_t session_hash_remote; /**< Session hash for remote machine sync by @see AG_flags_sem*/
-    sem_t hard_sem;
+    unsigned char check[CHECK_SZ]; // check-buf. TODO: fill with pattern "170" aka 10101010
     int head_process;
     int tflush_counter, tflush_counter_recv;
     struct timeval chanel_info_time;
@@ -675,7 +678,9 @@ struct conn_info {
     struct packet_sum test_packet_code[MAX_TCP_LOGICAL_CHANNELS];
     struct timeval last_written_recv_ts;
     int frtt_ms;
+    int drtt;
     int frtt_local_applied;
+    struct timeval frtt_smooth_tick;
     uint32_t ag_mask; // unsynced
     uint32_t ag_mask_recv; // unsynced
     int max_rtt_lag;
