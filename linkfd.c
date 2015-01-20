@@ -127,7 +127,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
-#define PLP_UNRECOVERABLE_CUTOFF 5000 // in theory about 50 mbit/s at 20ms 
+#define PLP_UNRECOVERABLE_CUTOFF 1000 // in theory about 50 mbit/s at 20ms 
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
@@ -2792,7 +2792,7 @@ double xhi_function(int rtt_ms, int pbl) {
     
     double maxwin = 1.17 * pow( rtt / plp, 3.0/4.0 );
     int xhi = (int) round( maxwin / rtt );
-    return xhi;
+    return xhi * info.eff_len;
 }
 
 int print_xhi_data(struct mini_path_desc *path_descs, int count) {
