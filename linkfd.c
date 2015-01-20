@@ -4478,9 +4478,9 @@ int lfd_linker(void)
             } else if (d_rsr > RSR_TOP) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f", d_rsr);
             }
-            if(d_rsr <= SEND_Q_LIMIT_MINIMAL) {
+            if(d_rsr < SEND_Q_LIMIT_MINIMAL) {
                 d_rsr = SEND_Q_LIMIT_MINIMAL;
-                vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+                //vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
             }
                 
             info.rsr = d_rsr;
