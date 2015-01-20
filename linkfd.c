@@ -113,7 +113,8 @@ struct my_ip {
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
-#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+//#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
+#define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 
@@ -127,6 +128,7 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
+#define PLP_UNRECOVERABLE_CUTOFF 1000 // in theory about 50 mbit/s at 20ms 
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
@@ -219,7 +221,7 @@ short retransmit_count = 0;
 char channel_mode = MODE_NORMAL;
 int hold_mode = 0; // 1 - hold 0 - normal
 int force_hold_mode = 1;
-int buf_len, incomplete_seq_len = 0, rtt_shift=0;
+int buf_len, incomplete_seq_len = 0;
 int16_t my_miss_packets_max = 0; // in ms; calculated here
 int16_t miss_packets_max = 0; // get from another side
 int proto_err_cnt = 0;
@@ -283,14 +285,17 @@ struct {
     int v_max;
 } v_mma;
 
-struct {
+struct _ag_stat {
     int WT;
     int RT;
     int D;
     int CL;
     int DL;
     int PL;
-} ag_stat;
+};
+
+struct _ag_stat ag_stat;
+struct _ag_stat ag_stat_copy;
 
 struct mini_path_desc
 {
@@ -854,7 +859,9 @@ int check_rtt_latency_drop_chan(int chan_num) {
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    if( ((shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ( (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt)) {
+    int rtt_diff = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+    int cur_mld = (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt;
+    if( rtt_diff > cur_mld ) {
         return 0;
     }
     return 1;
@@ -1596,6 +1603,8 @@ int retransmit_send(char *out2, int n_to_send) {
         statb.packet_sent_rmit += 1000;
         if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
             shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+        if(shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
+            shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
         info.channel[i].up_len += len_ret;
         statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
@@ -2011,6 +2020,8 @@ if(drop_packet_flag) {
     statb.packet_sent_ag += 1000;
     if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
         shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+    if(shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
+        shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
     info.channel[chan_num].up_len += len_ret;
     statb.byte_sent_ag_full += len_ret;
     info.channel[chan_num].up_packets++;
@@ -2850,6 +2861,7 @@ int set_IDLE() {
     
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
+        shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -2916,6 +2928,14 @@ int plp_avg_pbl(int pnum) {
     }
 }
 
+int plp_avg_pbl_unrecoverable(int pnum) {
+    if(shm_conn_info->stats[pnum].l_pbl_tmp_unrec > shm_conn_info->stats[pnum].l_pbl_unrec) {
+        return shm_conn_info->stats[pnum].l_pbl_tmp_unrec;
+    } else {
+        return shm_conn_info->stats[pnum].l_pbl_unrec;
+    }
+}
+
 int fill_path_descs_unsync(struct mini_path_desc *path_descs, uint32_t chan_mask) {
     int p=0;
     memset((void *)path_descs, 0, sizeof(path_descs));
@@ -2976,6 +2996,17 @@ int calc_xhi(struct mini_path_desc *path_descs, int count) {
     xhi = (int) round( maxwin / rtt );
 
     return xhi;
+}
+
+double xhi_function(int rtt_ms, int pbl) {
+    double rtt = rtt_ms;
+    rtt /= 1000.0;
+    double plp = pbl;
+    plp = 1.0 / plp;
+    
+    double maxwin = 1.17 * pow( rtt / plp, 3.0/4.0 );
+    int xhi = (int) round( maxwin / rtt );
+    return xhi * info.eff_len;
 }
 
 int print_xhi_data(struct mini_path_desc *path_descs, int count) {
@@ -3331,6 +3362,30 @@ int lost_buf_exists(uint32_t seq_num) {
             return 1;
         }
     }
+    return 0;
+}
+
+int print_ag_drop_reason() {
+    char *reason = "Dropping AG due to";
+    if(ag_stat.WT == 1 && ag_stat_copy.WT != ag_stat.WT) {
+        vtun_syslog(LOG_INFO,  "%s WT", reason);
+    }
+    if(ag_stat.RT == 1 && ag_stat_copy.RT != ag_stat.RT) {
+        vtun_syslog(LOG_INFO,  "%s RT", reason);
+    }
+    if(ag_stat.D == 1 && ag_stat_copy.D != ag_stat.D) {
+        vtun_syslog(LOG_INFO,  "%s D", reason);
+    }
+    if(ag_stat.CL == 1 && ag_stat_copy.CL != ag_stat.CL) {
+        vtun_syslog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d - rtt_maxchan %d > MLD %d + frtt %d", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt);
+    }
+    if(ag_stat.DL == 1 && ag_stat_copy.DL != ag_stat.DL) {
+        vtun_syslog(LOG_INFO,  "%s DL", reason);
+    }
+    if(ag_stat.PL == 1 && ag_stat_copy.PL != ag_stat.PL) {
+        vtun_syslog(LOG_INFO,  "%s PL", reason);
+    }
+    ag_stat_copy = ag_stat; 
     return 0;
 }
 
@@ -3900,6 +3955,7 @@ int lfd_linker(void)
     info.fast_pcs_ts = info.current_time;
     int pump_adj = 0;
     int temp_sql_copy =0;
+    int temp_sql_copy2 =0;
     int temp_acs_copy =0;
 
     struct timeval wb_1ms_time = { 0, 1000 };
@@ -3910,6 +3966,8 @@ int lfd_linker(void)
     int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
     vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
     memset(shm_conn_info->check, 170, CHECK_SZ);
+    info.head_change_tv = info.current_time;
+    info.head_change_safe = 1;
 /**
  *
  *
@@ -4232,7 +4290,7 @@ int lfd_linker(void)
                     if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
                         //shm_conn_info->forced_rtt = shm_conn_info->drtt;
                         //need_send_FCI = 1;
-                        vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
+                        //vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
                     }
                 }
             }
@@ -4289,6 +4347,10 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
             }
+            
+            
+            timersub(&info.current_time, &info.head_change_tv, &tv_tmp_tmp_tmp);
+            info.head_change_safe = (tv2ms(&tv_tmp_tmp_tmp) > (info.exact_rtt * 2) ? 1 : 0);
                     
         }
         // << END AVERAGE (MEAN) SEND_Q_EFF calculation
@@ -4341,6 +4403,8 @@ int lfd_linker(void)
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
                 info.send_q_limit_cubic = info.W_cubic_copy;
+                info.head_change_tv = info.current_time;
+                info.head_change_safe = 0;
             }
             info.head_channel = 0;
         }
@@ -4350,30 +4414,31 @@ int lfd_linker(void)
     
 
         // RSR section here >>>
-        int32_t rtt_shift;
+        int rtt_shift;
         int rsr_top;
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
-            info.send_q_limit_threshold = info.rsr / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
         } else {
             rsr_top = shm_conn_info->stats[max_chan].rsr;
-            info.send_q_limit_threshold = rsr_top / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER;
             
             // copy all vars used to their 'double' reprs
-            double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed;
-            double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed;
-            double d_rsr_top = shm_conn_info->stats[max_chan].rsr;
-            double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt;
-            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;
-            d_rtt_h = d_rtt_h / 1000.0; // ms
-            double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;
-            d_rtt = d_rtt / 1000.0; // ms
-            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;
-            double d_frtt = shm_conn_info->forced_rtt;
-            double d_rsr = info.rsr;
+            double d_ACS_h = shm_conn_info->stats[        max_chan].ACK_speed; // bytes/s
+            double d_ACS = shm_conn_info->stats[info.process_num].ACK_speed; // bytes/s
+            double d_rsr_top = shm_conn_info->stats[max_chan].rsr; // bytes
+            double d_rtt_h = shm_conn_info->stats[max_chan].exact_rtt; // ms
+            d_rtt_h = d_rtt_h / 1000.0; // ms->s
+            double d_rtt_h_var = shm_conn_info->stats[max_chan].rttvar;// ms
+            d_rtt_h_var /= 1000.0; // ms->s
+            double d_rtt = shm_conn_info->stats[info.process_num].exact_rtt;// ms
+            d_rtt = d_rtt / 1000.0; // ms->s
+            double d_rtt_var = shm_conn_info->stats[info.process_num].rttvar;// ms
+            d_rtt_var /= 1000.0; // ms->s
+            double d_frtt = shm_conn_info->forced_rtt;// ms
+            d_frtt /= 1000.0; // ms->s
+            double d_rsr = info.rsr; // bytes
             
             if(d_ACS_h < 1) {
                 d_ACS_h = 1; // zero-protect
@@ -4384,10 +4449,15 @@ int lfd_linker(void)
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
-            double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h;
-            double d_pump_adj = d_ACS * (((double)MAX_LATENCY_DROP_USEC/1000000.0) + d_frtt - ((d_rtt + d_rtt_var) - (d_rtt_h - d_rtt_h_var)));
+            // TODO: rtt_shift and pump_adj are essentially the same - we should join them one day...
+            double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
+            double d_mld_ms = MAX_LATENCY_DROP_USEC;
+            d_mld_ms /= 1000000.0;
+            d_mld_ms += d_frtt;
+            double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
             if(d_pump_adj < 0) d_pump_adj = 0;
             
+            double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
             if(d_rtt_shift < d_sql) {
                 d_sql -= d_rtt_shift;
             } else {
@@ -4395,6 +4465,7 @@ int lfd_linker(void)
             }
             
             d_sql += d_pump_adj;
+            temp_sql_copy2 = (int) d_sql; 
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
@@ -4407,12 +4478,12 @@ int lfd_linker(void)
             } else if (d_rsr > RSR_TOP) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f", d_rsr);
             }
-            if(d_rsr < SEND_Q_LIMIT_MINIMAL) d_rsr = SEND_Q_LIMIT_MINIMAL;
+            if(d_rsr <= SEND_Q_LIMIT_MINIMAL) {
+                d_rsr = SEND_Q_LIMIT_MINIMAL;
+                vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+            }
+                
             info.rsr = d_rsr;
-            
-            //if(info.send_q_limit < info.send_q_limit_threshold) {
-            //    info.send_q_limit = info.send_q_limit_threshold - 1;
-            //}
             
             // now compute W
             timersub(&(info.current_time), &loss_time, &t_tv);
@@ -4432,31 +4503,32 @@ int lfd_linker(void)
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
 
-        // calc send_q_limit_threshold
-        if(info.send_q_limit_threshold < SEND_Q_LIMIT_MINIMAL) {
-            info.send_q_limit_threshold = SEND_Q_LIMIT_MINIMAL-1;
-        }
         // <<< END RSR section here
 
 
         // AG DECISION >>>
-        ag_flag_local = ((    (!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
+        ag_flag_local = ((    //(!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
+            (shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER))
                            //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
-                           || ( !check_rtt_latency_drop() )
+                           || ( info.head_change_safe && !check_rtt_latency_drop() )
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
-                           || ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
+                           //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
+                           || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
                            /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
                            ) ? R_MODE : AG_MODE);
         // logging part
-        if(info.rsr <= info.send_q_limit_threshold) ag_stat.RT = 1;
+        //if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
+        if( shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER) ) ag_stat.RT = 1;
         //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
-        if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
+        //if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
+        if( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) ag_stat.PL = 1; // pseudo-model cut-off
         if(channel_dead) ag_stat.D = 1;
-        if(!check_rtt_latency_drop()) ag_stat.CL = 1;
+        if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
+        print_ag_drop_reason();
         //ag_flag_local = R_MODE;
 
         if(ag_flag_local == AG_MODE) {
@@ -4690,6 +4762,7 @@ int lfd_linker(void)
             }
             
             int cur_plp = plp_avg_pbl(info.process_num);
+            int cur_plp_unrec = plp_avg_pbl_unrecoverable(info.process_num);
             
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
@@ -4781,6 +4854,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
             add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
+            add_json(js_buf, &js_cur, "plp2u", "%d", cur_plp_unrec);
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
@@ -4795,8 +4869,9 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
+            add_json(js_buf, &js_cur, "sql2", "%d", temp_sql_copy2);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
-            add_json(js_buf, &js_cur, "rtt_shift", "%d", (int)rtt_shift);
+            add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
             add_json(js_buf, &js_cur, "W_cubic_copy", "%d", info.W_cubic_copy);
             add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
@@ -4828,6 +4903,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num)));
 
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
@@ -6014,6 +6090,7 @@ if(drop_packet_flag) {
                                 psl = ntohl(tmp_h);
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_psl", "%d", ntohl(tmp_h));
+                                psl = ntohl(tmp_h);
                             }
 
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
@@ -6093,6 +6170,11 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
                                                 add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
+                                                if(psl > 2) {
+                                                    // unrecoverable loss
+                                                    shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
+                                                    shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
+                                                }
                                             }
                                             add_json(lossLog, &lossLog_cur, "p_num", "%d", i);
                                             break;
@@ -7109,7 +7191,6 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     hold_mode = 0; // 1 - hold 0 - normal
     force_hold_mode = 1;
     incomplete_seq_len = 0;
-    rtt_shift=0;
     my_miss_packets_max = 0; // in ms; calculated here
     miss_packets_max = 0; // get from another side
     proto_err_cnt = 0;
