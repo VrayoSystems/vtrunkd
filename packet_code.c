@@ -20,8 +20,9 @@ void sum_init(struct packet_sum* sum, uint32_t start_seq, uint32_t stop_seq, int
     sum->stop_seq = stop_seq;
     sum->current_seq = 0;
     sum->my_selection_num = my_selection_num;
+#ifdef CODE_LOG
     vtun_syslog(6, "func sum_init selection %d seq start %"PRIu32" stop %"PRIu32" len %i", my_selection_num, start_seq, stop_seq, packet_len);
-
+#endif
 }
 
 void add_packet_code(char* packet, struct packet_sum *sum, uint16_t packet_len) {
@@ -55,8 +56,9 @@ void add_redundancy_packet_code(struct packet_sum *sum, int *bulk_counter, char*
     sum[*bulk_counter].my_selection_num = ntohs(my_selection_num_n);
     sum[*bulk_counter].len_sum = packet_len - (sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t));
     memcpy(sum[*bulk_counter].sum, packet + sizeof(uint32_t) + sizeof(uint16_t), sum[*bulk_counter].len_sum);
+#ifdef CODE_LOG
     vtun_syslog(6, "func add_redundancy_packet_code selection %i start_seq %"PRIu32" %"PRIu32" stop_seq %"PRIu32" len %i", sum[*bulk_counter].my_selection_num, sum[*bulk_counter].start_seq,ntohl(start_seq_n), sum[*bulk_counter].stop_seq, sum[*bulk_counter].len_sum);
-
+#endif
     //iterate the sum recv buffer
     if (++*bulk_counter == BULK_BUFFER_PACKET_CODE) {
         *bulk_counter = 0;

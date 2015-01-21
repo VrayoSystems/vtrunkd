@@ -1828,11 +1828,13 @@ if(drop_packet_flag) {
         shm_conn_info->t_model_rtt100 = ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
-        print_head_of_packet(buf, "add to sum ", tmp_seq_counter, len);
 
         // packet code section
 #ifdef SUM_SEND
-        //vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+#ifdef CODE_LOG
+        print_head_of_packet(buf, "add to sum ", tmp_seq_counter, len);
+        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+#endif
 
         int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
         int packet_code_ready = 0;
@@ -1853,13 +1855,10 @@ if(drop_packet_flag) {
             packet_code_ready = 1;
         }
         shm_conn_info->packet_code[current_selection][chan_num].current_seq = tmp_seq_counter;
-//        print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "redund code\0", 0, shm_conn_info->packet_code[chan_num].len_sum);
 #endif
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
 #ifdef SUM_SEND
         if (packet_code_ready) {
-//            print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "send redund code", tmp_seq_counter + 1 - REDUNDANCY_CODE_LAG, shm_conn_info->packet_code[chan_num].len_sum);
-
             int len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection, FRAME_REDUNDANCY_CODE);
             update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer);
             sem_post(&(shm_conn_info->common_sem));
@@ -1878,11 +1877,14 @@ if(drop_packet_flag) {
             vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
         #endif
             if (select_ret == 1) {
+#ifdef CODE_LOG
                 vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
-            //    add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
+#endif
                 udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
             } else {
+#ifdef CODE_LOG
                 vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+#endif
                 sem_wait(&(shm_conn_info->resend_buf_sem));
                 int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
                 sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1911,8 +1913,9 @@ if(drop_packet_flag) {
 #endif
     }
     else {
+#ifdef DEBUGG
         vtun_syslog(LOG_INFO, "we have fast resend frame sending...");
-
+#endif
     }
 #ifdef DEBUGG
     else {
@@ -5502,7 +5505,9 @@ int lfd_linker(void)
                 shm_conn_info->packet_code[selection][i].timer.timer_time = tv_tmp;
                 if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
                         && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
+#ifdef CODE_LOG
                     vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&info.current_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
+#endif
                     shm_conn_info->packet_code[selection][i].stop_seq = shm_conn_info->packet_code[selection][i].current_seq;
                     len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[selection][i],
                             shm_conn_info->packet_code[selection][i].stop_seq, selection, FRAME_REDUNDANCY_CODE);
@@ -5518,7 +5523,9 @@ int lfd_linker(void)
                     if (info.channel[i].local_seq_num == (UINT32_MAX - 1)) {
                         info.channel[i].local_seq_num = 0;
                     }
+#ifdef CODE_LOG
                     vtun_syslog(LOG_ERR, "add redund code to fast_resend");
+#endif
                     sem_wait(&(shm_conn_info->resend_buf_sem));
                     int idx = add_fast_resend_frame(i, buf2, len_sum | VTUN_BAD_FRAME, 0);
                     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -5779,8 +5786,10 @@ if(drop_packet_flag) {
                             vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
                             continue;
                         } else if (flag_var == FRAME_REDUNDANCY_CODE) {
+#ifdef CODE_LOG
                             vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,ntohl(*((uint32_t *)(buf))));
-                         //   print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
+                            print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
+#endif
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
                        //     len -= 3 * sizeof(uint32_t);
@@ -5791,12 +5800,16 @@ if(drop_packet_flag) {
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
+#ifdef CODE_LOG
                                 vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
+#endif
                                 int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                         shm_conn_info->frames_buf, lostSeq);
                                 if (packet_index > -1) {
+#ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+#endif
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
@@ -5804,7 +5817,6 @@ if(drop_packet_flag) {
                             }
                             sem_post(write_buf_sem);
 
-                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE local seq num %"PRIu32"", local_seq_num);
                             // rtt calculation
                             if ((info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
                                 timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
@@ -6540,8 +6552,9 @@ if(drop_packet_flag) {
                     uint32_t packet_recv_spd;
                     flag_var = 0;
                     len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum, &last_recv_lsn, &packet_recv_spd);
+#ifdef CODE_LOG
                     vtun_syslog(LOG_INFO, "PKT local seq num %"PRIu32" seq_num %"PRIu32"", local_seq_tmp, seq_num);
-
+#endif
                     // rtt calculation
                     if( (info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
                         timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
@@ -6801,13 +6814,17 @@ if(drop_packet_flag) {
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
                                     &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf,
                                     &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
+#ifdef CODE_LOG
                             vtun_syslog(LOG_INFO, "packet after sum Uniq lostSeq %u found", lostSeq);
+#endif
                             int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
                                     &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                     shm_conn_info->frames_buf, lostSeq);
                             if (packet_index > -1) {
+#ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+#endif
                                 write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                         info.pid, &succ_flag);
