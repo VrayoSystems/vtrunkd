@@ -1854,14 +1854,12 @@ if(drop_packet_flag) {
         }
         shm_conn_info->packet_code[current_selection][chan_num].current_seq = tmp_seq_counter;
 //        print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "redund code\0", 0, shm_conn_info->packet_code[chan_num].len_sum);
-        vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
 #endif
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
 #ifdef SUM_SEND
         if (packet_code_ready) {
 //            print_head_of_packet(shm_conn_info->packet_code[chan_num].sum, "send redund code", tmp_seq_counter + 1 - REDUNDANCY_CODE_LAG, shm_conn_info->packet_code[chan_num].len_sum);
 
-            vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE");
             int len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection, FRAME_REDUNDANCY_CODE);
             update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer);
             sem_post(&(shm_conn_info->common_sem));
@@ -1880,9 +1878,11 @@ if(drop_packet_flag) {
             vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
         #endif
             if (select_ret == 1) {
+                vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
             //    add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
                 udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
             } else {
+                vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
                 sem_wait(&(shm_conn_info->resend_buf_sem));
                 int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
                 sem_post(&(shm_conn_info->resend_buf_sem));
