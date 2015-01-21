@@ -5802,7 +5802,7 @@ if(drop_packet_flag) {
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
 #ifdef CODE_LOG
-                            vtun_syslog(LOG_INFO, "LostAmount", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
+                            vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
 #ifdef CODE_LOG
@@ -6816,7 +6816,7 @@ if(drop_packet_flag) {
                     if (sumIndex != -1) {
                         shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount--;
 #ifdef CODE_LOG
-                        vtun_syslog(LOG_INFO, "LostAmount", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
+                        vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                         if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
