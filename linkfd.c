@@ -2273,7 +2273,7 @@ int write_buf_check_n_flush(int logical_channel) {
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
             return 1;
         } else {
-//            return 0;
+            return 0;
             int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0],
                     &shm_conn_info->wb_just_write_frames[logical_channel], &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf,
                     shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
