@@ -4903,6 +4903,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100);
             add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num)));
 
 
@@ -5493,14 +5494,15 @@ int lfd_linker(void)
         for (int i = 1; i <= info.channel_amount; i++) {
             for (int selection = 0; selection < SELECTION_NUM; selection++) {
                 int flag = 0, len_sum;
-                int tmp = shm_conn_info->t_model_rtt100;
+                //int tmp = shm_conn_info->t_model_rtt100;
+                int tmp = 100000;
                 tv_tmp.tv_sec = tmp / 100000;
                 tv_tmp.tv_usec = (tmp % 100000) * 10;
                 sem_wait(&(shm_conn_info->common_sem));
-                memcpy(&(shm_conn_info->packet_code[selection][i].timer.timer_time), &tv_tmp, sizeof(struct timeval));
+                shm_conn_info->packet_code[selection][i].timer.timer_time = tv_tmp;
                 if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
                         && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
-                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&shm_conn_info->packet_code[selection][i].timer.cur_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
+                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&info.current_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
                     shm_conn_info->packet_code[selection][i].stop_seq = shm_conn_info->packet_code[selection][i].current_seq;
                     len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[selection][i],
                             shm_conn_info->packet_code[selection][i].stop_seq, selection, FRAME_REDUNDANCY_CODE);
