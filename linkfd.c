@@ -2397,6 +2397,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         *succ_flag = -2;
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
+
     // now check if we can find it in write buf current .. inline!
     // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
     acnt = 0;
@@ -2415,6 +2416,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 #endif
         }
     }
+    shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] = seq_num;
     i = shm_conn_info->write_buf[conn_num].frames.rel_head;
 
     if(frame_llist_pull(   &shm_conn_info->wb_free_frames,
@@ -6804,6 +6806,10 @@ if(drop_packet_flag) {
 //                    print_head_of_packet(out, "recv packet",seq_num, len);
 
                     succ_flag = 0;
+                    int newPacket = 0;
+                    if(shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] != seq_num){
+                        newPacket = 1;
+                    }
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
                     my_miss_packets = buf_len;
                     my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
@@ -6814,7 +6820,9 @@ if(drop_packet_flag) {
                     }
                     int sumIndex = get_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, seq_num);
                     if (sumIndex != -1) {
-                        shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount--;
+                        if (newPacket) {
+                            shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount--;
+                        }
 #ifdef CODE_LOG
                         vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
