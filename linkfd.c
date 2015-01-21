@@ -2358,11 +2358,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->write_buf[conn_num].last_write_time = info.current_time;
     }
     int tail_idx = shm_conn_info->write_buf[conn_num].frames.rel_tail;
-    if (( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
+    if ((tail_idx != -1) && ( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
             (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num ) >= STRANGE_SEQ_FUTURE )) {
         vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT SRANGE_SEQ_FUTURE logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000 tail seq %lu", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num), shm_conn_info->frames_buf[tail_idx].seq_num);
     }
-    if( (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
+    if( (tail_idx != -1) && (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               ((shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST) ) { // this ABS comparison makes checks in MRB unnesesary...
         vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT STRANGE_SEQ_PAST logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num));
     }
