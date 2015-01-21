@@ -1832,7 +1832,7 @@ if(drop_packet_flag) {
 
         // packet code section
 #ifdef SUM_SEND
-        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+        //vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
 
         int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
         int packet_code_ready = 0;
