@@ -5807,7 +5807,6 @@ if(drop_packet_flag) {
                             vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
-                                shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount=0;
 #ifdef CODE_LOG
                                 vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
 #endif
@@ -5815,9 +5814,15 @@ if(drop_packet_flag) {
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                         shm_conn_info->frames_buf, lostSeq);
                                 if (packet_index > -1) {
+                                    shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
+                                    if (shm_conn_info->packet_code_recived[chan_num][packet_index].sum[0] != 0x45) {
+                                        print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
+                                                "ASSERT BAD packet repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                    } else {
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
+                                }
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
@@ -6828,7 +6833,6 @@ if(drop_packet_flag) {
                         vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                         if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
-                            shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
                                     &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf,
                                     &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
@@ -6839,10 +6843,16 @@ if(drop_packet_flag) {
                                     &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                     shm_conn_info->frames_buf, lostSeq);
                             if (packet_index > -1) {
+                                shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
+                                if (shm_conn_info->packet_code_recived[chan_num][packet_index].sum[0] != 0x45) {
+                                    print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "ASSERT BAD packet after sum repaired ", lostSeq,
+                                                                            shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                } else {
 #ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
+                                }
                                 write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                         info.pid, &succ_flag);
