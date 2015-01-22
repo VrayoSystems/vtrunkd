@@ -116,8 +116,9 @@ int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_wr
         return -1;
     }
     uint32_t seq_amount = (sum[sum_index].stop_seq - sum[sum_index].start_seq) / SELECTION_NUM + 1;
+#ifdef CODE_LOG
     vtun_syslog(6, " packet code found for packet seq_num %"PRIu32" selection %i sum - start_seq %"PRIu32" stop_seq %"PRIu32"  found packet len %i", seq_num, selection, sum[sum_index].start_seq, sum[sum_index].stop_seq, sum[sum_index].len_sum);
-
+#endif
     // if sum with one packet return sum immediately without xoring
     if (seq_amount == 1) {
         return sum_index;
@@ -131,7 +132,9 @@ int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_wr
             break;
         }
         if ((buf[j].seq_num >= sum[sum_index].start_seq) && (buf[j].seq_num <= sum[sum_index].stop_seq) && (((buf[j].seq_num - (SEQ_START_VAL + 1)) % SELECTION_NUM) == selection)) {
+#ifdef CODE_LOG
             vtun_syslog(6, " seq %"PRIu32" found packet len %i", buf[j].seq_num, buf[j].len);
+#endif
             seq_counter++;
         }
         if (j == wb->rel_tail) {
@@ -154,7 +157,9 @@ int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_wr
             break;
         }
         if ((buf[j].seq_num >= sum[sum_index].start_seq) && (buf[j].seq_num <= sum[sum_index].stop_seq) && (((buf[j].seq_num - (SEQ_START_VAL + 1)) % SELECTION_NUM) == selection)) {
+#ifdef CODE_LOG
             vtun_syslog(6, "xoring seq %"PRIu32" packet len %i", buf[j].seq_num, buf[j].len);
+#endif
             add_packet_code(buf[j].out, &sum[sum_index], buf[j].len);
             if (--seq_counter == 0)
                 break;
