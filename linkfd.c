@@ -1978,6 +1978,7 @@ if(drop_packet_flag) {
         }
     //}
     }
+    assert_packet_ipv4("writing to net", buf, len);
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
@@ -2248,7 +2249,7 @@ int write_buf_check_n_flush(int logical_channel) {
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
             shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
-
+            assert_packet_ipv4("writing to dev", frame_seq_tmp.out, frame_seq_tmp.len);
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
@@ -3397,9 +3398,9 @@ int print_ag_drop_reason() {
 }
 
 
-int assert_packet_ipv4(char *data, int len) {
+int assert_packet_ipv4(const char *desc, char *data, int len) {
     if(data[0] & 0x40 != 0x40) {
-        vtun_syslog(LOG_INFO, "ASSERT FAILED: packet not ipv4!");
+        vtun_syslog(LOG_INFO, "ASSERT FAILED: %s packet not ipv4!", desc);
         print_head_of_packet(data, "packet no IP header", 0, len);
         return 0;
     }
@@ -5836,7 +5837,7 @@ if(drop_packet_flag) {
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
                                     // TODO: assert here
-                                    assert_packet_ipv4(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                    assert_packet_ipv4("repaired", shm_conn_info->packet_code_recived[chan_num][packet_index].sum, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
