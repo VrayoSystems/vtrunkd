@@ -3379,7 +3379,7 @@ int print_ag_drop_reason() {
         vtun_syslog(LOG_INFO,  "%s WT", reason);
     }
     if(ag_stat.RT == 1 && ag_stat_copy.RT != ag_stat.RT) {
-        vtun_syslog(LOG_INFO,  "%s RT", reason);
+        vtun_syslog(LOG_INFO,  "%s RT ACS=%d < %d, max_ACS=%d", reason, shm_conn_info->stats[info.process_num].ACK_speed, (shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER), shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed );
     }
     if(ag_stat.D == 1 && ag_stat_copy.D != ag_stat.D) {
         vtun_syslog(LOG_INFO,  "%s D", reason);
