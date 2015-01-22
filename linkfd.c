@@ -5807,6 +5807,7 @@ if(drop_packet_flag) {
                             vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
+                                shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount=0;
 #ifdef CODE_LOG
                                 vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
 #endif
@@ -6827,6 +6828,7 @@ if(drop_packet_flag) {
                         vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                         if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
+                            shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
                                     &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf,
                                     &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
