@@ -5827,6 +5827,11 @@ if(drop_packet_flag) {
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                         shm_conn_info->frames_buf, lostSeq);
                                 if (packet_index > -1) {
+                                    shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
+                                    if (shm_conn_info->packet_code_recived[chan_num][packet_index].sum[0] != 0x45) {
+                                        print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
+                                                "ASSERT BAD packet repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                    } else {
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
@@ -5835,6 +5840,7 @@ if(drop_packet_flag) {
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
+                                    }
                                 }
                             }
                             sem_post(write_buf_sem);
@@ -6172,7 +6178,7 @@ if(drop_packet_flag) {
                                             memcpy(out_buf, out2, len);
                                             sem_post(&(shm_conn_info->resend_buf_sem));
                                             vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
-                                           //send_packet(1, out2, len);
+                                           send_packet(1, out2, len);
                                         }
                                         if(psl == 2) {
                                             sqn++; 
@@ -6185,7 +6191,7 @@ if(drop_packet_flag) {
                                                 memcpy(out_buf, out2, len);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
                                                 vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
-                                               //send_packet(1, out2, len);
+                                               send_packet(1, out2, len);
                                             }
                                         }
                                     }
@@ -6852,10 +6858,16 @@ if(drop_packet_flag) {
                                     &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                     shm_conn_info->frames_buf, lostSeq);
                             if (packet_index > -1) {
+                                shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount = 0;
+                                if (shm_conn_info->packet_code_recived[chan_num][packet_index].sum[0] != 0x45) {
+                                    print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "ASSERT BAD packet after sum repaired ", lostSeq,
+                                                                            shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
+                                } else {
 #ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
+                                }
                                 write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                         info.pid, &succ_flag);
