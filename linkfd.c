@@ -6178,7 +6178,8 @@ if(drop_packet_flag) {
                                         } else {
                                             memcpy(out_buf, out2, len);
                                             sem_post(&(shm_conn_info->resend_buf_sem));
-                                            vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
+                                            vtun_syslog(LOG_INFO, "resending packet %lu len %d", sqn, len);
+                                            assert_packet_ipv4("resend1", out2, len);
                                            send_packet(1, out2, len);
                                         }
                                         if(psl == 2) {
@@ -6191,7 +6192,8 @@ if(drop_packet_flag) {
                                             } else {
                                                 memcpy(out_buf, out2, len);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
-                                                vtun_syslog(LOG_INFO, "resending packet %lu", sqn);
+                                                vtun_syslog(LOG_INFO, "resending packet 2 %lu len %d", sqn, len);
+                                                assert_packet_ipv4("resend2", out2, len);
                                                send_packet(1, out2, len);
                                             }
                                         }
