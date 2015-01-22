@@ -3396,6 +3396,15 @@ int print_ag_drop_reason() {
     return 0;
 }
 
+
+int assert_packet_ipv4(char *data, int len) {
+    if(data[0] & 0x40 != 0x40) {
+        vtun_syslog(LOG_INFO, "ASSERT FAILED: packet not ipv4!");
+        print_head_of_packet(data, "packet no IP header", 0, len);
+        return 0;
+    }
+    return 1;
+}
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -4480,11 +4489,15 @@ int lfd_linker(void)
                 d_rsr = 7.0/8.0 * d_rsr + 1.0/8.0 * d_sql;
                 info.cycle_last = info.current_time;
             }
+            
             if(d_rsr < 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f", d_rsr);
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
+                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f", d_rsr);
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
+                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
             }
+            
             if(d_rsr < SEND_Q_LIMIT_MINIMAL) {
                 d_rsr = SEND_Q_LIMIT_MINIMAL;
                 //vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
@@ -5817,6 +5830,8 @@ if(drop_packet_flag) {
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
+                                    // TODO: assert here
+                                    assert_packet_ipv4(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
