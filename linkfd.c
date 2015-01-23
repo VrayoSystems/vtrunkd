@@ -2818,7 +2818,7 @@ uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
     }
     return ag_mask;
 }
-
+e - means we ignore
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
@@ -4492,7 +4492,7 @@ int lfd_linker(void)
             if(d_rsr < 0) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
-            } else if (d_rsr > RSR_TOP) {
+            } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
             }
