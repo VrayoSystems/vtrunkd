@@ -6180,7 +6180,7 @@ if(drop_packet_flag) {
                                             sem_post(&(shm_conn_info->resend_buf_sem));
                                             vtun_syslog(LOG_INFO, "resending packet %lu len %d", sqn, len);
                                             assert_packet_ipv4("resend1", out2, len);
-                                           send_packet(1, out2, len);
+                                           send_packet(1, out_buf, len);
                                         }
                                         if(psl == 2) {
                                             sqn++; 
@@ -6194,7 +6194,7 @@ if(drop_packet_flag) {
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
                                                 vtun_syslog(LOG_INFO, "resending packet 2 %lu len %d", sqn, len);
                                                 assert_packet_ipv4("resend2", out2, len);
-                                               send_packet(1, out2, len);
+                                               send_packet(1, out_buf, len);
                                             }
                                         }
                                     }
