@@ -5805,7 +5805,6 @@ if(drop_packet_flag) {
 #endif
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
-                       //     len -= 3 * sizeof(uint32_t);
                             len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
                             sem_wait(write_buf_sem);
                             int sumIndex = shm_conn_info->packet_code_bulk_counter;
@@ -5840,64 +5839,6 @@ if(drop_packet_flag) {
                                 }
                             }
                             sem_post(write_buf_sem);
-
-                            // rtt calculation
-                            if ((info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
-                                timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
-                                info.rtt2 = tv2ms(&tv_tmp);
-                                if (info.rtt2 <= 0)
-                                    info.rtt2 = 1;
-                                info.rtt2_lsn[chan_num] = 0;
-                                if (chan_num == my_max_send_q_chan_num) {
-                                    // calculate speed.. ?
-                                    info.max_sqspd += ((info.rtt2_send_q[chan_num] / info.rtt2) - info.max_sqspd) / 8;
-                                    vtun_syslog(LOG_INFO, "FRAME_RED_CODE max_sqspd: %d; avg %d", (info.rtt2_send_q[chan_num] / info.rtt2), info.max_sqspd);
-                                }
-                            }
-
-                            // calculate send_q and speed
-                            // send_q
-                            info.channel[chan_num].send_q_time = info.current_time;
-                            info.channel[chan_num].packet_seq_num_acked = last_recv_lsn;
-                            info.channel[chan_num].send_q =
-                                    info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
-                                            1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;
-                            if (info.max_send_q < info.channel[chan_num].send_q) {
-                                info.max_send_q = info.channel[chan_num].send_q;
-                            }
-                  //          vtun_syslog(LOG_INFO, "FRAME_RED_CODE PKT send_q %d", info.channel[chan_num].send_q);
-                            // the following is to calculate my_max_send_q_chan_num only
-                            uint32_t my_max_send_q = 0;
-                            for (int i = 1; i < info.channel_amount; i++) {
-                                if (my_max_send_q < info.channel[i].send_q) {
-                                    my_max_send_q = info.channel[i].send_q;
-                                    my_max_send_q_chan_num = i;
-                                }
-                            }
-
-                            // ACS
-                            info.channel[chan_num].packet_recv_upload = packet_recv_spd; // each packet data
-                            info.channel[chan_num].packet_recv_upload_avg =
-                                    info.channel[chan_num].packet_recv_upload > info.channel[chan_num].packet_recv_upload_avg ?
-                                            (info.channel[chan_num].packet_recv_upload - info.channel[chan_num].packet_recv_upload_avg) / 4
-                                                    + info.channel[chan_num].packet_recv_upload_avg :
-                                            info.channel[chan_num].packet_recv_upload_avg
-                                                    - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
-
-                            sem_wait(&(shm_conn_info->stats_sem));
-                            if (my_max_send_q_chan_num == chan_num) {
-                                shm_conn_info->stats[info.process_num].ACK_speed =
-                                        info.channel[chan_num].packet_recv_upload_avg == 0 ? 1 : info.channel[chan_num].packet_recv_upload_avg;
-                                info.packet_recv_upload_avg = shm_conn_info->stats[info.process_num].ACK_speed;
-                            }
-                            shm_conn_info->stats[info.process_num].max_send_q = my_max_send_q;
-                            shm_conn_info->stats[info.process_num].max_sqspd = info.max_sqspd;
-                            sem_post(&(shm_conn_info->stats_sem));
-
-                            // for (int i = 0; i < BULK_BUFFER_PACKET_CODE; i++) {
-                               // vtun_syslog(LOG_INFO, "red code array %i start %"PRIu32" stop %"PRIu32" ",i,shm_conn_info->packet_code_recived[chan_num][i].start_seq,shm_conn_info->packet_code_recived[chan_num][i].stop_seq);
-                               // print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][i].sum, "recv redund code",shm_conn_info->packet_code_recived[chan_num][i].start_seq, shm_conn_info->packet_code_recived[chan_num][i].len_sum);
-                           // }
                             continue;
                         } else if (flag_var == FRAME_MODE_RXMIT) {
                             // okay
