@@ -2780,6 +2780,9 @@ int hsnum2pnum(int hsnum) {
             return i;
         }
     }
+    if(hsnum == 65535) { // it is okay to have this value - means we ignore
+        return -1;
+    }
     vtun_syslog(LOG_ERR, "ASSERT FAILED: hsnum not found: %d", hsnum);
     return -1;
 }
