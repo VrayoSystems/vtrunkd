@@ -2818,7 +2818,6 @@ uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
     }
     return ag_mask;
 }
-e - means we ignore
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
