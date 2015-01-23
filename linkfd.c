@@ -1415,8 +1415,8 @@ int send_packet(int chan_num, char *buf, int len) {
     uint32_t local_seq_num_p;
     uint16_t tmp_flag;
     uint16_t sum;
-    len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
-    len = pack_packet(chan_num, out_buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
+    len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
+    len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
     
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, out_buf, len);
