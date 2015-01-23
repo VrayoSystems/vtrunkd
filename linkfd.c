@@ -1256,18 +1256,7 @@ int get_last_packet(int chan_num, uint32_t *seq_num, char **out, int *sender_pid
 
 int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, uint32_t *local_seq_num, uint16_t *mini_sum, uint32_t *last_recv_lsn, uint32_t *packet_recv_spd) {
     uint32_t local_seq_num_n, last_recv_lsn_n, packet_recv_spd_n;
-    if (*flag_var == 0) {
-        *seq_num = ntohl(
-                *((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t)
-                        - sizeof(uint32_t)])));
-        *flag_var = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
-        *local_seq_num = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
-        *mini_sum = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
-
-        *last_recv_lsn = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
-        *packet_recv_spd = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t)])));
-        return len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
-    } else if (*flag_var == FRAME_REDUNDANCY_CODE) {
+    if (*flag_var == FRAME_REDUNDANCY_CODE) {
         memcpy(&local_seq_num_n, out + len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t)), sizeof(uint32_t));
         memcpy(&last_recv_lsn_n, out + len - (sizeof(uint32_t) + sizeof(uint32_t)), sizeof(uint32_t));
         memcpy(&packet_recv_spd_n, out + len - sizeof(uint32_t), sizeof(uint32_t));
@@ -1276,6 +1265,14 @@ int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, u
         *packet_recv_spd = ntohl(packet_recv_spd_n);
         return len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t));
     }
+    *seq_num = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t)
+                        - sizeof(uint32_t)])));
+    *flag_var = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+    *local_seq_num = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+    *mini_sum = ntohs(*((uint16_t *) (&out[len - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t)])));
+    *last_recv_lsn = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t) - sizeof(uint32_t)])));
+    *packet_recv_spd = ntohl(*((uint32_t *) (&out[len - sizeof(uint32_t)])));
+    return len - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint16_t) - sizeof(uint32_t) - sizeof(uint32_t);
 }
 
 /**
@@ -1287,23 +1284,21 @@ int pack_packet(int chan_num, char *buf, int len, uint32_t seq_num, uint32_t loc
     uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num + info.channel[chan_num].local_seq_num_recv));
     uint32_t last_recv_lsn = htonl(info.channel[chan_num].local_seq_num_recv);
     uint32_t packet_recv_spd = htonl(info.channel[chan_num].packet_download);
-    if (flag == 0) {
-        uint32_t seq_num_n = htonl(seq_num);
-        memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
-        memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
-        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
-        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
-        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t), &last_recv_lsn, sizeof(uint32_t));
-        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t) + sizeof(uint32_t), &packet_recv_spd,
-                sizeof(uint32_t));
-        return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint32_t);
-    } else if (flag == FRAME_REDUNDANCY_CODE) {
+    if (flag == FRAME_REDUNDANCY_CODE) {
         memcpy(buf + len, &local_seq_num_n, sizeof(uint32_t));
         memcpy(buf + len + sizeof(uint32_t), &last_recv_lsn, sizeof(uint32_t));
         memcpy(buf + len + sizeof(uint32_t) + sizeof(uint32_t), &packet_recv_spd, sizeof(uint32_t));
 //        memcpy(buf + len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t), &mini_sum, sizeof(uint16_t));
         return len + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
     }
+    uint32_t seq_num_n = htonl(seq_num);
+    memcpy(buf + len, &seq_num_n, sizeof(uint32_t));
+    memcpy(buf + len + sizeof(uint32_t), &flag_n, sizeof(uint16_t));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t), &local_seq_num_n, sizeof(local_seq_num_n));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n), &mini_sum, sizeof(uint16_t));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t), &last_recv_lsn, sizeof(uint32_t));
+    memcpy(buf + len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(local_seq_num_n) + sizeof(uint16_t) + sizeof(uint32_t), &packet_recv_spd, sizeof(uint32_t));
+    return len + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }
 
 /**
@@ -1413,13 +1408,13 @@ int send_packet(int chan_num, char *buf, int len) {
     // TODO: optimize here
     uint32_t tmp_seq_counter;
     uint32_t local_seq_num_p;
-    uint16_t tmp_flag;
+    uint16_t tmp_flag = 0;
     uint16_t sum;
     len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
     len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
     
     // send DATA
-    int len_ret = udp_write(info.channel[chan_num].descriptor, out_buf, len);
+    int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     if (len && (len_ret < 0)) {
         vtun_syslog(LOG_INFO, "error retransmit to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
