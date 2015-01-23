@@ -3885,7 +3885,8 @@ int lfd_linker(void)
         info.C = C_LOW/2;
     }*/
     //info.C = C_LOW;
-    info.C = C_LOW/8.0; // 2x lower
+    //info.C = C_LOW/8.0; // 2x lower
+    info.C = C_LOW/4.0; // 2x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
 
