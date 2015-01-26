@@ -3920,8 +3920,8 @@ int lfd_linker(void)
         info.C = C_LOW/2;
     }*/
     //info.C = C_LOW;
-    //info.C = C_LOW/8.0; // 2x lower
-    info.C = C_LOW/4.0; // 2x lower
+    info.Cu = C_LOW/8.0; // x lower
+    info.C = C_LOW/3.0; // x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
     info.max_send_q_u = 0;
@@ -7271,6 +7271,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     max_reorder_byte = 0;
     last_channels_mask = 0;
     info.B = 0.2;
+    info.Bu = 0.2;
     /*Variables for the exact way of measuring speed*/
     send_q_read_timer = (struct timeval) {0, 0};
     send_q_read_drop_time = (struct timeval) {0, 100000};
