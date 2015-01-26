@@ -129,6 +129,7 @@ struct my_ip {
 #define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
 #define PLP_UNRECOVERABLE_CUTOFF 1000 // in theory about 50 mbit/s at 20ms 
+#define PSL_RECOVERABLE 2 // we can recover this amount of loss
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
@@ -2827,10 +2828,35 @@ double t_from_W (double W, double M, double B, double C) {
     return cbrt(B * M / C) + cbrt( (W - M) / C );
 }
 
+int get_t_loss(struct timeval *loss_tv, int tmax) {
+    struct timeval t_tv;
+    timersub(&(info.current_time), loss_tv, &t_tv);
+    int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+    t = t / CUBIC_T_DIV;
+    t = t > tmax ? tmax : t; // 400s limit
+    return t;
+}
+
+int cubic_recalculate(int t, int cubic_max, double beta, double c) {
+    double K = cbrt((((double) cubic_max) * beta) / c);
+    return (uint32_t) (c * pow(((double) (t)) - K, 3) + cubic_max);
+}
+
+int set_W_cubic_unrecoverable(int t) {
+    shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
+}
+
 // t in ms
 int set_W_unsync(int t) {
+    info.send_q_limit_cubic = cubic_recalculate(t, info.send_q_limit_cubic_max, info.B, info.C);
+    shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
+    //vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
+    return 1;
+}
+
+// t in ms
+int set_W_unsync_old(int t) {
     double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-    uint32_t limit_last = info.send_q_limit_cubic;
     info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
 
@@ -2843,6 +2869,13 @@ int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
     //vtun_syslog(LOG_INFO, "set W to, sq=%d", send_q);
     info.send_q_limit_cubic_max = send_q;
     set_W_unsync(0);
+}
+
+int set_Wu_to(int send_q) {
+    info.u_loss_tv = info.current_time;
+    info.W_u_max = send_q;
+    info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu); // TODO: place it everywhere whenever W_u_max changes??
+    shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(0, info.W_u_max, info.Bu, info.Cu);
 }
 
 int set_IDLE() {
@@ -3891,6 +3924,7 @@ int lfd_linker(void)
     info.C = C_LOW/4.0; // 2x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
+    info.max_send_q_u = 0;
 
     gettimeofday(&info.cycle_last, NULL); // for info.rsr smooth avg
     int ag_flag_local = R_MODE;
@@ -3960,6 +3994,8 @@ int lfd_linker(void)
     sem_wait(&(shm_conn_info->stats_sem));
     set_W_unsync(t);
     set_W_to(RSR_TOP, 1, &loss_time); // 1 means immediately!
+    set_Wu_to(RSR_TOP);
+    
     sem_post(&(shm_conn_info->stats_sem));
     struct timeval peso_lrl_ts = info.current_time;
     int32_t peso_old_last_recv_lsn = 10;
@@ -4351,6 +4387,9 @@ int lfd_linker(void)
             if (info.max_send_q < send_q_eff_mean) {
                 info.max_send_q = send_q_eff_mean;
             }
+            if (info.max_send_q_u < send_q_eff_mean) {
+                info.max_send_q_u = send_q_eff_mean;
+            }
             info.tv_sqe_mean_added = info.current_time;
             int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
             if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
@@ -4413,13 +4452,15 @@ int lfd_linker(void)
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 1 (ON)");
                 info.W_cubic_copy = info.send_q_limit_cubic;
+                info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
             }
             info.head_channel = 1;
         } else {
             if(info.head_channel != 0) {
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
-                info.send_q_limit_cubic = info.W_cubic_copy;
+                set_W_to(info.W_cubic_copy, 1, &loss_time);
+                set_Wu_to(info.Wu_cubic_copy);
                 info.head_change_tv = info.current_time;
                 info.head_change_safe = 0;
             }
@@ -4512,6 +4553,8 @@ int lfd_linker(void)
             t = t / CUBIC_T_DIV;
             t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
             set_W_unsync(t);
+            t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
+            shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
             
             pump_adj = (int) d_pump_adj;
             rtt_shift = (int) d_rtt_shift;
@@ -4519,7 +4562,7 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
         
 
-        int32_t send_q_limit_cubic_apply = (int32_t)info.send_q_limit_cubic;
+        int send_q_limit_cubic_apply = (info.send_q_limit_cubic > shm_conn_info->stats[info.process_num].W_cubic_u ? info.send_q_limit_cubic : shm_conn_info->stats[info.process_num].W_cubic_u);
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
@@ -4692,6 +4735,7 @@ int lfd_linker(void)
             if(slope > -100000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
                     set_W_to(send_q_eff + 2000, 1, &loss_time);
+                    set_Wu_to(send_q_eff + 2000);
             } else {
                 vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
                 // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
@@ -4702,6 +4746,7 @@ int lfd_linker(void)
         if(info.head_channel && (send_q_eff < (int32_t)info.send_q_limit_cubic)) {
             //set_W_to(send_q_eff, 30, &loss_time);
             set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
+            set_Wu_to(send_q_eff);
         }
         // <<< END fast convergence to underlying encap flow
         
@@ -4765,6 +4810,7 @@ int lfd_linker(void)
             if(shm_conn_info->idle) {
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
+                set_Wu_to(RSR_TOP/2);
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
             if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
@@ -4893,8 +4939,11 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sql2", "%d", temp_sql_copy2);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
             add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
-            add_json(js_buf, &js_cur, "W_cubic", "%u", (unsigned int)info.send_q_limit_cubic);
+            add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
+            add_json(js_buf, &js_cur, "Wu_cubic", "%d", shm_conn_info->stats[info.process_num].W_cubic_u);
             add_json(js_buf, &js_cur, "W_cubic_copy", "%d", info.W_cubic_copy);
+            add_json(js_buf, &js_cur, "Wu_cubic_copy", "%d", info.Wu_cubic_copy);
+            //add_json(js_buf, &js_cur, "W_cubic_appl", "%d", info.send_q_limit_cubic_apply);
             add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
@@ -5264,6 +5313,7 @@ int lfd_linker(void)
             //            udp_struct->rx_q, udp_struct->drops);
             //}
             cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
+            info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu); // TODO: place it everywhere whenever W_u_max changes??
             if(shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] > shm_conn_info->write_buf[1].last_received_seq[info.process_num]) {
                 vtun_syslog(LOG_INFO, "WARNING Fixing psl %d > lws %d to lws", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
                 shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
@@ -6156,7 +6206,7 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
                                                 add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
-                                                if(psl > 2) {
+                                                if(psl > PSL_RECOVERABLE) {
                                                     // unrecoverable loss
                                                     shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
                                                     shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
@@ -6323,13 +6373,23 @@ if(drop_packet_flag) {
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if(info.head_channel) {
                                     info.send_q_limit_cubic_max = info.max_send_q; // fast-converge to flow (head now always converges!)
+                                    info.W_u_max = info.max_send_q_u;
+                                    info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                 } else {
                                     if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
                                         //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
                                         info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
+                                        if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
+                                            info.W_u_max = info.max_send_q_u;
+                                            info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
+                                        }
                                     } else {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
                                         info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                        if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
+                                            info.W_u_max = (int) ((double)info.max_send_q_u * (2.0 - info.Bu) / 2.0);
+                                            info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
+                                        }
                                     }
                                 }
                                 t = 0;
@@ -6338,6 +6398,12 @@ if(drop_packet_flag) {
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 set_W_unsync(t);
                                 sem_post(&(shm_conn_info->stats_sem));
+                                if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
+                                    info.u_loss_tv = info.current_time;
+                                    info.max_send_q_u = 0;
+                                    shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(0, info.W_u_max, info.Bu, info.Cu);
+                                }
+                                    
                                 //waste Cubic recalc end
                             } else {
                                 timersub(&(info.current_time), &loss_time, &t_tv);
@@ -6930,7 +6996,7 @@ if(drop_packet_flag) {
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
-            int lim = (((uint32_t)info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
+            int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
             int n_to_send = (lim - send_q_eff) / 1000;
             if(n_to_send < 0) {
                 n_to_send = 0;

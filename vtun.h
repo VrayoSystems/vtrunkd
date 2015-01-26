@@ -383,6 +383,7 @@ struct conn_stats {
     int32_t max_PCS2;
     int32_t max_sqspd;
     int32_t W_cubic;
+    int32_t W_cubic_u;
     int32_t rsr; // sync on stats_sem
     int rtt_phys_avg; // accurate on idling
     int rtt2; // RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
@@ -517,14 +518,20 @@ struct phisical_status { // A.K.A. "info"
     struct timeval bdp1;
 
     /** Calculated values*/
-    uint32_t send_q_limit_cubic;
+    int32_t send_q_limit_cubic;
     int32_t send_q_limit;
-    uint32_t send_q_limit_cubic_max;
+    int32_t send_q_limit_cubic_max;
     int32_t rsr;
     struct timeval cycle_last;
     double C;
+    double Cu;
     double B;
+    double Bu;
+    int W_u_max;
+    int cubic_t_max_u;
+    struct timeval u_loss_tv;
     int max_send_q;
+    int max_send_q_u;
     struct timeval tv_sqe_mean_added;
     /** Logical channels information and statistic*/
     int channel_amount;   /**< Number elements in @see channel array AKA Number of logical channels already established(created)*/
@@ -581,6 +588,7 @@ struct phisical_status { // A.K.A. "info"
     int32_t encap_streams_bitcnt;
     int encap_streams;
     int W_cubic_copy;
+    int Wu_cubic_copy;
     struct timeval hold_time;
     struct timeval head_change_tv;
     int head_change_safe; // enough time passed since head change
