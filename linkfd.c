@@ -339,7 +339,7 @@ void ms2tv(struct timeval *result, unsigned long interval_ms) {
     result->tv_usec = ((interval_ms % 1000) * 1000);
 }
 
-uint32_t tv2ms(struct timeval *a) {
+unsigned long tv2ms(struct timeval *a) {
     return ((a->tv_sec * 1000) + (a->tv_usec / 1000));
 }
 
@@ -6117,7 +6117,7 @@ if(drop_packet_flag) {
                             tv_tmp.tv_sec = ntohl(tmp_h);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
                             tv_tmp.tv_usec = ntohl(tmp_h);
-                            add_json(lossLog, &lossLog_cur, "ts", "%u", tv2ms(&tv_tmp));
+                            add_json(lossLog, &lossLog_cur, "ts", "%lu", tv2ms(&tv_tmp));
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t));
                             if (flag_var == FRAME_LOSS_INFO) {
                                 add_json(lossLog, &lossLog_cur, "psl", "%d", ntohl(tmp_h));
