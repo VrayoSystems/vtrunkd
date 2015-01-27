@@ -2240,7 +2240,9 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens);
             }
-            shm_conn_info->tokens--; // remove a token...
+            if (shm_conn_info->tokens > 0) {
+                shm_conn_info->tokens--; // remove a token...
+            }
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
