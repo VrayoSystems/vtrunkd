@@ -4023,6 +4023,10 @@ int lfd_linker(void)
     memset(shm_conn_info->check, 170, CHECK_SZ);
     info.head_change_tv = info.current_time;
     info.head_change_safe = 1;
+
+    //reset FRAME_L_LOSS_INFO sending
+    info.last_sent_FLLI_idx = shm_conn_info->l_loss_idx;
+
 /**
  *
  *
