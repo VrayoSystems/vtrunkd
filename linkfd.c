@@ -4026,6 +4026,8 @@ int lfd_linker(void)
 
     //reset FRAME_L_LOSS_INFO sending
     info.last_sent_FLLI_idx = shm_conn_info->l_loss_idx;
+    //reset FRAME_LOSS_INFO sending
+    info.last_sent_FLI_idx = shm_conn_info->loss_idx;
 
 /**
  *
