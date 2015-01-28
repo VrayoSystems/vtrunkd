@@ -4023,8 +4023,6 @@ int lfd_linker(void)
     memset(shm_conn_info->check, 170, CHECK_SZ);
     info.head_change_tv = info.current_time;
     info.head_change_safe = 1;
-    vtun_syslog(LOG_INFO, "print1");
-    vtun_syslog(LOG_INFO, "curtime %u sec %"PRIu64" ms",info.current_time.tv_sec, tv2ms(&info.current_time));
 /**
  *
  *
