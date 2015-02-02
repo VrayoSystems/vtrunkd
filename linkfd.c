@@ -4570,7 +4570,8 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
         
 
-        int send_q_limit_cubic_apply = (info.send_q_limit_cubic > shm_conn_info->stats[info.process_num].W_cubic_u ? info.send_q_limit_cubic : shm_conn_info->stats[info.process_num].W_cubic_u);
+        //int send_q_limit_cubic_apply = (info.send_q_limit_cubic > shm_conn_info->stats[info.process_num].W_cubic_u ? info.send_q_limit_cubic : shm_conn_info->stats[info.process_num].W_cubic_u);
+        int send_q_limit_cubic_apply = info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
             send_q_limit_cubic_apply = SEND_Q_LIMIT_MINIMAL-1;
         }
