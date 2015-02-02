@@ -5861,6 +5861,10 @@ if(drop_packet_flag) {
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
                             len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
+                            unsigned int lrs2;
+                            if (lossed_consume(local_seq_num, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv) == 0) { // TODO: lrs?? not updated!
+                                info.channel[chan_num].loss_time = info.current_time;
+                            }
                             sem_wait(write_buf_sem);
                             int sumIndex = shm_conn_info->packet_code_bulk_counter;
                             add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
