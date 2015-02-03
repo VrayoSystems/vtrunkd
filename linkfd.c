@@ -3207,6 +3207,16 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         new_idx = LOSSED_BACKLOG_SIZE - new_idx;
     }
     
+    if(new_idx < 0) {
+        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #2 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        new_idx = 0;
+    }
+    
+    if(new_idx >= LOSSED_BACKLOG_SIZE) {
+        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #3 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        new_idx = 0;
+    }
+    
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
         //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
         info.lossed_last_received = new_idx;
