@@ -5324,7 +5324,7 @@ int lfd_linker(void)
             cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu); // TODO: place it everywhere whenever W_u_max changes??
             if(shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] > shm_conn_info->write_buf[1].last_received_seq[info.process_num]) {
-                vtun_syslog(LOG_INFO, "WARNING Fixing psl %d > lws %d to lws", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
+                vtun_syslog(LOG_INFO, "WARNING Fixing psl %d > lrs %d to last received seq", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
                 shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
             }
 
