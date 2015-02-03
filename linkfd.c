@@ -3204,7 +3204,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(new_idx < 0) {
-        new_idx = LOSSED_BACKLOG_SIZE - new_idx;
+        new_idx = LOSSED_BACKLOG_SIZE + new_idx;
     }
     
     if(new_idx < 0) {
@@ -3213,6 +3213,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE) {
+        // TODO: remove this - should never fire!
         vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #3 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
