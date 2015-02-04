@@ -2131,7 +2131,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     int sizeF, size1, sizeJW;
                     int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
-                    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel], shm_conn_info->frames_buf, &size1);
+                    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &size1);
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
                     vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d Fl %d jwl %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
@@ -2428,7 +2428,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         // try a fix
         int sizeF, size1;
         int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
-        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[1], shm_conn_info->frames_buf, &size1);
+        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &size1);
         vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d fl %d", size1, sizeF);
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
