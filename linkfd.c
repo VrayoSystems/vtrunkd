@@ -2129,13 +2129,14 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    int sizeF, size1;
+                    int sizeF, size1, sizeJW;
                     int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel], shm_conn_info->frames_buf, &size1);
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d Fl %d ms ts %ld.%06ld %s",
+                    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d Fl %d jwl %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), size1, sizeF, info.current_time, js_buf_fl);
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), size1, sizeF, sizeJW, info.current_time, js_buf_fl);
                     loss_flag = 1;
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", js_buf_fl);
