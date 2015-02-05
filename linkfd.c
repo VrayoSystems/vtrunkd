@@ -3174,6 +3174,9 @@ int lossed_count() {
 
 int lossed_latency_drop(unsigned int *last_received_seq) {
     // finish waiting for packets by latency; should be called by FCI process
+    if(!lossed_count()) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED: lossed_latency_drop called with no loss!");
+    }
     vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
     //lossed_print_debug();
     int loss = lossed_count();
@@ -3292,7 +3295,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_complete_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         //lossed_print_debug();
-        return reordering;
+        return loss_calc;
     }
     
     // now we have finished error handling - now account for pure data receipt
@@ -5210,7 +5213,7 @@ int lfd_linker(void)
 
             // now check if we need to fire LOSS event - send and commit locally
             if(is_loss() || need_send_loss_FCI_flag) { // we are in loss monitoring state..
-                timersub(&info.current_time, &info.channel[i].loss_time, &tv_tmp);
+                timersub(&info.current_time, &info.channel[i].last_recv_time, &tv_tmp);
                 int timer_result2 = timercmp(&tv_tmp, &info.max_reorder_latency, >=);
                 if ( (need_send_loss_FCI_flag || timer_result2) && select_net_write(i)) {
                     // now send and zero
@@ -5902,6 +5905,7 @@ if(drop_packet_flag) {
                             if (lossed_consume(local_seq_num, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv) == 0) { // TODO: lrs?? not updated!
                                 info.channel[chan_num].loss_time = info.current_time;
                             }
+                            info.channel[1].last_recv_time = info.current_time;
                             sem_wait(write_buf_sem);
                             int sumIndex = shm_conn_info->packet_code_bulk_counter;
                             add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
@@ -6477,6 +6481,7 @@ if(drop_packet_flag) {
                             if (lossed_consume(local_seq_tmp, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv) == 0) { // TODO: lrs?? not updated!
                                 info.channel[chan_num].loss_time = info.current_time;
                             }
+                            info.channel[1].last_recv_time = info.current_time;
                             
                             //if (local_seq_tmp > info.channel[chan_num].local_seq_num_recv) {
                             //    info.channel[chan_num].local_seq_num_recv = local_seq_tmp;
