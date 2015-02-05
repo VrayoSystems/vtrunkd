@@ -2050,7 +2050,7 @@ int write_buf_check_n_flush(int logical_channel) {
     //int buf_len = shm_conn_info->write_buf[logical_channel].frames.len; // disabled for #400
     int tail_idx = shm_conn_info->write_buf[logical_channel].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq;
-
+/*
     int sizeF, size1, sizeJW;
     int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &size1);
@@ -2063,6 +2063,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, logical_channel);
 
     }
+    */
     // first select tun
     fd_set fdset2;
     tv.tv_sec = 0;
