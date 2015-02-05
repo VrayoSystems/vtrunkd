@@ -2432,14 +2432,15 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] = seq_num;
     i = shm_conn_info->write_buf[conn_num].frames.rel_head;
 
-    if(frame_llist_pull(   &shm_conn_info->wb_free_frames,
-                           shm_conn_info->frames_buf,
-                           &newf) < 0) {
+    if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &newf) < 0) {
         // try a fix
-        int sizeF, size1;
+        int sizeF, size1, sizeJW;
         int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
         result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &size1);
-        vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d fl %d", size1, sizeF);
+        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[conn_num], shm_conn_info->frames_buf, &sizeJW);
+        vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d - %d jwbl %d - %d fl %d - %d", size1,
+                shm_conn_info->write_buf[conn_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[conn_num].length, sizeF,
+                shm_conn_info->wb_free_frames.length);
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf();
