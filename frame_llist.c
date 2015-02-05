@@ -42,10 +42,10 @@ void frame_llist_fill(struct frame_llist *l, struct frame_seq flist[], int len)
     l->length = 0;
     for (i = 0; i < (len - 1); i++) {
         flist[i].rel_next = i + 1;
-        l->length++;
     }
     flist[len - 1].rel_next = -1;
     l->rel_tail = len - 1;
+    l->length = len;
 } 
 
 
