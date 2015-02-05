@@ -5829,7 +5829,7 @@ if(drop_packet_flag) {
             if (FD_ISSET(info.tun_device, &fdset_w)) {
                 sem_wait(write_buf_sem);
                 if (write_buf_check_n_flush(chan_num)) { //double flush if possible
-                    write_buf_check_n_flush(chan_num);
+                    //write_buf_check_n_flush(chan_num); // fix for #509
                 }
                 sem_post(write_buf_sem);
             }
