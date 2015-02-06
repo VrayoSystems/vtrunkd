@@ -26,6 +26,7 @@
 #define _VTUN_FRAME_LLIST_H
 
 #include <sys/time.h>
+#include <stdint.h>
 
 #define VTUN_FRAME_SIZE2 1500
 
@@ -40,6 +41,7 @@ struct frame_seq {
     struct timeval time_stamp;
     struct timeval flush_time;
     int current_rtt;
+    uint32_t marker;
 };
 
 struct frame_llist{
