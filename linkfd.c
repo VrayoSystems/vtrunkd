@@ -485,6 +485,13 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
     return lostSeq;
 }
 
+int frame_llist_check_index_range(int index, int memory_size) {
+    if ((index < 0) || (index >= memory_size)) {
+        return 1;
+    }
+    return 0;
+}
+
 int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_seq *flist, int * size) {
     int len = 0;
     *size = 0;
@@ -1031,32 +1038,45 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     }
     return 0;
 }
-// untested module!
-int fix_free_writebuf() {
-    int i, j, st, found;
 
-    for(j=0; j<FRAME_BUF_SIZE; j++) {
-        for (i = 0; i < info.channel_amount; i++) {
-            st = shm_conn_info->write_buf[i].frames.rel_head;
-            found = 0;
-            acnt=0;
-            while(st > -1) {
-                if(st == j) found = 1;
-                st = shm_conn_info->frames_buf[st].rel_next;
-#ifdef DEBUGG
-                if(assert_cnt(2)) break;
-#endif
-            }
+// NEW untested module!
+int fix_free_writebuf(int chan_num) {
+    int sizeF, sizeWB, sizeJW;
+    int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
+    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[chan_num].frames, shm_conn_info->frames_buf, &sizeWB);
+    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf, &sizeJW);
+    vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
+            shm_conn_info->write_buf[chan_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[chan_num].length, sizeF,
+            shm_conn_info->wb_free_frames.length);
+
+    if ((sizeWB != shm_conn_info->write_buf[chan_num].frames.length) || (shm_conn_info->wb_just_write_frames[chan_num].length != sizeJW)
+            || (sizeF != shm_conn_info->wb_free_frames.length) || ((sizeF + sizeWB + sizeJW) != RESEND_BUF_SIZE)) {
+
+        int idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
+        int j;
+        for (j = 0; ((j < FRAME_BUF_SIZE) && (idx > -1)); j++) {
+            idx = shm_conn_info->frames_buf[idx].rel_next;
+            shm_conn_info->frames_buf[idx].marker = 0xDEADBEEF;
         }
-        if(!found) {
-            // append to tail free
-            if(shm_conn_info->wb_free_frames.rel_head == -1) {
-                shm_conn_info->wb_free_frames.rel_head = shm_conn_info->wb_free_frames.rel_tail = j;
-            } else {
-                shm_conn_info->frames_buf[shm_conn_info->wb_free_frames.rel_tail].rel_next=j;
-                shm_conn_info->wb_free_frames.rel_tail = j;
+        if (j != FRAME_BUF_SIZE) {
+            frame_llist_init(&shm_conn_info->wb_free_frames);
+            for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+                frame_llist_init(&shm_conn_info->wb_just_write_frames[i]);
             }
-            shm_conn_info->frames_buf[j].rel_next = -1;
+            for (int i = 0; i < FRAME_BUF_SIZE; i++) {
+                if (shm_conn_info->frames_buf[i].marker == 0xDEADBEEF) {
+                    shm_conn_info->frames_buf[i].marker = 0;
+                } else {
+                    frame_llist_append(&shm_conn_info->wb_free_frames, i, shm_conn_info->frames_buf);
+                }
+            }
+        } else {
+            frame_llist_init(&shm_conn_info->wb_free_frames);
+            frame_llist_fill(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, FRAME_BUF_SIZE);
+            for (int i = 0; i < MAX_TCP_LOGICAL_CHANNELS; i++) {
+                frame_llist_init(&shm_conn_info->write_buf[i].frames);
+                frame_llist_init(&shm_conn_info->wb_just_write_frames[i]);
+            }
         }
     }
     return 0;
@@ -2434,16 +2454,15 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 
     if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &newf) < 0) {
         // try a fix
-        int sizeF, size1, sizeJW;
+        vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
+        fix_free_writebuf(conn_num);
+        int sizeF, sizeWB, sizeJW;
         int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
-        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &size1);
+        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &sizeWB);
         result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[conn_num], shm_conn_info->frames_buf, &sizeJW);
-        vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d - %d jwbl %d - %d fl %d - %d", size1,
+        vtun_syslog(LOG_ERR, "WARNING! write buffer repaired bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
                 shm_conn_info->write_buf[conn_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[conn_num].length, sizeF,
                 shm_conn_info->wb_free_frames.length);
-        return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-        vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
-        fix_free_writebuf();
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
                             shm_conn_info->frames_buf,
                             &newf) < 0) {
