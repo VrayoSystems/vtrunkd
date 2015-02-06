@@ -2456,6 +2456,13 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         // try a fix
         vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf(conn_num);
+        int sizeF, sizeWB, sizeJW;
+        int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
+        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &sizeWB);
+        result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[conn_num], shm_conn_info->frames_buf, &sizeJW);
+        vtun_syslog(LOG_ERR, "WARNING! write buffer repaired bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
+                shm_conn_info->write_buf[conn_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[conn_num].length, sizeF,
+                shm_conn_info->wb_free_frames.length);
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
                             shm_conn_info->frames_buf,
                             &newf) < 0) {
