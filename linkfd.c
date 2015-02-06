@@ -3213,15 +3213,18 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         new_idx = new_idx - LOSSED_BACKLOG_SIZE;
     }
     
+/*    
     if(new_idx >= LOSSED_BACKLOG_SIZE) {
         vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
-    
+*/  
+
     if(new_idx < 0) {
         new_idx = LOSSED_BACKLOG_SIZE + new_idx;
     }
     
+/*    
     if(new_idx < 0) {
         vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #2 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
@@ -3232,32 +3235,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #3 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
-    
-    if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
-        //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
-        info.lossed_last_received = new_idx;
-        info.lossed_complete_received = new_idx;
-        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
-        info.lossed_loop_data[new_idx].seq_num = seq_num;
-        *last_received_seq = seq_num;
-        *last_local_received_seq = local_seq_num;
-        //lossed_print_debug();
-        return 0;
-    }
-    
-    if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
-        //lossed_print_debug();
-        // now check if it is dup or LATE
-        if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
-            vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        } else {
-            vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
-        }
-        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
-        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
-        return -1;
-    }
-    
+*/
+
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
         //lossed_print_debug();
         vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
@@ -3284,6 +3263,31 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         return 0;
     }
     
+    if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
+        //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
+        info.lossed_last_received = new_idx;
+        info.lossed_complete_received = new_idx;
+        info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
+        info.lossed_loop_data[new_idx].seq_num = seq_num;
+        *last_received_seq = seq_num;
+        *last_local_received_seq = local_seq_num;
+        //lossed_print_debug();
+        return 0;
+    }
+    
+    if(local_seq_num < info.lossed_loop_data[info.lossed_complete_received].local_seq_num) {
+        //lossed_print_debug();
+        // now check if it is dup or LATE
+        if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
+            vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        } else {
+            vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        }
+        *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
+        *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
+        return -1;
+    }
+   
     int reordering = local_seq_num - info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
     if(reordering > MAX_REORDER_PERPATH) {
         *last_received_seq = seq_num;
