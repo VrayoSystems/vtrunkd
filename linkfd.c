@@ -2154,7 +2154,8 @@ int write_buf_check_n_flush(int logical_channel) {
                             shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                     char printLine[100] = { 0 };
                     if (sumIndex != -1) {
-                        sprintf(printLine, "lostSeq %"PRIu32" sum start %"PRIu32" stop %"PRIu32"",
+                        sprintf(printLine, "lostSeqAmount %d lostSeq %"PRIu32" sum start %"PRIu32" stop %"PRIu32"",
+                                shm_conn_info->packet_code_recived[logical_channel][sumIndex].lostAmount,
                                 shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
                                 shm_conn_info->packet_code_recived[logical_channel][sumIndex].start_seq,
                                 shm_conn_info->packet_code_recived[logical_channel][sumIndex].stop_seq);
