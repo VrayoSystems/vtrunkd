@@ -1055,8 +1055,8 @@ int fix_free_writebuf(int chan_num) {
         int idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
         int j;
         for (j = 0; ((j < FRAME_BUF_SIZE) && (idx > -1)); j++) {
-            idx = shm_conn_info->frames_buf[idx].rel_next;
             shm_conn_info->frames_buf[idx].marker = 0xDEADBEEF;
+            idx = shm_conn_info->frames_buf[idx].rel_next;
         }
         if (j != FRAME_BUF_SIZE) {
             frame_llist_init(&shm_conn_info->wb_free_frames);
