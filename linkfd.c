@@ -2150,10 +2150,22 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" ms ts %ld.%06ld %s",
+                    int sumIndex = get_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0], &shm_conn_info->packet_code_bulk_counter,
+                            shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                    char printLine[100] = { 0 };
+                    if (sumIndex != -1) {
+                        sprintf(printLine, "lostSeq %"PRIu32" sum start %"PRIu32" stop %"PRIu32"",
+                                shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
+                                shm_conn_info->packet_code_recived[logical_channel][sumIndex].start_seq,
+                                shm_conn_info->packet_code_recived[logical_channel][sumIndex].stop_seq);
+                    } else {
+                        sprintf(printLine, "sum for seq %"PRIu32" not found", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                    }
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d %s wb %d jwb %d lat %"PRIu64" ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), info.current_time, js_buf_fl);
+                            info.least_rx_seq[logical_channel], printLine, shm_conn_info->write_buf[logical_channel].frames.length,
+                            shm_conn_info->wb_just_write_frames[logical_channel].length, tv2ms(&tv_tmp), info.current_time, js_buf_fl);
 
                     loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
