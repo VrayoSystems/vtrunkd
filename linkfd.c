@@ -2312,6 +2312,9 @@ int write_buf_check_n_flush(int logical_channel) {
                     shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
 //            vtun_syslog(LOG_ERR, "calculated packet stored in %i", packet_index);
             if (packet_index != -1) {
+                vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host,
+                        shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+
                 //    vtun_syslog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 //  else
 //                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calculated packet",
@@ -5952,6 +5955,7 @@ if(drop_packet_flag) {
                                         print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                                 "ASSERT BAD packet repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     } else {
+                                        vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host, lostSeq);
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
@@ -6944,6 +6948,7 @@ if(drop_packet_flag) {
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "ASSERT BAD packet after sum repaired ", lostSeq,
                                                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                 } else {
+                                    vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host, lostSeq);
 #ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
