@@ -445,21 +445,21 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
     int prevIndex = -1;
 
     packet_sum->lostAmount = packet_sum->stop_seq - packet_sum->start_seq + 1;
-
-    uint32_t nextSeq = packet_sum->start_seq;
-    uint32_t lostSeq = 0;
+#ifdef CODE_LOG
+    vtun_syslog(LOG_INFO, "jwb %d wb %d",l_jw->length, l->length);
+#endif
+    uint32_t lostSeq = packet_sum->start_seq;
 
     //search lost packet in wb_just_write_frames
     while (index > -1) {
+#ifdef CODE_LOG
+        vtun_syslog(LOG_INFO, "jwb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
+#endif
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
-            if (nextSeq != flist[index].seq_num) {
-                lostSeq = nextSeq;
-                nextSeq = flist[index].seq_num + 1;
-            } else {
-                nextSeq++;
+            if (lostSeq == flist[index].seq_num) {
+                lostSeq++;
             }
-
         } else if (flist[index].seq_num > packet_sum->stop_seq) {
             return lostSeq;
         }
@@ -469,13 +469,13 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
     //search lost packet in write buf
     index = l->rel_head;
     while (index > -1) {
+#ifdef CODE_LOG
+        vtun_syslog(LOG_INFO, "wb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
+#endif
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
-            if (nextSeq != flist[index].seq_num) {
-                lostSeq = nextSeq;
-                nextSeq = flist[index].seq_num + 1;
-            } else {
-                nextSeq++;
+            if (lostSeq == flist[index].seq_num) {
+                lostSeq++;
             }
         } else if (flist[index].seq_num > packet_sum->stop_seq) {
             return lostSeq;
@@ -5948,8 +5948,8 @@ if(drop_packet_flag) {
                             }
                             info.channel[1].last_recv_time = info.current_time;
                             sem_wait(write_buf_sem);
-                            int sumIndex = shm_conn_info->packet_code_bulk_counter;
-                            add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
+                            int sumIndex = add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
+                                    &shm_conn_info->packet_code_bulk_counter, buf, len);
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
                             vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE start_seq %"PRIu32" stop_seq %"PRIu32" LostAmount %d",
@@ -5957,9 +5957,9 @@ if(drop_packet_flag) {
                                     shm_conn_info->packet_code_recived[chan_num][sumIndex].stop_seq,
                                     shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
-#ifdef CODE_LOG
-                                vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
-#endif
+//#ifdef CODE_LOG
+                                vtun_syslog(LOG_INFO, "Uniq lostSeq %u found lws %lu", lostSeq, shm_conn_info->write_buf[chan_num].last_written_seq );
+//#endif
                                 int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
                                         shm_conn_info->frames_buf, lostSeq);

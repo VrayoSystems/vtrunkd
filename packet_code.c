@@ -44,25 +44,34 @@ void del_packet_code(struct packet_sum* sum, int index) {
     sum[index].my_selection_num = 0;
 }
 
-void add_redundancy_packet_code(struct packet_sum *sum, int *bulk_counter, char* packet, size_t packet_len) {
-    uint32_t start_seq_n, stop_seq_n;
+int add_redundancy_packet_code(struct packet_sum *sum, int *bulk_counter, char* packet, size_t packet_len) {
+    uint32_t start_seq, stop_seq;
     uint16_t my_selection_num_n;
     // load redundancy code and range
-    memcpy(&start_seq_n, packet, sizeof(uint32_t));
-    memcpy(&stop_seq_n, packet + packet_len - (sizeof(uint32_t) + sizeof(uint16_t)), sizeof(uint32_t));
+    memcpy(&start_seq, packet, sizeof(uint32_t));
+    memcpy(&stop_seq, packet + packet_len - (sizeof(uint32_t) + sizeof(uint16_t)), sizeof(uint32_t));
+    start_seq = ntohl(start_seq);
+    stop_seq = ntohl(stop_seq);
+    for (int i = 0; i < BULK_BUFFER_PACKET_CODE; i++) {
+        if ((sum[i].start_seq == start_seq) && (sum[i].stop_seq == stop_seq)) {
+            return i;
+        }
+    }
     memcpy(&my_selection_num_n, packet + packet_len - sizeof(uint16_t), sizeof(uint16_t));
-    sum[*bulk_counter].start_seq = ntohl(start_seq_n);
-    sum[*bulk_counter].stop_seq = ntohl(stop_seq_n);
+    sum[*bulk_counter].start_seq = start_seq;
+    sum[*bulk_counter].stop_seq = stop_seq;
     sum[*bulk_counter].my_selection_num = ntohs(my_selection_num_n);
     sum[*bulk_counter].len_sum = packet_len - (sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint16_t));
     memcpy(sum[*bulk_counter].sum, packet + sizeof(uint32_t) + sizeof(uint16_t), sum[*bulk_counter].len_sum);
 #ifdef CODE_LOG
     vtun_syslog(6, "func add_redundancy_packet_code selection %i start_seq %"PRIu32" %"PRIu32" stop_seq %"PRIu32" len %i", sum[*bulk_counter].my_selection_num, sum[*bulk_counter].start_seq,ntohl(start_seq_n), sum[*bulk_counter].stop_seq, sum[*bulk_counter].len_sum);
 #endif
+    int lastCounter = *bulk_counter;
     //iterate the sum recv buffer
     if (++*bulk_counter == BULK_BUFFER_PACKET_CODE) {
         *bulk_counter = 0;
     }
+    return lastCounter;
 }
 
 int pack_redundancy_packet_code(char *buf, struct packet_sum* sum, uint32_t seq_counter, int selection, int flag) {
@@ -111,7 +120,8 @@ int check_bulk_packet_code(struct packet_sum* sum, uint32_t seq_num, int selecti
  */
 int check_n_repair_packet_code(struct packet_sum* sum, struct frame_llist* wb_written, struct frame_llist* wb, struct frame_seq buf[], uint32_t seq_num) {
     int selection = (seq_num - (SEQ_START_VAL + 1)) % SELECTION_NUM;
-    int sum_index = check_bulk_packet_code(sum, seq_num, selection);
+    //int gg = (BULK_BUFFER_PACKET_CODE-1);
+    int sum_index = check_bulk_packet_code(sum, seq_num, selection);//get_packet_code(sum, &gg, seq_num);
     if (sum_index == -1) {
         return -1;
     }

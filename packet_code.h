@@ -10,7 +10,7 @@
 
 #include "timer.h"
 
-#define REDUNDANCY_CODE_SIZE 1450
+#define REDUNDANCY_CODE_SIZE (3*512)
 #define BULK_BUFFER_PACKET_CODE 15
 #define SELECTION_NUM 1
 #define SELECTION_LENGTH 100
@@ -40,7 +40,7 @@ struct packet_sum {
 void sum_init(struct packet_sum* sum, uint32_t start_seq, uint32_t stop_seq, int my_selection_num, size_t packet_len);
 void add_packet_code(char* packet, struct packet_sum* sum, uint16_t packet_len);
 void del_packet_code(struct packet_sum* sum, int index);
-void add_redundancy_packet_code(struct packet_sum* sum, int* bulk_counter, char* packet, size_t packet_len);
+int add_redundancy_packet_code(struct packet_sum* sum, int* bulk_counter, char* packet, size_t packet_len);
 int pack_redundancy_packet_code(char *buf, struct packet_sum* sum, uint32_t seq_counter, int selection, int flag);
 int check_bulk_packet_code(struct packet_sum* sum, uint32_t seq_num, int selection);
 int repair_packet_code(struct packet_sum* sum, char* packet, uint32_t seq_num, size_t packet_len);
