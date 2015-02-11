@@ -28,7 +28,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-#define VTUN_FRAME_SIZE2 1500
+#define VTUN_FRAME_SIZE2 (3*512)
 
 struct frame_seq {
     char out[VTUN_FRAME_SIZE2];

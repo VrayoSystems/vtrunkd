@@ -25,7 +25,7 @@ void sum_init(struct packet_sum* sum, uint32_t start_seq, uint32_t stop_seq, int
 #endif
 }
 
-void add_packet_code(char* packet, struct packet_sum *sum, uint16_t packet_len) {
+__attribute__ ((section ("code_packing"))) void add_packet_code(char* restrict packet, struct packet_sum* restrict sum, uint16_t packet_len) {
     uint16_t i = 0;
     for (; i + sizeof(uint64_t) < packet_len; i += sizeof(uint64_t)) {
         *(uint64_t*) (sum->sum + i) ^= *(uint64_t*) (packet + i);

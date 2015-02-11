@@ -5952,9 +5952,10 @@ if(drop_packet_flag) {
                             add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, buf, len);
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
-#ifdef CODE_LOG
-                            vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
-#endif
+                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE start_seq %"PRIu32" stop_seq %"PRIu32" LostAmount %d",
+                                    shm_conn_info->packet_code_recived[chan_num][sumIndex].start_seq,
+                                    shm_conn_info->packet_code_recived[chan_num][sumIndex].stop_seq,
+                                    shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
 #ifdef CODE_LOG
                                 vtun_syslog(LOG_INFO, "Uniq lostSeq %u found", lostSeq);
