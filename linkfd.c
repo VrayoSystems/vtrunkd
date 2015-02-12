@@ -4583,6 +4583,9 @@ int lfd_linker(void)
                 vtun_syslog(LOG_INFO, "Switching head to 1 (ON) saving W %d", info.send_q_limit_cubic);
                 info.W_cubic_copy = info.send_q_limit_cubic;
                 info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
+                if(shm_conn_info->head_lossing && !shm_conn_info->idle) {
+                    shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // just to continue AG due to dropping_lossing
+                }
             }
             info.head_channel = 1;
         } else {
