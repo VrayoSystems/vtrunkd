@@ -3755,12 +3755,13 @@ int lfd_linker(void)
             } else {
                 vtun_syslog(LOG_INFO, "send buffer size = %d\n", sendbuff);
             }
-
+            /*
             sendbuff = RCVBUF_SIZE;
             // WARNING! This should be on sysadmin's duty to optimize!
             if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
                 vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
             }
+            */
 
 //            prio_opt = 1;
 //            setsockopt(prio_s, SOL_SOCKET, SO_REUSEADDR, &prio_opt, sizeof(prio_opt));
@@ -6066,11 +6067,13 @@ if(drop_packet_flag) {
                                         break;
                                     }
                                 }
+                                /*
                                 sendbuff = RCVBUF_SIZE;
                                 // WARNING! This should be on sysadmin's duty to optimize!
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
                                     vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
                                 }
+                                */
 
 
                                 rmaddr.sin_port = htons(info.channel[i].rport);
