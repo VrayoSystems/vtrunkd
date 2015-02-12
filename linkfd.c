@@ -3436,6 +3436,11 @@ int set_rttlag() {
             }
         }
         if(chamt > 1) {
+            // now check that max_rtt_lag is adequate
+            if(max_rtt > (min_rtt * 7)) {
+                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                max_rtt = min_rtt *7;
+            }
             shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
         } else {
             shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
