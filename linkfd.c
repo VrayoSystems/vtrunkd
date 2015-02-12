@@ -115,6 +115,8 @@ struct my_ip {
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 //#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
+#define RTT_THRESHOLD_MULTIPLIER 5 // cut-off by RTT only
+#define RTT_THRESHOLD_GOOD 50 // cut-off by RTT ms
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 
@@ -862,16 +864,26 @@ int check_rtt_latency_drop() { // TODO: remove this dumb method (refactor some c
     return check_rtt_latency_drop_chan(info.process_num);
 }
 
+/*
+    This method allows AG or disallows AG based on latency
+*/
 int check_rtt_latency_drop_chan(int chan_num) {
     struct timeval max_latency_drop = info.max_latency_drop;
     if(shm_conn_info->stats[chan_num].channel_dead && (shm_conn_info->max_chan != chan_num)) {
         return 0;
     }
-    int rtt_diff = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar) - (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
-    int cur_mld = (int32_t)(tv2ms(&max_latency_drop)) + shm_conn_info->forced_rtt;
-    if( rtt_diff > cur_mld ) {
+    
+    if(shm_conn_info->stats[chan_num].exact_rtt < RTT_THRESHOLD_GOOD) {
+        return 1;
+    }
+    
+    int my_rtt = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar);
+    int min_rtt = (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+    
+    if(my_rtt > min_rtt * RTT_THRESHOLD_MULTIPLIER) {
         return 0;
     }
+    
     return 1;
 }
 
@@ -3415,7 +3427,40 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     return -1;
 }
 
-int set_rttlag() {
+int get_rttlag(uint32_t ag_mask) {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    if(NumberOfSetBits(ag_mask)< 2) {
+        return 0;
+    } else {
+        int min_rtt = INT32_MAX;
+        int max_rtt = 0;
+        int chamt = 0;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (ag_mask & (1 << i))) { 
+                if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                    min_rtt = shm_conn_info->stats[i].exact_rtt;
+                }
+
+                if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                    max_rtt = shm_conn_info->stats[i].exact_rtt;
+                }
+                chamt++;
+            }
+        }
+        if(chamt > 1) {
+            // now check that max_rtt_lag is adequate
+            if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
+                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
+            }
+            return max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
+        } else {
+            return 0; // correct is max_rtt only
+        }
+    }
+}
+
+int set_rttlag() { // TODO: rewrite using get_rttlag
     uint32_t chan_mask = shm_conn_info->channels_mask;
     if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
         shm_conn_info->max_rtt_lag = 0;
@@ -3437,9 +3482,9 @@ int set_rttlag() {
         }
         if(chamt > 1) {
             // now check that max_rtt_lag is adequate
-            if(max_rtt > (min_rtt * 7)) {
+            if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
                 vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
-                max_rtt = min_rtt *7;
+                max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
             }
             shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
         } else {
@@ -4711,14 +4756,17 @@ int lfd_linker(void)
                     && (!shm_conn_info->stats[i].channel_dead)
                     && ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec)) 
                     && ((shm_conn_info->stats[i].ag_flag_local) || (check_delivery_time_path_unsynced(i, 2)))) { // warning! CLD may
+                    info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
+                    if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted) ) {
                         if(info.head_channel) {
-                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
+                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
                             redetect_head_unsynced(chan_mask, info.process_num);
                             // TODO: immediate action required!
                         } else {
-                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec));
+                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
 
                         }
+                    }
                 }
             }
         }
@@ -5016,6 +5064,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
+            add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted);
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
