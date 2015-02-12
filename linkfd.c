@@ -4530,7 +4530,7 @@ int lfd_linker(void)
         if(max_chan == info.process_num) {
             if(info.head_channel != 1) {
                 skip++;
-                vtun_syslog(LOG_INFO, "Switching head to 1 (ON)");
+                vtun_syslog(LOG_INFO, "Switching head to 1 (ON) saving W %d", info.send_q_limit_cubic);
                 info.W_cubic_copy = info.send_q_limit_cubic;
                 info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
             }
@@ -4538,7 +4538,7 @@ int lfd_linker(void)
         } else {
             if(info.head_channel != 0) {
                 skip++;
-                vtun_syslog(LOG_INFO, "Switching head to 0 (OFF)");
+                vtun_syslog(LOG_INFO, "Switching head to 0 (OFF) restoring W %d if > than current W %d", info.W_cubic_copy, info.send_q_limit_cubic);
                 if(info.send_q_limit_cubic < info.W_cubic_copy) {
                     set_W_to(info.W_cubic_copy, 1, &loss_time);
                     set_Wu_to(info.Wu_cubic_copy);
