@@ -1694,7 +1694,7 @@ int select_net_write(chan_num) {
  *
  */
 int select_devread_send(char *buf, char *out2) {
-    int len, select_ret, idx;
+    int len, len_sum, select_ret, idx;
     uint32_t tmp_seq_counter = 0;
     int chan_num;
     struct my_ip *ip;
@@ -1703,7 +1703,8 @@ int select_devread_send(char *buf, char *out2) {
     struct timeval tv;
     int new_packet = 0;
     fd_set fdset_tun;
-
+    int packet_code_ready = 0;
+    int current_selection;
     uint32_t local_seq_num_p;
     uint16_t tmp_flag;
     uint16_t sum;
@@ -1713,9 +1714,9 @@ int select_devread_send(char *buf, char *out2) {
     if (idx == -1) {
         if (!FD_ISSET(info.tun_device, &fdset)) {
 #ifdef DEBUGG
-if(drop_packet_flag) {
-            vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
-}
+            if(drop_packet_flag) {
+                vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
+            }
 #endif
             return TRYWAIT_NOTIFY;
         }
@@ -1758,7 +1759,7 @@ if(drop_packet_flag) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
-        
+
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
                 vtun_syslog(LOG_INFO, "sem_post! dev read err");
@@ -1776,60 +1777,64 @@ if(drop_packet_flag) {
             return CONTINUE_ERROR;
         }
 
-
         if (drop_packet_flag == 1) {
             drop_counter++;
 //#ifdef DEBUGG
             int other_chan = 0;
-            if(info.process_num == 0) other_chan=1;
-            else other_chan = 0;
+            if (info.process_num == 0)
+                other_chan = 1;
+            else
+                other_chan = 0;
             info.dropping = 1;
-            if(debug_trace) {
-                vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d", info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg, shm_conn_info->stats[other_chan].hold);
-                info.max_send_q=0;
+            if (debug_trace) {
+                vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d",
+                        info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
+                        shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg,
+                        shm_conn_info->stats[other_chan].hold);
+                info.max_send_q = 0;
             }
-            
-            
+
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
             sem_post(&(shm_conn_info->AG_flags_sem));
-            
+
             // set dropped_flag here
-            
+
             /*
-            for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
-                if (chan_mask & (1 << p)) {
-                    vtun_syslog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", p, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));   
-                }
-            }
-            */
+             for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
+             if (chan_mask & (1 << p)) {
+             vtun_syslog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", p, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));
+             }
+             }
+             */
 //#endif
             /*
-            struct timeval time_tmp;
-            
-            sem_wait(&(shm_conn_info->common_sem));
-            timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
-            struct timeval time_tmp2 = { 20, 0 };
+             struct timeval time_tmp;
 
-            if (timercmp(&time_tmp, &time_tmp2, >)) {
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if (chan_mask & (1 << i)) {
-                       shm_conn_info->flood_flag[i] = 1;
-                    }
-                }
-                shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
-                shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
-            }
-            sem_post(&(shm_conn_info->common_sem));
-            */
+             sem_wait(&(shm_conn_info->common_sem));
+             timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
+             struct timeval time_tmp2 = { 20, 0 };
+
+             if (timercmp(&time_tmp, &time_tmp2, >)) {
+             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+             if (chan_mask & (1 << i)) {
+             shm_conn_info->flood_flag[i] = 1;
+             }
+             }
+             shm_conn_info->last_flood_sent.tv_sec=info.current_time.tv_sec;
+             shm_conn_info->last_flood_sent.tv_usec=info.current_time.tv_usec;
+             }
+             sem_post(&(shm_conn_info->common_sem));
+             */
             return CONTINUE_ERROR;
         } else {
-            if(drop_counter > 0) {
-                vtun_syslog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+            if (drop_counter > 0) {
+                vtun_syslog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d",
+                        drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
+                        shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
                 drop_counter = 0;
             }
         }
-
 
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
@@ -1852,9 +1857,10 @@ if(drop_packet_flag) {
         }
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
-        if(shm_conn_info->streams[hash%31] < 255) shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
+        if (shm_conn_info->streams[hash % 31] < 255)
+            shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
         sem_wait(&(shm_conn_info->common_sem));
-        shm_conn_info->t_model_rtt100 = ((TMRTTA-1) * shm_conn_info->t_model_rtt100 + info.exact_rtt*100) / TMRTTA; // RFC6298 compliant
+        shm_conn_info->t_model_rtt100 = ((TMRTTA - 1) * shm_conn_info->t_model_rtt100 + info.exact_rtt * 100) / TMRTTA; // RFC6298 compliant
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
 
@@ -1865,8 +1871,7 @@ if(drop_packet_flag) {
         vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
 #endif
 
-        int current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
-        int packet_code_ready = 0;
+        current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
 
         if (tmp_seq_counter == SEQ_START_VAL + 1) {
             struct timeval redund_code_timer_time = REDUNDANT_CODE_TIMER_TIME;
@@ -1888,60 +1893,22 @@ if(drop_packet_flag) {
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, channel_mode);
 #ifdef SUM_SEND
         if (packet_code_ready) {
-            int len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection, FRAME_REDUNDANCY_CODE);
+            len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection,
+                    FRAME_REDUNDANCY_CODE);
             update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer);
             sem_post(&(shm_conn_info->common_sem));
-            len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[chan_num].local_seq_num, FRAME_REDUNDANCY_CODE);
-            info.channel[chan_num].local_seq_num++;
-            if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
-                info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
-            }
-            //try send or store packet in fast resend buf
-            FD_ZERO(&fdset_tun);
-            FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
-            tv.tv_sec = 0;
-            tv.tv_usec = 0;
-            select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
-        #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
-        #endif
-            if (select_ret == 1) {
-#ifdef CODE_LOG
-                vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
-#endif
-                udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
-            } else {
-#ifdef CODE_LOG
-                vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
-#endif
-                sem_wait(&(shm_conn_info->resend_buf_sem));
-                int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
-                sem_post(&(shm_conn_info->resend_buf_sem));
-                if (idx == -1) {
-                    vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
-                }
-//               return NET_WRITE_BUSY_NOTIFY;
-            }
-            // int idx = add_fast_resend_frame(chan_num, shm_conn_info->packet_code[chan_num].sum, shm_conn_info->packet_code[chan_num].len_sum | VTUN_BAD_FRAME, 1);
-
-            //            sem_post(&(shm_conn_info->resend_buf_sem));
-            /*            if (idx == -1) {
-             vtun_syslog(LOG_ERR, "ERROR add packet_code fast_resend_buf is full");
-             }
-             */
-//            vtun_syslog(LOG_INFO, "after send FRAME_REDUNDANCY_CODE to fast resend chan %d send flag %i seq start %"PRIu32" stop %"PRIu32" counter %"PRIu32" len %i ", chan_num, packet_code_ready,shm_conn_info->packet_code[chan_num].start_seq, shm_conn_info->packet_code[chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[chan_num].len_sum);
         } else {
             sem_post(&(shm_conn_info->common_sem));
         }
 #else
         sem_post(&(shm_conn_info->common_sem));
 #endif
+
         new_packet = 1;
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, length);
 #endif
-    }
-    else {
+    } else {
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "we have fast resend frame sending...");
 #endif
@@ -1951,7 +1918,7 @@ if(drop_packet_flag) {
         vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, length, tmp_seq_counter, idx);
     }
 #endif
-    
+
     FD_ZERO(&fdset_tun);
     FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
     tv.tv_sec = 0;
@@ -1978,34 +1945,35 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
     vtun_syslog(LOG_INFO, "READY - descriptor %i channel %d");
 #endif
-    if (tmp_seq_counter){
-    sem_wait(&(shm_conn_info->resend_buf_sem));
-    seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
-    sem_post(&(shm_conn_info->resend_buf_sem));
-
+    if (tmp_seq_counter) {
+        sem_wait(&(shm_conn_info->resend_buf_sem));
+        seqn_add_tail(chan_num, buf, len, tmp_seq_counter, channel_mode, info.pid);
+        sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
-    vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
+        vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
+        vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
 #endif
-    if(debug_trace) {
-        vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
-    }
+        if (debug_trace) {
+            vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len,
+                    shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num + 1));
+        }
 
-    // now add correct mini_sum and local_seq_num
-    //if(!new_packet) {
-        local_seq_num_p=0;
-        tmp_flag=0;
-        sum=0;
+        // now add correct mini_sum and local_seq_num
+        //if(!new_packet) {
+        local_seq_num_p = 0;
+        tmp_flag = 0;
+        sum = 0;
 
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
-        if( (info.rtt2_lsn[chan_num] == 0) && ((shm_conn_info->stats[info.process_num].max_ACS2/info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
+        if ((info.rtt2_lsn[chan_num] == 0)
+                && ((shm_conn_info->stats[info.process_num].max_ACS2 / info.eff_len) > (1000 / shm_conn_info->stats[info.process_num].exact_rtt))) {
             info.rtt2_lsn[chan_num] = info.channel[chan_num].local_seq_num;
             info.rtt2_tv[chan_num] = info.current_time;
             info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
         }
-    //}
+        //}
     }
     assert_packet_ipv4("writing to net", buf, len);
     struct timeval send1; // need for mean_delay calculation (legacy)
@@ -2035,35 +2003,72 @@ if(drop_packet_flag) {
         shm_conn_info->eff_len.sum = 1;
     sem_post(&shm_conn_info->common_sem);
     gettimeofday(&send2, NULL );
-    if (tmp_seq_counter){
+    if (tmp_seq_counter) {
 
-    info.channel[chan_num].local_seq_num++;
-    if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
-       info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
-    }
+        info.channel[chan_num].local_seq_num++;
+        if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
+            info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
+        }
 
-    delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
-    delay_cnt++; // need for mean_delay calculation (legacy)
+        delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
+        delay_cnt++; // need for mean_delay calculation (legacy)
 #ifdef DEBUGG
-    if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
+        if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
 #endif
 
-    shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
-    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
-    statb.packet_sent_ag += 1000;
-    if(shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX) 
-        shm_conn_info->stats[info.process_num].l_pbl_tmp++;
-    if(shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
-        shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
-    info.channel[chan_num].up_len += len_ret;
-    statb.byte_sent_ag_full += len_ret;
-    info.channel[chan_num].up_packets++;
-    info.channel[chan_num].bytes_put++;
-if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ select_send"); } 
-    info.byte_efficient += len_ret;
+        shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
+        shm_conn_info->stats[info.process_num].packet_upload_cnt++;
+        statb.packet_sent_ag += 1000;
+        if (shm_conn_info->stats[info.process_num].l_pbl_tmp < INT32_MAX)
+            shm_conn_info->stats[info.process_num].l_pbl_tmp++;
+        if (shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec < INT32_MAX)
+            shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec++;
+        info.channel[chan_num].up_len += len_ret;
+        statb.byte_sent_ag_full += len_ret;
+        info.channel[chan_num].up_packets++;
+        info.channel[chan_num].bytes_put++;
+        if (drop_packet_flag) {
+            vtun_syslog(LOG_INFO, "bytes_pass++ select_send");
+        }
+        info.byte_efficient += len_ret;
 
-    last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
+        last_sent_packet_num[chan_num].seq_num = tmp_seq_counter;
     }
+#ifdef SUM_SEND
+    if (packet_code_ready) {
+        len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[chan_num].local_seq_num, FRAME_REDUNDANCY_CODE);
+        info.channel[chan_num].local_seq_num++;
+        if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
+            info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
+        }
+        //try send or store packet in fast resend buf
+        FD_ZERO(&fdset_tun);
+        FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
+#ifdef DEBUGG
+        vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
+#endif
+        if (select_ret == 1) {
+#ifdef CODE_LOG
+            vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+#endif
+            udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
+        } else {
+#ifdef CODE_LOG
+            vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+#endif
+            sem_wait(&(shm_conn_info->resend_buf_sem));
+            int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
+            sem_post(&(shm_conn_info->resend_buf_sem));
+            if (idx == -1) {
+                vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+            }
+//               return NET_WRITE_BUSY_NOTIFY;
+        }
+    }
+#endif
     return len & VTUN_FSIZE_MASK;
 }
 
