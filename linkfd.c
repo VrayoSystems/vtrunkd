@@ -4150,6 +4150,7 @@ int lfd_linker(void)
     info.last_sent_FLLI_idx = shm_conn_info->l_loss_idx;
     //reset FRAME_LOSS_INFO sending
     info.last_sent_FLI_idx = shm_conn_info->loss_idx;
+    struct timeval select_tv_copy;
 
 /**
  *
@@ -5111,7 +5112,9 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
             add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
-            add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
+            //add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
+            add_json(js_buf, &js_cur, "sel_imd", "%d", info.select_immediate);
+            info.select_immediate = 0;
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
             add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100);
@@ -5821,6 +5824,8 @@ int lfd_linker(void)
         struct timeval work_loop1, work_loop2;
         gettimeofday(&work_loop1, NULL );
 #endif
+main_select:
+        select_tv_copy = tv;
         len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
 #ifdef DEBUGG
 if(drop_packet_flag) {
@@ -7108,6 +7113,19 @@ if(drop_packet_flag) {
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
 #endif
+            if(timercmp(&tv, &select_tv_copy, ==)) { // means select was an immediate return
+                // fill in all structs for immediate read
+                FD_ZERO(&fdset_w);
+                FD_ZERO(&fdset);
+                pfdset_w = NULL;
+                tv.tv_sec = 0;
+                tv.tv_usec = 1000; // one ms to wait
+                for (i = 0; i < info.channel_amount; i++) {
+                    FD_SET(info.channel[i].descriptor, &fdset);
+                }
+                info.select_immediate++;
+                goto main_select;
+            }
             continue;
         }
         /* Pass data from write_buff to TUN device */
