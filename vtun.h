@@ -703,6 +703,8 @@ struct conn_info {
     struct timeval APCS_tick_tv;
     int tokens;
     struct timeval tokens_lastadd_tv;
+    int max_chan_new;
+    struct timeval head_detected_ts;
 };
 
 struct resent_chk {

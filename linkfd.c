@@ -152,6 +152,7 @@ struct my_ip {
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
+#define HEAD_REDETECT_HYSTERESIS_TV {0,400000} // timeval (interval) for chan speed redetect
 #define SPEED_REDETECT_IMMUNE_SEC 5 // (interval seconds) before next auto-redetection can occur after PROTUP - added to above timer!
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
@@ -2704,6 +2705,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     int max_ACS_chan = -1;
     int max_chan = shm_conn_info->max_chan;
     int immune_sec = 0;
+    struct timeval tv_tmp;
+    int new_max_chan = -1;
 
     if( exclude == max_chan) { // the only case right now
         // choose first (random) head, excluding 'excluded', then do following redetect
@@ -2775,13 +2778,15 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         // TODO HERE: What if Wf < Wh and Sf > Sh => RSRf < RSRh => f can not get full speed due to RSRf
         if(max_chan_H != -1 && max_chan_CS == -1) {
 //                        vtun_syslog(LOG_INFO, "Head change H");
-            shm_conn_info->max_chan = max_chan_H;
+            //shm_conn_info->max_chan = max_chan_H;
+            new_max_chan = max_chan_H;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
             shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else if (max_chan_H == -1 && max_chan_CS != -1) {
             vtun_syslog(LOG_INFO, "Head change CS");
-            shm_conn_info->max_chan = max_chan_CS;
+            //shm_conn_info->max_chan = max_chan_CS;
+            new_max_chan = max_chan_CS;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
             shm_conn_info->last_switch_time.tv_sec += immune_sec;
@@ -2789,7 +2794,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
             if(max_chan_H != max_chan_CS) {
                 vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
             }
-            shm_conn_info->max_chan = max_chan_H;
+            //shm_conn_info->max_chan = max_chan_H;
+            new_max_chan = max_chan_H;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
             shm_conn_info->last_switch_time.tv_sec += immune_sec;
@@ -2808,7 +2814,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 vtun_syslog(LOG_INFO, "Head change - first alive (default): %s(%d), excluded: %d ACS2=%d,PCS2=%d (idle? %d)",
                         shm_conn_info->stats[alive_chan].name, alive_chan, exclude, shm_conn_info->stats[alive_chan].max_ACS2,
                         shm_conn_info->stats[alive_chan].max_PCS2, shm_conn_info->idle);
-                shm_conn_info->max_chan = alive_chan;
+                //shm_conn_info->max_chan = alive_chan;
+                new_max_chan = alive_chan;
             }
             if(alive_cnt == 0) { // no chan is alive, do without excluded
                 int alive_cnt = 0;
@@ -2821,7 +2828,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
                 if(alive_cnt == 1) {
                     vtun_syslog(LOG_INFO, "Head no change - first and only channel dead: %d, excluded: %d", alive_chan, exclude);
-                    shm_conn_info->max_chan = alive_chan;
+                    //shm_conn_info->max_chan = alive_chan;
+                    new_max_chan = alive_chan;
                 } else {
                     vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
                 }
@@ -2832,8 +2840,21 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
             }
         }
     }
+    if(new_max_chan == -1) {
+        vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        return 0;
+    }
+    if(new_max_chan != shm_conn_info->max_chan_new) {
+        shm_conn_info->head_detected_ts = info.current_time;
+        shm_conn_info->max_chan_new = new_max_chan;
+        vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+    }
+    
+    timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp);
+    if(timercmp(&tv_tmp, &((struct timeval) HEAD_REDETECT_HYSTERESIS_TV), >=)) {
+        shm_conn_info->max_chan = shm_conn_info->max_chan_new;
+    }
     // now re-calculate lossing for new head
-    struct timeval tv_tmp;
     timersub(&(info.current_time), &(shm_conn_info->stats[max_chan].real_loss_time), &tv_tmp);
     if(timercmp(&tv_tmp, &((struct timeval) {DROPPING_LOSSING_DETECT_SECONDS, 0}), >=)) {
         // noop
