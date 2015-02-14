@@ -2725,6 +2725,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         }
         if(new_head != -1) { // means we've found one alive and not excluded
             shm_conn_info->max_chan = new_head;
+            shm_conn_info->max_chan_new = new_head;
             max_chan = new_head;
             // set redetect time to future
             immune_sec = SPEED_REDETECT_IMMUNE_SEC;
@@ -2745,6 +2746,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         }
         //vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
         shm_conn_info->max_chan = min_rtt_chan;
+        shm_conn_info->max_chan_new = min_rtt_chan;
         fixed = 1;
         shm_conn_info->last_switch_time = info.current_time; // nothing bad in this..
         shm_conn_info->last_switch_time.tv_sec += immune_sec;
@@ -2820,7 +2822,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 vtun_syslog(LOG_INFO, "Head change - first alive (default): %s(%d), excluded: %d ACS2=%d,PCS2=%d (idle? %d)",
                         shm_conn_info->stats[alive_chan].name, alive_chan, exclude, shm_conn_info->stats[alive_chan].max_ACS2,
                         shm_conn_info->stats[alive_chan].max_PCS2, shm_conn_info->idle);
-                //shm_conn_info->max_chan = alive_chan;
+                shm_conn_info->max_chan = alive_chan; // change immedialtey
+                shm_conn_info->max_chan_new = alive_chan;
                 new_max_chan = alive_chan;
             }
             if(alive_cnt == 0) { // no chan is alive, do without excluded
@@ -2834,7 +2837,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
                 if(alive_cnt == 1) {
                     vtun_syslog(LOG_INFO, "Head no change - first and only channel dead: %d, excluded: %d", alive_chan, exclude);
-                    //shm_conn_info->max_chan = alive_chan;
+                    shm_conn_info->max_chan = alive_chan;
+                    shm_conn_info->max_chan_new = alive_chan;
                     new_max_chan = alive_chan;
                 } else {
                     vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
@@ -2848,7 +2852,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     }
     if(new_max_chan == -1) {
         vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
-        return 0;
+        return fixed;
     }
     if(new_max_chan != shm_conn_info->max_chan_new) {
         shm_conn_info->head_detected_ts = info.current_time;
