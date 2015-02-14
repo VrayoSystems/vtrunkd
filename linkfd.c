@@ -1314,6 +1314,7 @@ int seqn_break_tail(char *out, int len, uint32_t *seq_num, uint16_t *flag_var, u
  */
 int pack_packet(int chan_num, char *buf, int len, uint32_t seq_num, uint32_t local_seq_num, int flag) {
     uint16_t flag_n = htons(flag);
+    
     uint32_t local_seq_num_n = htonl(local_seq_num);
     uint16_t mini_sum = htons((uint16_t)(seq_num + local_seq_num + info.channel[chan_num].local_seq_num_recv));
     uint32_t last_recv_lsn = htonl(info.channel[chan_num].local_seq_num_recv);
@@ -4787,7 +4788,7 @@ int lfd_linker(void)
                     && ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec)) 
                     && ((shm_conn_info->stats[i].ag_flag_local) || (check_delivery_time_path_unsynced(i, 2)))) { // warning! CLD may
                     info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
-                    if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted) ) {
+                    if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted * 1000) ) {
                         if(info.head_channel) {
                             vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
                             redetect_head_unsynced(chan_mask, info.process_num);
