@@ -2038,7 +2038,6 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef SUM_SEND
     if (packet_code_ready) {
         len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[chan_num].local_seq_num, FRAME_REDUNDANCY_CODE);
-        info.channel[chan_num].local_seq_num++;
         if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
             info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
         }
@@ -2056,6 +2055,7 @@ int select_devread_send(char *buf, char *out2) {
             vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
 #endif
             udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
+            info.channel[chan_num].local_seq_num++;
         } else {
 #ifdef CODE_LOG
             vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
