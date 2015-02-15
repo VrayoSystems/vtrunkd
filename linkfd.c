@@ -2055,8 +2055,15 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef CODE_LOG
             vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
 #endif
-            udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
-            info.channel[chan_num].local_seq_num++;
+            len_ret = udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
+            if(len_sum <= 0) {
+                vtun_syslog(LOG_ERR, "error sum len %d! reason: %s (%d)", len_sum, strerror(errno), errno);
+            }
+            if (len_sum && (len_ret <= 0)) {
+                vtun_syslog(LOG_INFO, "error direct send sum to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+            } else {
+                info.channel[chan_num].local_seq_num++;
+            }
         } else {
 #ifdef CODE_LOG
             vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
