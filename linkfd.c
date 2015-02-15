@@ -112,6 +112,7 @@ struct my_ip {
 #define CS_THRESH 60
 #define SEND_Q_IDLE 7000 // send_q less than this enters idling mode; e.g. head is detected by rtt
 #define SEND_Q_LIMIT_MINIMAL 9000 // 7000 seems to work
+#define SPEED_MINIMAL 100000.0 // 100kb/s minimal speed
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 //#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
@@ -4706,10 +4707,17 @@ int lfd_linker(void)
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
             }
-            
-            if(d_rsr < SEND_Q_LIMIT_MINIMAL) {
-                d_rsr = SEND_Q_LIMIT_MINIMAL;
-                //vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+           
+            double d_sqlm = d_rtt * (SPEED_MINIMAL - d_ACS);
+            if(d_sqlm > SEND_Q_LIMIT_MINIMAL) {
+                if(d_rsr < d_sqlm) {
+                    d_rsr = d_sqlm;
+                }
+            } else {
+                if(d_rsr < SEND_Q_LIMIT_MINIMAL) {
+                    d_rsr = SEND_Q_LIMIT_MINIMAL;
+                    //vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+                }
             }
                 
             info.rsr = d_rsr;
