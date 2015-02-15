@@ -5764,7 +5764,6 @@ int lfd_linker(void)
                 sem_post(&(shm_conn_info->common_sem));
                 if (flag) {
                     len_sum = pack_packet(i, buf2, len_sum, 0, info.channel[i].local_seq_num, FRAME_REDUNDANCY_CODE);
-                    info.channel[i].local_seq_num++;
                     if (info.channel[i].local_seq_num == (UINT32_MAX - 1)) {
                         info.channel[i].local_seq_num = 0;
                     }
