@@ -4816,15 +4816,17 @@ int lfd_linker(void)
             }
             // first calculate agag
             timersub(&info.current_time, &agon_time, &tv_tmp);
-            agag = tv2ms(&tv_tmp) / 10;
-            if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
-            for(int i=0; i<info.channel_amount; i++) {
-                dirty_seq += info.channel[i].local_seq_num;
-            }
-            if(agag < 127) {
-                ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
-            } else {
-                ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+            agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
+            if(agag > 0) {
+                if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
+                for(int i=0; i<info.channel_amount; i++) {
+                    dirty_seq += info.channel[i].local_seq_num;
+                }
+                if(agag < 127) {
+                    ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
+                } else {
+                    ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+                }
             }
             // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
         } else {
