@@ -5746,9 +5746,6 @@ int lfd_linker(void)
                 }
             }
             sem_post(&(shm_conn_info->common_sem));
-            if((!need_retransmit) && ((shm_conn_info->dropping || shm_conn_info->head_lossing) && (!info.head_channel))  ) { // semi-atomic, no need to sync, TODO: can optimize with above
-                need_retransmit = 1; // flood not-head to top for 'dropping time'
-            }
         }
         // gettimeofday(&info.current_time, NULL); // TODO: required??
         
