@@ -118,14 +118,15 @@
 #define LWS_NOTIFY_PEROID 3 // seconds; TODO: make this configurable
 #define LWS_NOTIFY_MAX_SUB_SEQ 30
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
-#define FRAME_BUF_SIZE 4500 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #ifdef LOW_MEM
-    #define RESEND_BUF_SIZE 600 // int
+    #define RESEND_BUF_SIZE 400 // int
     #define JS_MAX 1000 // data for logs, * 3 times is allocated
+    #define FRAME_BUF_SIZE 700 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 #else
     #define RESEND_BUF_SIZE 1200 // int
     #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
+    #define FRAME_BUF_SIZE 4500 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 #endif
 // maximum compiled-in buffers for tcp channels per link
 #define MAX_TCP_LOGICAL_CHANNELS 7//100 // int
