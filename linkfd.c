@@ -880,10 +880,14 @@ int check_rtt_latency_drop_chan(int chan_num) {
         return 1;
     }
     
-    int my_rtt = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar);
-    int min_rtt = (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
+    //int my_rtt = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar);
+    //int min_rtt = (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
     
-    if(my_rtt > min_rtt * RTT_THRESHOLD_MULTIPLIER) {
+    //if(my_rtt > min_rtt * RTT_THRESHOLD_MULTIPLIER) {
+    //    return 0;
+    //}
+    
+    if(info.exact_rtt > shm_conn_info->max_allowed_rtt) {
         return 0;
     }
     
@@ -3583,7 +3587,7 @@ int print_ag_drop_reason() {
         vtun_syslog(LOG_INFO,  "%s D", reason);
     }
     if(ag_stat.CL == 1 && ag_stat_copy.CL != ag_stat.CL) {
-        vtun_syslog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d > rtt_maxchan %d * 5 (MLD %d ; frtt %d)", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt);
+        vtun_syslog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d > rtt_maxchan %d * 5 (MLD %d ; frtt %d) MAR %d", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt, shm_conn_info->max_allowed_rtt);
     }
     if(ag_stat.DL == 1 && ag_stat_copy.DL != ag_stat.DL) {
         vtun_syslog(LOG_INFO,  "%s DL", reason);
@@ -3604,6 +3608,37 @@ int assert_packet_ipv4(const char *desc, char *data, int len) {
     }
     return 1;
 }
+
+
+int compute_max_allowed_rtt() {
+    // return max frtt in ms
+    
+    int sum_rsr = 0;
+    int min_rtt = INT32_MAX;
+    int max_rtt = 0;
+    int rtt_diff = 0;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && ((i == shm_conn_info->max_chan) || (shm_conn_info->ag_mask & (1 << i)))) { 
+            sum_rsr += shm_conn_info->stats[i].sqe_mean;
+        }
+        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+            min_rtt = shm_conn_info->stats[i].exact_rtt;
+        }
+        if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+            max_rtt = shm_conn_info->stats[i].exact_rtt;
+        }
+    }
+    if((min_rtt < INT32_MAX) && (max_rtt > 0)) {
+        rtt_diff = max_rtt - min_rtt;
+    } else {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED! max_allwed_rtt no chan alive max_rtt %d min_rtt %d", max_rtt, min_rtt);
+    }
+    int spd = shm_conn_info->tpps * info.eff_len;
+    if(spd == 0) return INT32_MAX;
+    int max_frtt = sum_rsr * 1000 / spd + rtt_diff; // in ms
+    return max_frtt;
+}
+
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -4535,7 +4570,7 @@ int lfd_linker(void)
             */
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-                shm_conn_info->frtt_local_applied = 14 * shm_conn_info->frtt_local_applied / 15 + shm_conn_info->max_rtt_lag / 15;
+                shm_conn_info->frtt_local_applied = 34 * shm_conn_info->frtt_local_applied / 35 + shm_conn_info->max_rtt_lag / 35;
                 int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
                 shm_conn_info->frtt_smooth_tick = info.current_time;
@@ -5009,6 +5044,7 @@ int lfd_linker(void)
             if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
                 shm_conn_info->forced_rtt = shm_conn_info->drtt;
             }
+            shm_conn_info->max_allowed_rtt = compute_max_allowed_rtt();
             
             // compute perceived loss probability
             if(info.p_lost > 0 && info.r_lost > 0) {
@@ -5089,6 +5125,7 @@ int lfd_linker(void)
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
             tpps=(shm_conn_info->seq_counter[1] - info.tpps_old)*2;
+            shm_conn_info->tpps = tpps;
             info.tpps_old=shm_conn_info->seq_counter[1];
             
 #if !defined(DEBUGG) && defined(JSON)
@@ -5118,6 +5155,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
+            add_json(js_buf, &js_cur, "MAR", "%d", shm_conn_info->max_allowed_rtt);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
             add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted);

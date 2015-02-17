@@ -118,15 +118,14 @@
 #define LWS_NOTIFY_PEROID 3 // seconds; TODO: make this configurable
 #define LWS_NOTIFY_MAX_SUB_SEQ 30
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
+#define FRAME_BUF_SIZE 4500 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #ifdef LOW_MEM
-    #define RESEND_BUF_SIZE 400 // int
+    #define RESEND_BUF_SIZE 600 // int
     #define JS_MAX 1000 // data for logs, * 3 times is allocated
-    #define FRAME_BUF_SIZE 700 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 #else
     #define RESEND_BUF_SIZE 1200 // int
     #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
-    #define FRAME_BUF_SIZE 4500 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 #endif
 // maximum compiled-in buffers for tcp channels per link
 #define MAX_TCP_LOGICAL_CHANNELS 7//100 // int
@@ -668,7 +667,6 @@ struct conn_info {
     struct timeval forced_rtt_start_grow;
     int forced_rtt;
     int forced_rtt_recv; //in ms
-    int forced_rtt_remote; //in ms
     int idle;
     struct timeval drop_time; // time that we DROPPED by fact!
     struct timed_loss loss[LOSS_ARRAY]; // sync by write_buf_sem
@@ -707,6 +705,9 @@ struct conn_info {
     struct timeval tokens_lastadd_tv;
     int max_chan_new;
     struct timeval head_detected_ts;
+    int max_allowed_rtt; // MAR calculated against current speed and send_q
+    int tpps;
+    int forced_rtt_remote;
 };
 
 struct resent_chk {
