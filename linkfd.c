@@ -5167,7 +5167,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sel_imd", "%d", info.select_immediate);
             info.select_immediate = 0;
             add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
-            add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_recv);
+            add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_remote);
             add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100);
             add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num)));
 
@@ -5335,6 +5335,7 @@ int lfd_linker(void)
                 // local_seq_num
                 tmp32_n = htonl(info.channel[i].local_seq_num);
                 memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
+                /*
                 uint16_t tmp16 = ((uint16_t) (-1));
                 sem_wait(write_buf_sem);
                 if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
@@ -5342,6 +5343,8 @@ int lfd_linker(void)
                 }
                 sem_post(write_buf_sem);
                 tmp16_n = htons(tmp16); //forced_rtt here
+                */
+                tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
@@ -5419,6 +5422,7 @@ int lfd_linker(void)
                     memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
                     tmp32_n = htonl(info.channel[1].packet_download);
                     memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan
+                    /*
                     uint16_t tmp16 = ((uint16_t) (-1));
                     sem_wait(write_buf_sem);
                     if ((unsigned int) shm_conn_info->forced_rtt < ((uint16_t) (-1))) {
@@ -5426,6 +5430,8 @@ int lfd_linker(void)
                     }
                     sem_post(write_buf_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
+                    */
+                    tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                     tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
@@ -6479,7 +6485,8 @@ if(drop_packet_flag) {
                             memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); //forced_rtt
                             
                             sem_wait(write_buf_sem);
-                            shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n);
+                            //shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n); // temporarily commented out to enable logs for remote frtt monitoring
+                            shm_conn_info->forced_rtt_remote = (int) ntohs(tmp16_n);
                             /*
                             if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
                                 ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select

@@ -667,6 +667,7 @@ struct conn_info {
     struct timeval forced_rtt_start_grow;
     int forced_rtt;
     int forced_rtt_recv; //in ms
+    int forced_rtt_remote; //in ms
     int idle;
     struct timeval drop_time; // time that we DROPPED by fact!
     struct timed_loss loss[LOSS_ARRAY]; // sync by write_buf_sem
