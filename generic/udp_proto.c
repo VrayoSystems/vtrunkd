@@ -78,10 +78,19 @@ int udp_write(int fd, char *buf, int len)
     } else if (bad_frame == VTUN_BAD_FRAME) {
         int flag_var = 0;
         memcpy(&flag_var, buf + sizeof(uint32_t), sizeof(uint16_t));
-        if (ntohs(flag_var) == FRAME_REDUNDANCY_CODE) {
+        flag_var = ntohs(flag_var);
+        if (flag_var == FRAME_REDUNDANCY_CODE) {
             uint32_t local_seq_num = ntohl(*((uint32_t *) (&buf[len - 4 * sizeof(uint32_t)])));
             if ((previous_local_seq_num) && ((previous_local_seq_num + 1) != local_seq_num)) {
                 vtun_syslog(LOG_INFO, "udp local_seqnum %lu prev %lu sum packet", local_seq_num, previous_local_seq_num);
+            }
+            if (local_seq_num)
+                previous_local_seq_num = local_seq_num;
+        }
+        if (flag_var == FRAME_CHANNEL_INFO) {
+            uint32_t local_seq_num = ntohl(*((uint32_t *) (&buf[4 * sizeof(uint16_t) + sizeof(uint32_t)])));
+            if ((previous_local_seq_num) && ((previous_local_seq_num + 1) != local_seq_num)) {
+                vtun_syslog(LOG_INFO, "udp local_seqnum %lu prev %lu FCI", local_seq_num, previous_local_seq_num);
             }
             if (local_seq_num)
                 previous_local_seq_num = local_seq_num;
