@@ -1977,6 +1977,8 @@ int select_devread_send(char *buf, char *out2) {
             info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
         }
         //}
+    } else { // this is sum packet
+        
     }
     assert_packet_ipv4("writing to net", buf, len);
     struct timeval send1; // need for mean_delay calculation (legacy)
@@ -2006,7 +2008,7 @@ int select_devread_send(char *buf, char *out2) {
         shm_conn_info->eff_len.sum = 1;
     sem_post(&shm_conn_info->common_sem);
     gettimeofday(&send2, NULL );
-    if (tmp_seq_counter) {
+    if (tmp_seq_counter) { // this is not sum packet
 
         info.channel[chan_num].local_seq_num++;
         if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
@@ -2039,7 +2041,7 @@ int select_devread_send(char *buf, char *out2) {
     }
 #ifdef SUM_SEND
     if (packet_code_ready) {
-        len_sum = pack_packet(chan_num, buf2, len_sum, 0, 0, FRAME_REDUNDANCY_CODE);
+        len_sum = pack_packet(chan_num, buf2, len_sum, 0, 0 /* local seq */, FRAME_REDUNDANCY_CODE);
 
         //try send or store packet in fast resend buf
         FD_ZERO(&fdset_tun);
@@ -5784,7 +5786,7 @@ int lfd_linker(void)
 
                 sem_post(&(shm_conn_info->common_sem));
                 if (flag) {
-                    len_sum = pack_packet(i, buf2, len_sum, 0, info.channel[i].local_seq_num, FRAME_REDUNDANCY_CODE);
+                    len_sum = pack_packet(i, buf2, len_sum, 0, 0 /*local seq*/, FRAME_REDUNDANCY_CODE);
                     if (info.channel[i].local_seq_num == (UINT32_MAX - 1)) {
                         info.channel[i].local_seq_num = 0;
                     }
@@ -6060,10 +6062,12 @@ if(drop_packet_flag) {
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
                             len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
+                            /*
                             unsigned int lrs2;
                             if (lossed_consume(local_seq_num, 0, &lrs2, &info.channel[chan_num].local_seq_num_recv) == 0) { // TODO: lrs?? not updated!
                                 info.channel[chan_num].loss_time = info.current_time;
                             }
+                            */
                             info.channel[1].last_recv_time = info.current_time;
                             sem_wait(write_buf_sem);
                             int sumIndex = add_redundancy_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
