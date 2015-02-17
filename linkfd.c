@@ -343,7 +343,8 @@ void ms2tv(struct timeval *result, unsigned long interval_ms) {
     result->tv_usec = ((interval_ms % 1000) * 1000);
 }
 
-uint64_t tv2ms(struct timeval *a) {
+// TODO: 32 bit tv2ms required #
+int64_t tv2ms(struct timeval *a) {
     return (((uint64_t)a->tv_sec * 1000) + ((uint64_t)a->tv_usec / 1000));
 }
 
