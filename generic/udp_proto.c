@@ -62,6 +62,17 @@ int udp_write(int fd, char *buf, int len)
 {
      register char *ptr;
      register int wlen;
+    int bad_frame = len & ~VTUN_FSIZE_MASK;
+    if (bad_frame != VTUN_BAD_FRAME) {
+        vtun_syslog(LOG_INFO, "local_seqnum %lu regular packet", ntohl(*((uint32_t *) (&buf[len - 3 * sizeof(uint32_t) - sizeof(uint16_t)]))));
+    } else {
+        int flag_var = 0;
+        memcpy(&flag_var, buf + sizeof(uint32_t), sizeof(uint16_t));
+        if (ntohs(flag_var) == FRAME_REDUNDANCY_CODE) {
+            vtun_syslog(LOG_INFO, "local_seqnum %lu sum packet", ntohl(*((uint32_t *) (&buf[len - 4 * sizeof(uint32_t)]))));
+        }
+    }
+
 
      ptr = buf - sizeof(uint16_t);
 
