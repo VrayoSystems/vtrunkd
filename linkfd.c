@@ -2038,10 +2038,8 @@ int select_devread_send(char *buf, char *out2) {
     }
 #ifdef SUM_SEND
     if (packet_code_ready) {
-        len_sum = pack_packet(chan_num, buf2, len_sum, 0, info.channel[chan_num].local_seq_num, FRAME_REDUNDANCY_CODE);
-        if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
-            info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
-        }
+        len_sum = pack_packet(chan_num, buf2, len_sum, 0, 0, FRAME_REDUNDANCY_CODE);
+
         //try send or store packet in fast resend buf
         FD_ZERO(&fdset_tun);
         FD_SET(info.channel[chan_num].descriptor, &fdset_tun);
@@ -2062,7 +2060,10 @@ int select_devread_send(char *buf, char *out2) {
             if (len_sum && (len_ret <= 0)) {
                 vtun_syslog(LOG_INFO, "error direct send sum to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
             } else {
-                info.channel[chan_num].local_seq_num++;
+//                info.channel[chan_num].local_seq_num++;
+                if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
+                    info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
+                }
             }
         } else {
 #ifdef CODE_LOG
@@ -5437,6 +5438,7 @@ int lfd_linker(void)
                     // TODO: select here ???
                     int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
+
                     if (len_ret < 0) {
                         vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                         linker_term = TERM_NONFATAL;

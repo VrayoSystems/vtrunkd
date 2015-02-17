@@ -61,6 +61,7 @@ int tcp_write(int fd, char *buf, int len)
 {
      char *ptr;
      int bad_frame = len & ~VTUN_FSIZE_MASK;
+#ifdef BAD_LOCAL_SEQ_LOG_TCP
      if (bad_frame == 0) {
          vtun_syslog(LOG_INFO, "tcp local_seqnum %lu regular packet", ntohl(*((uint32_t *) (&buf[len - 3 * sizeof(uint32_t) - sizeof(uint16_t)]))));
      } else if(bad_frame == VTUN_BAD_FRAME) {
@@ -72,6 +73,7 @@ int tcp_write(int fd, char *buf, int len)
      } else  {
          vtun_syslog(LOG_INFO, "tcp local_seqnum other");
      }
+#endif
      ptr = buf - sizeof(uint16_t);
 
      *((uint16_t *)ptr) = htons(len);
