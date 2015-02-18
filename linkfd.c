@@ -912,13 +912,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
     if(buf_len >= max_buf_len) {
-        APCS = shm_conn_info->APCS * 2;
-    }
-    if(buf_len >= max_buf_len * 2 ) {
-        APCS = shm_conn_info->APCS * 3;
-    }
-    if(buf_len >= max_buf_len * 3) {
-        APCS = shm_conn_info->APCS * 10;
+        float fbdiff = buf_len / max_buf_len;
+        fbdiff *= fbdiff;
+        float fAPCS = shm_conn_info->APCS;
+        fAPCS *= fbdiff;
+        APCS = (int)fAPCS;
     }
     
     // now do add some tokens ?
@@ -5062,7 +5060,7 @@ int lfd_linker(void)
             
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
-            if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=)) {
+            if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=) && (shm_conn_info->APCS_cnt > 150)) {
                 shm_conn_info->APCS = shm_conn_info->APCS_cnt * tv2ms(&tv_tmp) / 1000;
                 shm_conn_info->APCS_cnt = 0;
                 shm_conn_info->APCS_tick_tv = info.current_time;
