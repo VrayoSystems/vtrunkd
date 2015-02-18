@@ -883,12 +883,15 @@ int check_rtt_latency_drop_chan(int chan_num) {
     //int my_rtt = (int)(shm_conn_info->stats[chan_num].exact_rtt + shm_conn_info->stats[chan_num].rttvar);
     //int min_rtt = (int)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
     
-    //if(my_rtt > min_rtt * RTT_THRESHOLD_MULTIPLIER) {
-    //    return 0;
-    //}
     
-    if(info.exact_rtt > shm_conn_info->max_allowed_rtt) {
-        return 0;
+    if(shm_conn_info->max_allowed_rtt != 0) {
+        if(info.exact_rtt > shm_conn_info->max_allowed_rtt) {
+            return 0;
+        }
+    } else {
+        //if(my_rtt > min_rtt * RTT_THRESHOLD_MULTIPLIER) {
+            return 0;
+        //}
     }
     
     return 1;
@@ -3615,24 +3618,29 @@ int compute_max_allowed_rtt() {
     int min_rtt = INT32_MAX;
     int max_rtt = 0;
     int rtt_diff = 0;
+    struct timeval tv_tmp;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && ((i == shm_conn_info->max_chan) || (shm_conn_info->ag_mask & (1 << i)))) { 
-            sum_rsr += shm_conn_info->stats[i].sqe_mean;
-        }
-        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-            min_rtt = shm_conn_info->stats[i].exact_rtt;
-        }
-        if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
-            max_rtt = shm_conn_info->stats[i].exact_rtt;
+            timersub(&info.current_time, &shm_conn_info->stats[i].agon_time, &tv_tmp);
+            if((i == shm_conn_info->max_chan) || (tv2ms(&tv_tmp) > shm_conn_info->stats[i].exact_rtt)) {
+                sum_rsr += shm_conn_info->stats[i].sqe_mean;
+            }
+            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                min_rtt = shm_conn_info->stats[i].exact_rtt;
+            }
+            if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                max_rtt = shm_conn_info->stats[i].exact_rtt;
+            }
         }
     }
+    if(sum_rsr == 0) return 0;
     if((min_rtt < INT32_MAX) && (max_rtt > 0)) {
         rtt_diff = max_rtt - min_rtt;
     } else {
         vtun_syslog(LOG_ERR, "ASSERT FAILED! max_allwed_rtt no chan alive max_rtt %d min_rtt %d", max_rtt, min_rtt);
     }
     int spd = shm_conn_info->tpps * info.eff_len;
-    if(spd == 0) return INT32_MAX;
+    if(spd == 0) return 0;
     int max_frtt = sum_rsr * 1000 / spd + rtt_diff; // in ms
     return max_frtt;
 }
@@ -4871,6 +4879,7 @@ int lfd_linker(void)
         if(ag_flag_local == AG_MODE) {
             if(ag_flag_local_prev != ag_flag_local) {
                 agon_time = info.current_time;
+                shm_conn_info->stats[info.process_num].agon_time = agon_time;
                 ag_flag_local_prev = ag_flag_local;
             }
             // first calculate agag
@@ -5068,11 +5077,18 @@ int lfd_linker(void)
             sem_wait(&(shm_conn_info->stats_sem));
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
             if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=) && (shm_conn_info->APCS_cnt > 150)) {
-                shm_conn_info->APCS = shm_conn_info->APCS_cnt * tv2ms(&tv_tmp) / 1000;
+                shm_conn_info->APCS = shm_conn_info->APCS_cnt * 1000 / tv2ms(&tv_tmp);
                 shm_conn_info->APCS_cnt = 0;
                 shm_conn_info->APCS_tick_tv = info.current_time;
             }
             
+            timersub(&info.current_time, &shm_conn_info->tpps_tick_tv, &tv_tmp);
+            if(timercmp(&tv_tmp, &((struct timeval) {0, 800000}), >=) && ((shm_conn_info->seq_counter[1] - info.tpps_old) > 150)) {
+                tpps = (shm_conn_info->seq_counter[1] - info.tpps_old) * 1000 / tv2ms(&tv_tmp);
+                shm_conn_info->tpps = tpps;
+                info.tpps_old = shm_conn_info->seq_counter[1];
+                shm_conn_info->tpps_tick_tv = info.current_time;
+            }
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp; // absolutely unnessessary (done at loop )
             //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
@@ -5129,9 +5145,6 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->AG_flags_sem));
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
-            tpps=(shm_conn_info->seq_counter[1] - info.tpps_old)*2;
-            shm_conn_info->tpps = tpps;
-            info.tpps_old=shm_conn_info->seq_counter[1];
             
 #if !defined(DEBUGG) && defined(JSON)
             start_json(js_buf, &js_cur);

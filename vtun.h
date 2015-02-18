@@ -415,6 +415,7 @@ struct conn_stats {
     int packet_upload_cnt;
     int packet_upload_spd;
     struct timeval packet_upload_tv;
+    struct timeval agon_time;
 };
 /**
  * Structure for garbage statistic and information
@@ -701,6 +702,7 @@ struct conn_info {
     int APCS_cnt; // counter for coming packets with AG mode
     int APCS; // speed for packets per seconf in AG mode coming to WB
     struct timeval APCS_tick_tv;
+    struct timeval tpps_tick_tv;
     int tokens;
     struct timeval tokens_lastadd_tv;
     int max_chan_new;
