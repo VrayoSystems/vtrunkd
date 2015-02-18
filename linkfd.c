@@ -885,7 +885,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     
     
     if(shm_conn_info->max_allowed_rtt != 0) {
-        if(info.exact_rtt > shm_conn_info->max_allowed_rtt) {
+        if(info.exact_rtt > (shm_conn_info->max_allowed_rtt + shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt)) {
             return 0;
         }
     } else {
@@ -2877,6 +2877,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         shm_conn_info->head_detected_ts = info.current_time;
         shm_conn_info->max_chan_new = new_max_chan;
         vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+    } else {
+        vtun_syslog(LOG_INFO, "Head detect - New head is not new - NO WAIT max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
     }
     
     timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp);
@@ -5080,9 +5082,9 @@ int lfd_linker(void)
             
             int new_mar = compute_max_allowed_rtt();
             if(new_mar > shm_conn_info->max_allowed_rtt) {
-                shm_conn_info->max_allowed_rtt = 8 * shm_conn_info->max_allowed_rtt / 9 + compute_max_allowed_rtt() / 9;
+                shm_conn_info->max_allowed_rtt = 8 * shm_conn_info->max_allowed_rtt / 9 + new_mar / 9;
             } else {
-                shm_conn_info->max_allowed_rtt = 5 * shm_conn_info->max_allowed_rtt / 6 + compute_max_allowed_rtt() / 6;
+                shm_conn_info->max_allowed_rtt = 5 * shm_conn_info->max_allowed_rtt / 6 + new_mar / 6;
             }
             
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
