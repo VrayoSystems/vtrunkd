@@ -4752,7 +4752,14 @@ int lfd_linker(void)
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
             }
            
+           /*
             double d_sqlm = d_rtt * (SPEED_MINIMAL - d_ACS);
+            if(d_sqlm > SEND_Q_LIMIT_MINMAX) {
+                d_sqlm = SEND_Q_LIMIT_MINMAX;
+            }
+            */
+            
+            double d_sqlm = 0; // TODO: pump_adj should deal with this problem!
             if(d_sqlm > SEND_Q_LIMIT_MINIMAL) {
                 if(d_rsr < d_sqlm) {
                     d_rsr = d_sqlm;
