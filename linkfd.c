@@ -915,7 +915,9 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
     if(buf_len >= max_buf_len) {
-        float fbdiff = buf_len / max_buf_len;
+        float fbl = buf_len;
+        float fmbl = max_buf_len;
+        float fbdiff = fbl / fmbl;
         fbdiff *= fbdiff;
         float fAPCS = shm_conn_info->APCS;
         fAPCS *= fbdiff;
