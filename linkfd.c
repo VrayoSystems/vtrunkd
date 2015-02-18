@@ -4737,7 +4737,8 @@ int lfd_linker(void)
             double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
             if(d_pump_adj < 0) d_pump_adj = 0;
             
-            double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
+            //double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
+            double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h; // rttvar seems to be causing high RSR jitter
             if(d_rtt_shift < d_sql) {
                 d_sql -= d_rtt_shift;
             } else {
