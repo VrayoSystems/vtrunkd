@@ -2544,6 +2544,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->frames_buf[newf].flush_time = info.current_time;
     }
     shm_conn_info->write_buf[conn_num].frames.length++;
+    if (shm_conn_info->buf_len < shm_conn_info->write_buf[1].frames.length) {
+//    vtun_syslog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
+            shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+        }
     shm_conn_info->APCS_cnt++;
     if(i<0) {
         // expensive op; may be optimized!
@@ -5193,8 +5197,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
-            add_json(js_buf, &js_cur, "buf_len", "%d", (int)my_miss_packets_max);
-            add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)miss_packets_max);
+            add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
+            add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)shm_conn_info->buf_len);
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
@@ -5417,15 +5421,20 @@ int lfd_linker(void)
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
-
-                        if(debug_trace) {
+//                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len %d counter %d current buf_len %d",shm_conn_info->buf_len, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+                tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
+                memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
+                tmp32_n = htons(shm_conn_info->buf_len);
+                shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+                memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
+                if(debug_trace) {
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((7 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -5505,6 +5514,12 @@ int lfd_linker(void)
                     tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
+//                    vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len %d counter %d current buf_len %d",shm_conn_info->buf_len, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+                    tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
+                    memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
+                    tmp32_n = htons(shm_conn_info->buf_len);
+                    shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+                    memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -5513,7 +5528,7 @@ int lfd_linker(void)
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((5 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((7 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
 
                     if (len_ret < 0) {
@@ -6570,7 +6585,13 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
                             shm_conn_info->ag_mask_recv = hsag_mask2ag_mask(ntohl(tmp32_n));
                             set_rttlag();
-
+                            memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len counter
+                            int buf_len_counter = ntohs(tmp32_n);
+                            memcpy(&tmp32_n, buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len
+//                            vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv %d counter %d was %d",ntohs(tmp32_n), buf_len_counter, shm_conn_info->buf_len_recv_counter);
+                            if (buf_len_counter > shm_conn_info->buf_len_recv_counter) {
+                                shm_conn_info->buf_len_recv = (int)ntohs(tmp32_n);
+                            }
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
                             info.channel[chan_num].send_q =
