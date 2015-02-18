@@ -5061,7 +5061,6 @@ int lfd_linker(void)
             if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
                 shm_conn_info->forced_rtt = shm_conn_info->drtt;
             }
-            shm_conn_info->max_allowed_rtt = compute_max_allowed_rtt();
             
             // compute perceived loss probability
             if(info.p_lost > 0 && info.r_lost > 0) {
@@ -5078,6 +5077,14 @@ int lfd_linker(void)
             int cur_plp_unrec = plp_avg_pbl_unrecoverable(info.process_num);
             
             sem_wait(&(shm_conn_info->stats_sem));
+            
+            int new_mar = compute_max_allowed_rtt();
+            if(new_mar > shm_conn_info->max_allowed_rtt) {
+                shm_conn_info->max_allowed_rtt = 8 * shm_conn_info->max_allowed_rtt / 9 + compute_max_allowed_rtt() / 9;
+            } else {
+                shm_conn_info->max_allowed_rtt = 5 * shm_conn_info->max_allowed_rtt / 6 + compute_max_allowed_rtt() / 6;
+            }
+            
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
             if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=) && (shm_conn_info->APCS_cnt > 150)) {
                 shm_conn_info->APCS = shm_conn_info->APCS_cnt * 1000 / tv2ms(&tv_tmp);
