@@ -3385,6 +3385,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
             vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         } else {
             vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            need_send_loss_FCI_flag = -1; // inform that we are experiencing reorder
         }
         *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
         *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
@@ -6615,6 +6616,15 @@ if(drop_packet_flag) {
                                     my_max_send_q_chan_num = i;
                                 }
                             }
+                            if ((info.channel[chan_num].packet_loss == -1) && (info.Wmax_saved != 0)) { 
+                                vtun_syslog(LOG_INFO, "Undoing congestion control: Wmax %d", info.Wmax_saved);
+                                info.send_q_limit_cubic_max = info.Wmax_saved;
+                                loss_time = info.Wmax_tv;
+                                info.Wmax_saved = 0;
+                            } else if ((info.channel[chan_num].packet_loss == -1) && (info.Wmax_saved == 0)) {
+                                vtun_syslog(LOG_INFO, "Cannot undo congestion: Wmax %d", info.Wmax_saved);
+                            }
+                            
                             //Для чего нужен подсчет значения потерь через info.channel[chan_num].packet_loss ( возможно ложное срабатывание в дальнейшем
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
                                 // TODO: need to get L_PBL somehow here - see dumbass method at FCI send
@@ -6680,6 +6690,8 @@ if(drop_packet_flag) {
                                 } else {
                                     if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
                                         //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                        info.Wmax_saved = info.send_q_limit_cubic_max;
+                                        info.Wmax_tv = loss_time;
                                         info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
                                         if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                             info.W_u_max = info.max_send_q_u;

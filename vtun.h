@@ -595,6 +595,8 @@ struct phisical_status { // A.K.A. "info"
     int head_change_safe; // enough time passed since head change
     int frtt_remote_predicted;
     int select_immediate; /** immediate select times counter */
+    int Wmax_saved;
+    struct timeval Wmax_tv;
 };
 
 #define LOSS_ARRAY 80
