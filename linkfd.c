@@ -977,7 +977,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     // TODO WARNING i do not know why we are still checking packets if we see no rel_head
     struct timeval max_latency_drop = info.max_latency_drop;
     struct timeval tv_tmp;
-    int any_lrx, seq_loss = 0;
+    int any_lrx = 0, seq_loss = 0;
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
         info.least_rx_seq[i] = UINT32_MAX;
         seq_loss = 0;
@@ -998,7 +998,9 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
+                if(any_lrx < shm_conn_info->write_buf[i].last_received_seq[p]) {
+                    any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
+                }
                 if(seq_loss && (shm_conn_info->write_buf[i].possible_seq_lost[p] > (shm_conn_info->write_buf[i].last_written_seq + seq_loss)) 
                 && (shm_conn_info->write_buf[i].possible_seq_lost[p] < (shm_conn_info->write_buf[i].last_written_seq + PLOSS_CHECK_PKTS))) {
                     // means we received a local loss with this global seq
@@ -1009,10 +1011,9 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
                     if(shm_conn_info->stats[p].channel_dead  
-                        || (((shm_conn_info->stats[p].exact_rtt + shm_conn_info->stats[p].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) 
-                            > ( (int32_t)(tv2ms(&max_latency_drop)*2) + shm_conn_info->forced_rtt))
-                        //|| !(shm_conn_info->ag_mask_recv & (1 << p)) // this is TODO #395
-                      ) { // trying to fix #359 - mul MLD by 2
+                            || ((shm_conn_info->stats[p].recv_mode == 0)
+                            && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
+                      ) { 
                         // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
                     }
@@ -1024,8 +1025,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
             //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
-            //info.least_rx_seq[i] = any_lrx;
-            info.least_rx_seq[i] = 0; // do not detect any loss
+            info.least_rx_seq[i] = any_lrx;
+            //info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
             /* // TODO for #395
             for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
@@ -6585,6 +6586,24 @@ if(drop_packet_flag) {
                             
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
                             shm_conn_info->ag_mask_recv = hsag_mask2ag_mask(ntohl(tmp32_n));
+                            // we have received new mask
+                            shm_conn_info->stats[info.process_num].agoff_immunity_tv.tv_sec = 0;
+                            shm_conn_info->stats[info.process_num].agoff_immunity_tv.tv_usec = 0;
+                            if(shm_conn_info->stats[info.process_num].recv_mode != (shm_conn_info->ag_mask_recv & (1 << info.process_num))) {
+                                shm_conn_info->stats[info.process_num].recv_mode = (shm_conn_info->ag_mask_recv & (1 << info.process_num)) ? 1 : 0;
+                            }
+                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                if( (i != info.process_num) && (shm_conn_info->stats[i].recv_mode != (shm_conn_info->ag_mask_recv & (1 << i))) ) { 
+                                    // we are setting new mode for another channel
+                                    if(shm_conn_info->stats[i].recv_mode == 1) { // AG_MODE -> R_MODE: set immunity timer
+                                        struct timeval tv_dt;
+                                        ms2tv(&tv_dt, shm_conn_info->stats[i].exact_rtt);
+                                        timeradd(&info.current_time, &tv_dt, &shm_conn_info->stats[i].agoff_immunity_tv);
+                                    }
+                                    shm_conn_info->stats[i].recv_mode = (shm_conn_info->ag_mask_recv & (1 << i)) ? 1 : 0;
+                                }
+                            }
+                                    
                             set_rttlag();
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len counter
                             int buf_len_counter = ntohs(tmp32_n);

@@ -416,6 +416,8 @@ struct conn_stats {
     int packet_upload_spd;
     struct timeval packet_upload_tv;
     struct timeval agon_time;
+    struct timeval agoff_immunity_tv;
+    int recv_mode;
 };
 /**
  * Structure for garbage statistic and information
