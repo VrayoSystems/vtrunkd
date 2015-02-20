@@ -418,6 +418,11 @@ struct conn_stats {
     struct timeval agon_time;
     struct timeval agoff_immunity_tv;
     int recv_mode;
+    struct timeval plp_immune;
+    int l_pbl_recv_saved;
+    int l_pbl_tmp_saved;
+    int pbl_lossed_saved;
+    int pbl_lossed_cnt_saved;
 };
 /**
  * Structure for garbage statistic and information
