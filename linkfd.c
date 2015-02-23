@@ -5014,6 +5014,12 @@ int lfd_linker(void)
         #ifdef CLIENTONLY
         if(!sq_control) {
             hold_mode = 0;
+            if(! (dirty_seq_num % 30) ) {
+                info.max_latency_drop = { 0, 1000 };
+                drop_packet_flag = 1;
+            } else {
+                info.max_latency_drop = { 0, 50000 };
+            }
         }
         #endif
         
