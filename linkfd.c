@@ -2464,7 +2464,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             int len_ret = dev_write(info.tun_device, out, len);
             gettimeofday(&work_loop2, NULL );
             timersub(&work_loop2, &work_loop1, &tmp_tv);
-            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time);
+            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
