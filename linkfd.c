@@ -5011,9 +5011,11 @@ int lfd_linker(void)
         if(hold_mode) {
             info.hold_time = info.current_time;
         }
+        #ifdef CLIENTONLY
         if(!sq_control) {
             hold_mode = 0;
         }
+        #endif
         
         
         // fast convergence to underlying encap flow >>> 
