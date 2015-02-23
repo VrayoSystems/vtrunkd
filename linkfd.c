@@ -4766,10 +4766,15 @@ int lfd_linker(void)
             
             // TODO: rtt_shift and pump_adj are essentially the same - we should join them one day...
             double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
-            double d_mld_ms = MAX_LATENCY_DROP_USEC;
-            d_mld_ms /= 1000000.0;
-            d_mld_ms += d_frtt;
-            double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
+            
+            //double d_mld_ms = MAX_LATENCY_DROP_USEC;
+            //d_mld_ms /= 1000000.0;
+            double d_mld_ms = shm_conn_info->max_allowed_rtt;
+            d_mld_ms /= 1000.0;
+            
+            //d_mld_ms += d_frtt; // ?
+            //double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
+            double d_pump_adj = d_ACS * ( d_mld_ms - d_rtt );
             if(d_pump_adj < 0) d_pump_adj = 0;
             
             //double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
