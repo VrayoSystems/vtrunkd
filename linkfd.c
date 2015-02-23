@@ -3263,6 +3263,7 @@ int print_flush_data() {
                 add_json(js_buf_fl, &js_cur_fl, "lrs_s", "%d", shm_conn_info->write_buf[i].last_received_seq_shadow[p]);      
                 add_json(js_buf_fl, &js_cur_fl, "lsn_b", "%d", shm_conn_info->stats[p].local_seq_num_beforeloss);                        
                 add_json(js_buf_fl, &js_cur_fl, "prc_al", "%d", shm_conn_info->stats[p].packet_recv_counter_afterloss);  
+                add_json(js_buf_fl, &js_cur_fl, "rhd", "%d", shm_conn_info->stats[info.process_num].remote_head_channel);  
             }   
         }
     }
