@@ -998,7 +998,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if(any_lrx < shm_conn_info->write_buf[i].last_received_seq[p]) {
+                if((any_lrx < shm_conn_info->write_buf[i].last_received_seq[p]) && (shm_conn_info->stats[p].remote_head_channel)) { // TODO: two heads possible?
                     any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
                 }
                 if(seq_loss && (shm_conn_info->write_buf[i].possible_seq_lost[p] > (shm_conn_info->write_buf[i].last_written_seq + seq_loss)) 
@@ -1025,7 +1025,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
             //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
-            info.least_rx_seq[i] = any_lrx;
+            info.least_rx_seq[i] = any_lrx; // do not detect any loss if head is unknown?
             //info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
             /* // TODO for #395
@@ -2189,6 +2189,16 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
+                    int sizeF = -1, size1 = -1, sizeJW = -1;
+                    if(r_amt == 0) {
+                        vtun_syslog(LOG_INFO, "SKIP PDROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d Fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
+                            shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), size1, sizeF, sizeJW, info.current_time, js_buf_fl);
+                        if (shm_conn_info->tokens > 0) {
+                            shm_conn_info->tokens--; // remove a token...
+                        }
+                        return 0;
+                    }
                     int sumIndex = get_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0], &shm_conn_info->packet_code_bulk_counter,
                             shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                     char printLine[100] = { 0 };
@@ -2210,8 +2220,17 @@ int write_buf_check_n_flush(int logical_channel) {
                     loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
+                    int sizeF = -1, size1 = -1, sizeJW = -1;
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    int sizeF, size1, sizeJW;
+                    if(r_amt == 0) {
+                        vtun_syslog(LOG_INFO, "SKIP DROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d Fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
+                            shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), size1, sizeF, sizeJW, info.current_time, js_buf_fl);
+                        if (shm_conn_info->tokens > 0) {
+                            shm_conn_info->tokens--; // remove a token...
+                        }
+                        return 0;
+                    }
                     int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &size1);
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
@@ -5178,6 +5197,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "hsnum", "%d", shm_conn_info->stats[info.process_num].hsnum);
             add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
+            add_json(js_buf, &js_cur, "rhd", "%d", shm_conn_info->stats[info.process_num].remote_head_channel);
             add_json(js_buf, &js_cur, "super", "%d", super);
             super = 0;
             add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
@@ -5409,7 +5429,11 @@ int lfd_linker(void)
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                 memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
-                tmp16_n = htons((uint16_t) i); // chan_num ?? not needed in fact TODO remove
+                if(info.head_channel) { 
+                    tmp16_n = htons((uint16_t) (100+i)); // chan_num ?? not needed in fact TODO remove
+                } else {
+                    tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
+                }
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[1].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan (PCS send)
@@ -5507,7 +5531,11 @@ int lfd_linker(void)
                     memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // flag
                     tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                     memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
-                    tmp16_n = htons((uint16_t) i); // chan_num
+                    if(info.head_channel) { 
+                        tmp16_n = htons((uint16_t) (100+i)); // chan_num ?? not needed in fact TODO remove
+                    } else {
+                        tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
+                    }
                     memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //chan_num
                     tmp32_n = htonl(info.channel[i].local_seq_num); // local_seq_num
                     memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
@@ -6555,9 +6583,15 @@ if(drop_packet_flag) {
                             PCS_aux++;
                             uint32_t tmp32_n;
                             uint16_t tmp16_n;
-                            int chan_num;
+                            int chan_num2;
                             memcpy(&tmp16_n, buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint16_t));
-                            chan_num = (int)ntohs(tmp16_n);
+                            chan_num2 = (int)ntohs(tmp16_n);
+                            if(chan_num2 >= 100) {
+                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                    shm_conn_info->stats[i].remote_head_channel = 0;
+                                }
+                                shm_conn_info->stats[info.process_num].remote_head_channel = 1;
+                            }
                             gettimeofday(&info.current_time, NULL);
                             memcpy(&info.channel[chan_num].send_q_time, &info.current_time, sizeof(struct timeval));
                             memcpy(&tmp16_n, buf, sizeof(uint16_t));

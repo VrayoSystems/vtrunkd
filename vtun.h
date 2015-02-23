@@ -423,6 +423,7 @@ struct conn_stats {
     int l_pbl_tmp_saved;
     int pbl_lossed_saved;
     int pbl_lossed_cnt_saved;
+    int remote_head_channel;
 };
 /**
  * Structure for garbage statistic and information
