@@ -3726,7 +3726,7 @@ int lfd_linker(void)
     
     struct timeval MAX_REORDER_LATENCY = { 0, 50000 };
 
-
+    int sq_control = 1;
     int service_channel = lfd_host->rmt_fd; //aka channel 0
     int len, len1, fl;
     int err=0;
@@ -5011,6 +5011,9 @@ int lfd_linker(void)
         if(hold_mode) {
             info.hold_time = info.current_time;
         }
+        if(!sq_control) {
+            hold_mode = 0;
+        }
         
         
         // fast convergence to underlying encap flow >>> 
@@ -5435,11 +5438,16 @@ int lfd_linker(void)
                 memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                 memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+                
+#ifndef CLIENTONLY
                 if(info.head_channel) { 
                     tmp16_n = htons((uint16_t) (100+i)); // chan_num ?? not needed in fact TODO remove
                 } else {
                     tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
                 }
+                #else
+                    tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
+                #endif
                 memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t));
                 tmp32_n = htonl(info.channel[1].packet_download);
                 memcpy(buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // down speed per current chan (PCS send)
@@ -5537,11 +5545,15 @@ int lfd_linker(void)
                     memcpy(buf + 2 * sizeof(uint16_t), &tmp16_n, sizeof(uint16_t)); // flag
                     tmp32_n = htonl(info.channel[i].local_seq_num_recv); // last received local seq_num
                     memcpy(buf + 3 * sizeof(uint16_t), &tmp32_n, sizeof(uint32_t));
+#ifndef CLIENTONLY
                     if(info.head_channel) { 
                         tmp16_n = htons((uint16_t) (100+i)); // chan_num ?? not needed in fact TODO remove
                     } else {
                         tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
                     }
+                    #else
+                        tmp16_n = htons((uint16_t) (i)); // chan_num ?? not needed in fact TODO remove
+                    #endif
                     memcpy(buf + 3 * sizeof(uint16_t) + sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //chan_num
                     tmp32_n = htonl(info.channel[i].local_seq_num); // local_seq_num
                     memcpy(buf + 4 * sizeof(uint16_t) + sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); // local_seq_num
@@ -5681,6 +5693,13 @@ int lfd_linker(void)
                 sem_wait(&(shm_conn_info->stats_sem));
                 redetect_head_unsynced(chan_mask, -1);
                 sem_post(&(shm_conn_info->stats_sem));
+            }
+            timersub(&info.current_time, &shm_conn_info->last_head, &tv_tmp);
+            if (timercmp(&tv_tmp, &((struct timeval) {800,0}), >=)) {
+                vtun_syslog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
+                sq_control = 0;
+            } else {
+                sq_control = 1;
             }
             if (info.just_started_recv == 1) {
                 uint32_t time_passed = tv_tmp.tv_sec * 1000 + tv_tmp.tv_usec / 1000;
@@ -6597,6 +6616,7 @@ if(drop_packet_flag) {
                                     shm_conn_info->stats[i].remote_head_channel = 0;
                                 }
                                 shm_conn_info->stats[info.process_num].remote_head_channel = 1;
+                                shm_conn_info->last_head = info.current_time;
                             }
                             gettimeofday(&info.current_time, NULL);
                             memcpy(&info.channel[chan_num].send_q_time, &info.current_time, sizeof(struct timeval));

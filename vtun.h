@@ -703,6 +703,7 @@ struct conn_info {
     int packet_code_bulk_counter;
     struct packet_sum test_packet_code[MAX_TCP_LOGICAL_CHANNELS];
     struct timeval last_written_recv_ts;
+    struct timeval last_head;
     int frtt_ms;
     int drtt;
     int frtt_local_applied;
