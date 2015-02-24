@@ -238,6 +238,7 @@ int max_chan=-1;
 uint32_t start_of_train = 0, end_of_train = 0;
 struct timeval flood_start_time = { 0, 0 };
 char *buf2;
+int buf_len_real=0;
 
 int need_send_loss_FCI_flag = 0;
 #define WB_1MS_SIZE 500
@@ -2571,9 +2572,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->frames_buf[newf].flush_time = info.current_time;
     }
     shm_conn_info->write_buf[conn_num].frames.length++;
-    if (shm_conn_info->buf_len < shm_conn_info->write_buf[1].frames.length) {
+    if (buf_len_real < shm_conn_info->write_buf[1].frames.length) {
 //    vtun_syslog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
-            shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+        buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
     shm_conn_info->APCS_cnt++;
     if(i<0) {
@@ -5271,7 +5272,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
-            add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)shm_conn_info->buf_len);
+            add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)buf_len_real);
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
@@ -5507,11 +5508,11 @@ int lfd_linker(void)
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
-//                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len %d counter %d current buf_len %d",shm_conn_info->buf_len, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+//                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d", buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                 tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                 memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
-                tmp32_n = htons(shm_conn_info->buf_len);
-                shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+                tmp32_n = htons(buf_len_real);
+                buf_len_real = shm_conn_info->write_buf[1].frames.length;
                 memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -5618,11 +5619,11 @@ int lfd_linker(void)
                     tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
-//                    vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len %d counter %d current buf_len %d",shm_conn_info->buf_len, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+//                    vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d",buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                     tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                     memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
-                    tmp32_n = htons(shm_conn_info->buf_len);
-                    shm_conn_info->buf_len = shm_conn_info->write_buf[1].frames.length;
+                    tmp32_n = htons(buf_len_real);
+                    buf_len_real = shm_conn_info->write_buf[1].frames.length;
                     memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
@@ -6739,6 +6740,7 @@ if(drop_packet_flag) {
 //                            vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv %d counter %d was %d",ntohs(tmp32_n), buf_len_counter, shm_conn_info->buf_len_recv_counter);
                             if (buf_len_counter > shm_conn_info->buf_len_recv_counter) {
                                 shm_conn_info->buf_len_recv = (int)ntohs(tmp32_n);
+//                                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv apply");
                             }
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
