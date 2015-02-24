@@ -722,6 +722,7 @@ struct conn_info {
     int max_allowed_rtt; // MAR calculated against current speed and send_q
     int tpps;
     int forced_rtt_remote;
+    int rttvar_worst;
 };
 
 struct resent_chk {

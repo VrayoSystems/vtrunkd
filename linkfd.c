@@ -975,7 +975,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     // TODO WARNING: is it synchronized? stats_sem! write_buf sem!? TODO! bug #189
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     // TODO WARNING i do not know why we are still checking packets if we see no rel_head
-    struct timeval max_latency_drop = info.max_latency_drop;
+    
+    struct timeval max_latency_drop;
+    int rtou = get_rto_usec();
+    max_latency_drop.tv_sec = rtou / 1000000;
+    max_latency_drop.tv_usec = rtou % 1000000;
     struct timeval tv_tmp;
     int any_lrx = 0, seq_loss = 0;
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
@@ -2098,7 +2102,10 @@ int write_buf_check_n_flush(int logical_channel) {
     int fold = -1;
     int len;
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
-    struct timeval max_latency_drop = info.max_latency_drop;
+    struct timeval max_latency_drop;
+    int rtou = get_rto_usec();
+    max_latency_drop.tv_sec = rtou / 1000000;
+    max_latency_drop.tv_usec = rtou % 1000000;
     int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
     struct timeval tv;
@@ -3543,6 +3550,14 @@ int get_rttlag(uint32_t ag_mask) {
             return 0; // correct is max_rtt only
         }
     }
+}
+
+inline int get_rto_usec() {
+    int sum_rtt = (shm_conn_info->frtt_local_applied + shm_conn_info->rttvar_worst) * 1000;
+    if(sum_rtt > info.max_latency_drop.tv_usec) {
+        return sum_rtt;
+    }
+    return info.max_latency_drop.tv_usec;
 }
 
 int set_rttlag() { // TODO: rewrite using get_rttlag
@@ -5016,6 +5031,8 @@ int lfd_linker(void)
             hold_mode = 0;
             if(! (dirty_seq_num % 30) ) {
                 info.max_latency_drop = { 0, 1000 };
+                shm_conn_info->frtt_local_applied = 1;
+                shm_conn_info->rttvar_worst = 1;
                 drop_packet_flag = 1;
             } else {
                 info.max_latency_drop = { 0, 50000 };
@@ -5096,7 +5113,8 @@ int lfd_linker(void)
                 int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
             }
-
+            
+            
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
             //}
@@ -5129,6 +5147,15 @@ int lfd_linker(void)
             
             sem_wait(&(shm_conn_info->stats_sem));
             
+            shm_conn_info->rttvar_worst = 0;
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+                    if(shm_conn_info->rttvar_worst < shm_conn_info->stats[i].rttvar) {
+                        shm_conn_info->rttvar_worst = shm_conn_info->stats[i].rttvar;
+                    }
+                }
+            }
+
             int new_mar = compute_max_allowed_rtt();
             if(new_mar > shm_conn_info->max_allowed_rtt) {
                 shm_conn_info->max_allowed_rtt = 8 * shm_conn_info->max_allowed_rtt / 9 + new_mar / 9;
