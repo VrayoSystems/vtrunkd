@@ -5030,12 +5030,12 @@ int lfd_linker(void)
         if(!sq_control) {
             hold_mode = 0;
             if(! (dirty_seq_num % 30) ) {
-                info.max_latency_drop = { 0, 1000 };
+                info.max_latency_drop.tv_usec = 1000;
                 shm_conn_info->frtt_local_applied = 1;
                 shm_conn_info->rttvar_worst = 1;
                 drop_packet_flag = 1;
             } else {
-                info.max_latency_drop = { 0, 50000 };
+                info.max_latency_drop.tv_usec = 50000;
             }
         }
         #endif
