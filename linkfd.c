@@ -5729,8 +5729,8 @@ int lfd_linker(void)
                 redetect_head_unsynced(chan_mask, -1);
                 sem_post(&(shm_conn_info->stats_sem));
             }
-            timersub(&info.current_time, &shm_conn_info->last_head, &tv_tmp);
-            if (timercmp(&tv_tmp, &((struct timeval) {800,0}), >=)) {
+            timersub(&info.current_time, &shm_conn_info->last_head, &tv_tmp_tmp_tmp);
+            if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {800,0}), >=)) {
                 vtun_syslog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
                 sq_control = 0;
             } else {
