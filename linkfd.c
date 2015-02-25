@@ -153,7 +153,7 @@ struct my_ip {
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
-#define HEAD_REDETECT_HYSTERESIS_TV {0,400000} // timeval (interval) for chan speed redetect
+#define HEAD_REDETECT_HYSTERESIS_TV {0,800000} // timeval (interval) for chan speed redetect
 #define SPEED_REDETECT_IMMUNE_SEC 5 // (interval seconds) before next auto-redetection can occur after PROTUP - added to above timer!
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
@@ -2903,6 +2903,8 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     }
     if(new_max_chan == -1) {
         vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        shm_conn_info->head_detected_ts = info.current_time;
+        shm_conn_info->max_chan_new = shm_conn_info->max_chan;
         return fixed;
     }
     if(new_max_chan != shm_conn_info->max_chan_new) {
@@ -2915,7 +2917,9 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     
     timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp);
     if(timercmp(&tv_tmp, &((struct timeval) HEAD_REDETECT_HYSTERESIS_TV), >=)) {
+        vtun_syslog(LOG_INFO, "Head detect - wait timer triggered max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
         shm_conn_info->max_chan = shm_conn_info->max_chan_new;
+        shm_conn_info->head_detected_ts = info.current_time;
     }
     // now re-calculate lossing for new head
     timersub(&(info.current_time), &(shm_conn_info->stats[max_chan].real_loss_time), &tv_tmp);
