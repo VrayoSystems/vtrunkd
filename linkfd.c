@@ -4920,7 +4920,7 @@ int lfd_linker(void)
                     info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
                     if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted * 1000) ) {
                         if(info.head_channel) {
-                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u and is head frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
+                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: ertt %d - ertt %d > %u and is head frtt_rem %d rtt2-1 %d rtt2-2 %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[i].exact_rtt, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted, shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2);
                             redetect_head_unsynced(chan_mask, info.process_num);
                             // TODO: immediate action required!
                         } else {
