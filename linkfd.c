@@ -1618,6 +1618,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
 
         
+        shm_conn_info->stats[info.process_num].lssqn = last_sent_packet_num[1].seq_num;
         // TODO: add select() here!
         // TODO: optimize here
         uint32_t tmp_seq_counter;
