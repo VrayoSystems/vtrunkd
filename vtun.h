@@ -424,6 +424,7 @@ struct conn_stats {
     int pbl_lossed_saved;
     int pbl_lossed_cnt_saved;
     int remote_head_channel;
+    int lssqn; // TODO: remove this after tests
 };
 /**
  * Structure for garbage statistic and information
