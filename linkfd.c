@@ -1618,7 +1618,6 @@ int retransmit_send(char *out2, int n_to_send) {
         }
 
         
-        shm_conn_info->stats[info.process_num].lssqn = last_sent_packet_num[1].seq_num;
         // TODO: add select() here!
         // TODO: optimize here
         uint32_t tmp_seq_counter;
@@ -4308,6 +4307,7 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
+        shm_conn_info->stats[info.process_num].lssqn = last_sent_packet_num[1].seq_num;
         errno = 0;
         super++;
         plp_avg_pbl(info.process_num);
