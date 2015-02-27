@@ -327,6 +327,7 @@ void usage(void)
      /* these actually do work. At least given in config file -- grandrew 20110507*/
      printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
 	    "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)]\n");
+     printf("Page size is %d\n", getpagesize());
 }
 
 void version() {

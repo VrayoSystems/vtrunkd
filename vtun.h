@@ -624,6 +624,10 @@ struct timed_loss {
  *  Description
  */
 struct conn_info {
+#ifdef SHM_DEBUD
+    volatile char void11[4096];
+    char void1[4096];
+#endif
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t hard_sem;
@@ -655,7 +659,10 @@ struct conn_info {
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
-
+#ifdef SHM_DEBUD
+    char void12[4096];
+    char void2[4096];
+#endif
     long int lock_time;
     long int alive;
     int rdy; /* ready flag */
@@ -724,6 +731,10 @@ struct conn_info {
     int tpps;
     int forced_rtt_remote;
     int rttvar_worst;
+#ifdef SHM_DEBUD
+    char void13[4096];
+    char void3[4096];
+#endif
 };
 
 struct resent_chk {
