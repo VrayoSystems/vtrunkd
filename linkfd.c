@@ -56,6 +56,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
+#include <sys/mman.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -3733,7 +3734,29 @@ int lfd_linker(void)
     js_buf_fl = malloc(JS_MAX);
     memset(js_buf_fl, 0, JS_MAX);
     js_cur_fl = 0;
-
+#ifdef SHM_DEBUD
+    if (!info.process_num) {
+        void *aligned_shm = (void *) (((unsigned long) shm_conn_info->void1) & ~(getpagesize() - 1));
+        static const char ar[] = { 0xfe, 0xed, 0xf0, 0x0d, 0xfa, 0xce };
+        int mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
+        if (mprotect_ret != 0) {
+            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+        }
+        vtun_syslog(LOG_ERR, "void1 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
+        aligned_shm = (void *) (((unsigned long) shm_conn_info->void2) & ~(getpagesize() - 1));
+        mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
+        if (mprotect_ret != 0) {
+            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+        }
+        vtun_syslog(LOG_ERR, "void2 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
+        aligned_shm = (void *) (((unsigned long) shm_conn_info->void3) & ~(getpagesize() - 1));
+        mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
+        if (mprotect_ret != 0) {
+            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+        }
+        vtun_syslog(LOG_ERR, "void3 address %X aligned to page %X", shm_conn_info->void3, aligned_shm);
+    }
+#endif
     #ifdef SEND_Q_LOG
         jsSQ_buf = malloc(JS_MAX);
         memset(jsSQ_buf, 0, JS_MAX);
@@ -3892,6 +3915,7 @@ int lfd_linker(void)
     info.srv = 0;
 #endif
     if(info.srv) {
+//        memset(shm_conn_info->void1,4096,1); //test mprotect
         /** Server accepted all logical channel here and get and send pid */
         // now read one single byte
         vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
