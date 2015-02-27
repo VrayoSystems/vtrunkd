@@ -1115,53 +1115,43 @@ int fix_free_writebuf(int chan_num) {
 // it is either the seq_num referenced as input argument (usually last_sent+1)
 // or oldest non-expired seq_num frame
 int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
-    int i, j, j_previous, len = -1;
+    int i, j, len = -1;
     int top_seq_num = shm_conn_info->seq_counter[chan_num];
     struct timeval expiration_date;
+    struct timeval continuum_date;
     struct timeval max_latency;
+    struct timeval min_latency;
     struct timeval hold_period;
-    int expnum = INT32_MAX;
+    int expnum = 0;
 
     int mrl_ms, drtt_ms, expiration_ms_fromnow;
 
-    //sem_wait(&(shm_conn_info->stats_sem)); // no need to have VERY exact value!
-    // drtt should be equal in AG mode as we balance the buffers, only takes place in PING-like mode
-    //drtt_ms = shm_conn_info->stats[info.process_num].rtt_phys_avg - shm_conn_info->stats[max_chan].rtt_phys_avg;
     drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
-    if(drtt_ms < 0) {
-        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt + shm_conn_info->stats[max_chan].rttvar);
-    } else {
-        drtt_ms = (shm_conn_info->stats[info.process_num].exact_rtt + shm_conn_info->stats[info.process_num].rttvar) - (shm_conn_info->stats[max_chan].exact_rtt - shm_conn_info->stats[max_chan].rttvar);
-    }
-    //sem_post(&(shm_conn_info->stats_sem));
-
-    // MRL is allowed time to lag
-    // WARNING : do we use MRL correctly here? may be use MLD?
-    //mrl_ms = info.max_reorder_latency.tv_usec / 1000; // WARNINIG: no MRL > 1000ms !!
-    // MRL unused - TODO
     mrl_ms = MAX_LATENCY_DROP_USEC / 1000;
-    expiration_ms_fromnow = mrl_ms - drtt_ms;
+    expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
-        // we can get no frames; handle this above
-        return -1;
-    }
-    ms2tv(&max_latency, expiration_ms_fromnow);
-    
-    timersub(&info.current_time, &max_latency, &expiration_date);
-    timersub(&info.current_time, &info.hold_time, &hold_period);
-    if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
-        // TODO: need info.ACK_speed_correct flag
-        // this will work just because hold is not likely to kick in before ACS is recalculated
-        expnum = (mrl_ms - drtt_ms) * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // no reason to send that late packets
+        return -1; // we can get no frames; handle this above
     }
     
+    if(drtt_ms > 0) {  // need to set expiration date
+        ms2tv(&max_latency, expiration_ms_fromnow);
+        timersub(&info.current_time, &max_latency, &expiration_date);
+    } else { // this means that we need to get seq_num that is not too early
+        expiration_date.tv_sec = 0; // no packet is too late
+        expiration_date.tv_usec = 0;
+        timersub(&info.current_time, &info.hold_time, &hold_period);
+        if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
+            // do not rely on ACS as it is too unstable
+            ms2tv(&min_latency, (-drtt_ms)); // we are not allowed to be any faster unlike in 'later' scenario
+            timersub(&info.current_time, &min_latency, &continuum_date);
+        }
+    }
+   
     //find start point
-    j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1;
-    j_previous = j;
+    j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1; // correct: the idx is incremented AFTER write
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
 //        vtun_syslog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
-            j_previous = j;
             break;
         }
         j--;
@@ -1172,35 +1162,21 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
 
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
 //                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
-        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) {
-            if (     timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >)
-                  || (shm_conn_info->resend_frames_buf[j].seq_num < *seq_num) 
-                  || (shm_conn_info->resend_frames_buf[j].chan_num == 0) // WTF?
-                  || ( (top_seq_num - shm_conn_info->resend_frames_buf[j].seq_num) > expnum)
-                ) {
-                *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
-                len = shm_conn_info->resend_frames_buf[j_previous].len;
-                *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
-                *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
-                *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
+        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) { // WTF?
+            if (   
+                      timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <) // packet is not too old
+                      && timercmp(&continuum_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >=) // packet is not too early
+                      && ( shm_conn_info->resend_frames_buf[j].seq_num <= *seq_num ) // is the one we're seeking for OR older if we are not allowed to send too early (we will alter last_sent_packet in this case)
+            ) {
+                // there are two cases: we are unable to send packets either because they are too late or too early(which is unlikely) so we will be sending most early
+                *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
+                len = shm_conn_info->resend_frames_buf[j].len;
+                *((uint16_t *) (shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
+                *out = shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV;
+                *sender_pid = shm_conn_info->resend_frames_buf[j].sender_pid;
 //                vtun_syslog(LOG_INFO, "previous j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
                 return len;
-            } else if (shm_conn_info->resend_frames_buf[j].seq_num == *seq_num) {
-                if (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <=)) {
-                    j_previous = j;
-                } else {
-		        	vtun_syslog(LOG_ERR, "WARNING get_resend_frame returning previous frame");
-        		}
-                *seq_num = shm_conn_info->resend_frames_buf[j_previous].seq_num;
-                len = shm_conn_info->resend_frames_buf[j_previous].len;
-                *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
-                *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
-                *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
-//                vtun_syslog(LOG_INFO, "bottom ret j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
-                return len;
-            } else {
-                j_previous = j;
-            }
+            } 
         }
         j--;
         if (j == -1) {
@@ -1208,12 +1184,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
         }
     }
 
-    //if(i == RESEND_BUF_SIZE) {
-        // means we have not found the most recent frame in resend_buf
-        // that means that we are too new, return -1!
-    //}
-
-    return len;
+    return len;// means we have not found the most recent frame in resend_buf
 }
 
 
@@ -1295,6 +1266,7 @@ int get_oldest_packet_seq_num(int chan_num, uint32_t *seq_num) {
 }
 
 int get_last_packet(int chan_num, uint32_t *seq_num, char **out, int *sender_pid) {
+    // there are two cases: we are unable to send packets either because they are too late or too early(which is unlikely) so we will be sending most early
     int j = get_last_packet_seq_num(chan_num, seq_num);
     if(j == -1) return -1;
     int len = shm_conn_info->resend_frames_buf[j].len;
@@ -1567,7 +1539,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         if(info.head_channel == 1) {
             // on head channel, do not allow to skip even if we see outdated packets?
-            len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid); // TODO HERE: is it correct?
             if (len == -1) {
                 if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1584,7 +1556,7 @@ int retransmit_send(char *out2, int n_to_send) {
             }
         } else {
             // this is required to not read new packets if being pushed to top and all packets exhausted ->>>
-            if(get_unconditional) len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            if(get_unconditional) len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);// TODO HERE: is it correct?
             else                  len = get_resend_frame              (i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
                 last_sent_packet_num[i].seq_num--;
