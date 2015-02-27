@@ -4426,7 +4426,6 @@ int lfd_linker(void)
         // <<< END IDLE EXIT
         
         // EXACT_RTT >>>
-        
         if(info.rtt2_lsn[1] != 0) { // rtt2 DDS detect
             timersub(&info.current_time, &info.rtt2_tv[1], &tv_tmp);
             if(tv2ms(&tv_tmp) > (info.srtt2_10 + info.srtt2var)/10) {
@@ -5395,7 +5394,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
             add_json(js_buf, &js_cur, "lssqn[?]", "%lu", last_sent_packet_num[1].seq_num);
             add_json(js_buf, &js_cur, "lssqn[0]", "%lu", shm_conn_info->stats[0].lssqn);
-            add_json(js_buf, &js_cur, "dlssqn[?]", "%lu", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn);
+            add_json(js_buf, &js_cur, "dlssqn[?]", "%ld", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn);
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
