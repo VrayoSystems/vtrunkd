@@ -1118,7 +1118,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     int i, j, len = -1;
     int top_seq_num = shm_conn_info->seq_counter[chan_num];
     struct timeval expiration_date;
-    struct timeval continuum_date;
+    struct timeval continuum_date = info.current_time;
     struct timeval max_latency;
     struct timeval min_latency;
     struct timeval hold_period;
@@ -1141,12 +1141,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     } else { // this means that we need to get seq_num that is not too early
         expiration_date.tv_sec = 0; // no packet is too late
         expiration_date.tv_usec = 0;
-        timersub(&info.current_time, &info.hold_time, &hold_period);
-        if((hold_period.tv_sec * 1000 + hold_period.tv_usec / 1000) <= info.exact_rtt) { // if we have been pressed lately, we have topped our real speed 
-            // do not rely on ACS as it is too unstable
-            ms2tv(&min_latency, (-drtt_ms)); // we are not allowed to be any faster unlike in 'later' scenario
-            timersub(&info.current_time, &min_latency, &continuum_date);
-        }
+        ms2tv(&min_latency, (-drtt_ms)); // we are not allowed to be any faster unlike in 'later' scenario
+        timersub(&info.current_time, &min_latency, &continuum_date);
     }
    
     //find start point
@@ -1207,7 +1203,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     }
     // last packet could only be possible in case of uninitailized buffer (at start)
     
-    vtun_syslog(LOG_INFO, "WARNING: get_resend_frame can't get packets: expiration_ms_fromnow= %d", expiration_ms_fromnow);
+    vtun_syslog(LOG_INFO, "WARNING: get_resend_frame can't get packets: expiration_ms_fromnow= %d, expnum=%d", expiration_ms_fromnow, expnum);
     return -1;// means we have not found the most recent frame in resend_buf
 }
 
