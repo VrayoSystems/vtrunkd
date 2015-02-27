@@ -3734,7 +3734,7 @@ int lfd_linker(void)
     js_buf_fl = malloc(JS_MAX);
     memset(js_buf_fl, 0, JS_MAX);
     js_cur_fl = 0;
-#ifdef SHM_DEBUD
+#ifdef SHM_DEBUG
     if (!info.process_num) {
         void *aligned_shm = (void *) (((unsigned long) shm_conn_info->void1) & ~(getpagesize() - 1));
         static const char ar[] = { 0xfe, 0xed, 0xf0, 0x0d, 0xfa, 0xce };
