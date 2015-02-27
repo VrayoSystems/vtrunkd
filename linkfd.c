@@ -5394,7 +5394,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
             add_json(js_buf, &js_cur, "lssqn[?]", "%lu", last_sent_packet_num[1].seq_num);
             add_json(js_buf, &js_cur, "lssqn[0]", "%lu", shm_conn_info->stats[0].lssqn);
-            add_json(js_buf, &js_cur, "dlssqn[?]", "%ld", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn);
+            add_json(js_buf, &js_cur, "dlssqn[?]", "%d", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn);
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
