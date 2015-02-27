@@ -1173,7 +1173,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     // clamp to high end, clamp to low end AND respect seq_num that we want - otherwise return oldest that we can afford
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
 //                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
-        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) { // WTF?
+        if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) && (shm_conn_info->resend_frames_buf[j].len != 0)) {
             if (   
                       timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <) // packet is not too old
                       && ( (top_seq_num - shm_conn_info->resend_frames_buf[j].seq_num) < expnum ) // AND we can send it and all of the rest to top in MLD time in case of DDS
@@ -1258,7 +1258,8 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
     int j = shm_conn_info->resend_buf_idx-1;
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {
-        if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
+        if ( (shm_conn_info->resend_frames_buf[j].chan_num == chan_num)
+         && (shm_conn_info->resend_frames_buf[j].len != 0)) {
             *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
             return j;
         }
