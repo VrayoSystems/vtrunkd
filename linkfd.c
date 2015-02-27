@@ -1131,6 +1131,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     mrl_ms = MAX_LATENCY_DROP_USEC / 1000;
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
+        vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
         return -1; // we can get no frames; handle this above
     }
     
@@ -1205,7 +1206,9 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
         }
     }
     // last packet could only be possible in case of uninitailized buffer (at start)
-    return len;// means we have not found the most recent frame in resend_buf
+    
+    vtun_syslog(LOG_INFO, "WARNING: get_resend_frame can't get packets: expiration_ms_fromnow= %d", expiration_ms_fromnow);
+    return -1;// means we have not found the most recent frame in resend_buf
 }
 
 
