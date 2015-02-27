@@ -623,10 +623,10 @@ struct timed_loss {
  *  Description
  */
 struct conn_info {
-//#ifdef SHM_DEBUD
+#ifdef SHM_DEBUD
     volatile char void11[4096];
     char void1[4096];
-//#endif
+#endif
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
     char devname[50];
     sem_t hard_sem;
