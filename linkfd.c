@@ -1204,7 +1204,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
             j = RESEND_BUF_SIZE - 1;
         }
     }
-
+    // last packet could only be possible in case of uninitailized buffer (at start)
     return len;// means we have not found the most recent frame in resend_buf
 }
 
@@ -1561,7 +1561,7 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         if(info.head_channel == 1) {
             // on head channel, do not allow to skip even if we see outdated packets?
-            len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid); // TODO HERE: is it correct?
+            len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid); // TODO: is it correct?
             if (len == -1) {
                 if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
@@ -1578,8 +1578,9 @@ int retransmit_send(char *out2, int n_to_send) {
             }
         } else {
             // this is required to not read new packets if being pushed to top and all packets exhausted ->>>
-            if(get_unconditional) len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);// TODO HERE: is it correct?
-            else                  len = get_resend_frame              (i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            //if(get_unconditional) len = get_resend_frame_unconditional(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
+            //else                  
+            len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
                 last_sent_packet_num[i].seq_num--;
                 if (check_delivery_time(2)) {
