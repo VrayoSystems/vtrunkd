@@ -124,7 +124,7 @@
     #define RESEND_BUF_SIZE 600 // int
     #define JS_MAX 1000 // data for logs, * 3 times is allocated
 #else
-    #define RESEND_BUF_SIZE 1200 // int
+    #define RESEND_BUF_SIZE 3000 // int
     #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
 #endif
 // maximum compiled-in buffers for tcp channels per link
@@ -363,6 +363,7 @@ struct speed_chan_data_struct {
  */
 struct conn_stats {
     char name[SESSION_NAME_SIZE];
+    int lssqn; // TODO: remove this after tests
     int hsnum; /* session name hash - identical between prodesses */
     int pid; /* current pid */
     int pid_remote; // pid from another side
@@ -424,7 +425,6 @@ struct conn_stats {
     int pbl_lossed_saved;
     int pbl_lossed_cnt_saved;
     int remote_head_channel;
-    int lssqn; // TODO: remove this after tests
 };
 /**
  * Structure for garbage statistic and information
