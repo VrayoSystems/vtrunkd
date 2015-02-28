@@ -1126,24 +1126,23 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
 
     int mrl_ms, drtt_ms, expiration_ms_fromnow;
 
-    drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[max_chan].exact_rtt;
+    drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
     // TODO what time is the expiration time? MLD diff or MAR?
-    mrl_ms = MAX_LATENCY_DROP_USEC / 1000;
+    mrl_ms = MAX_LATENCY_DROP_USEC / 1000 / 2;
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
         vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
         return -1; // we can get no frames; handle this above
     }
-    
-    if(drtt_ms > 0) {  // need to set expiration date
-        ms2tv(&max_latency, expiration_ms_fromnow);
-        timersub(&info.current_time, &max_latency, &expiration_date);
-    } else { // this means that we need to get seq_num that is not too early
-        expiration_date.tv_sec = 0; // no packet is too late
-        expiration_date.tv_usec = 0;
-        ms2tv(&min_latency, (-drtt_ms)); // we are not allowed to be any faster unlike in 'later' scenario
-        timersub(&info.current_time, &min_latency, &continuum_date);
-    }
+    ms2tv(&max_latency, expiration_ms_fromnow);
+    timersub(&info.current_time, &max_latency, &expiration_date);
+   
+    // I am commenting-out this block as we are OBLIGED to deliver packets ASAP in R_MODE (as in AG_MODE, too)
+    // we should take care of MLDs caused by too fast packets at receiver side
+    //if(drtt_ms < 0) {  // need to set expiration date
+    //    ms2tv(&min_latency, (-drtt_ms)); // we are not allowed to be any faster unlike in 'later' scenario
+    //    timersub(&info.current_time, &min_latency, &continuum_date);
+    //}
    
     //find start point
     j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1; // correct: the idx is incremented AFTER write
@@ -2154,7 +2153,7 @@ int write_buf_check_n_flush(int logical_channel) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
-                      || ( timercmp(&tv_tmp, &max_latency_drop, >=))
+                      || ( timercmp(&tv_tmp, &max_latency_drop, >=) && (shm_conn_info->frames_buf[fprev].seq_num <= ))
                       || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
@@ -6692,6 +6691,7 @@ if(drop_packet_flag) {
                                     shm_conn_info->last_head = info.current_time;
                                 }
                             }
+                            shm_conn_info->remote_head_pnum = info.process_num;
                             gettimeofday(&info.current_time, NULL);
                             memcpy(&info.channel[chan_num].send_q_time, &info.current_time, sizeof(struct timeval));
                             memcpy(&tmp16_n, buf, sizeof(uint16_t));
