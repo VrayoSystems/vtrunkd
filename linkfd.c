@@ -984,6 +984,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     max_latency_drop.tv_usec = rtou % 1000000;
     struct timeval tv_tmp;
     int any_lrx = 0, seq_loss = 0;
+    struct timeval packet_wait_tv;
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
         info.least_rx_seq[i] = UINT32_MAX;
         seq_loss = 0;
@@ -1047,13 +1048,14 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
+            timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &packet_wait_tv);
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
                 return forced_rtt_reached;
-            } else if (timercmp(&tv_tmp, &max_latency_drop, >=)
+            } else if (timercmp(&tv_tmp, &max_latency_drop, >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=)
                && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
             ) {
 #ifdef DEBUGG
@@ -2106,6 +2108,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
     struct timeval tv;
+    struct timeval since_write_tv;
     int ts;
     forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
@@ -2152,11 +2155,13 @@ int write_buf_check_n_flush(int logical_channel) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
+        timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || (    timercmp(&tv_tmp, &max_latency_drop, >=) 
                            && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
+                           && timercmp(&since_write_tv, &max_latency_drop, >=)
                          )
                       || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
