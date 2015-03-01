@@ -903,27 +903,31 @@ int check_rtt_latency_drop_chan(int chan_num) {
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
-    if(full_rtt == 0) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
-    }
+    int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
+    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
            
     int max_buf_len =  APCS * full_rtt / 1000;
-    if(max_buf_len < 10) {
+    
+    if((max_buf_len < 10) && (buf_len < 15)) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
     
-    int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
-    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-    if(buf_len >= max_buf_len) {
+    if(max_buf_len = 0) { // need to flush huge buffer at maximum speed
+        APCS = APCS * 3;
+    } else if(buf_len >= max_buf_len) {
         float fbl = buf_len;
         float fmbl = max_buf_len;
         float fbdiff = fbl / fmbl;
         fbdiff *= fbdiff;
         float fAPCS = shm_conn_info->APCS;
-        fAPCS *= fbdiff;
-        APCS = (int)fAPCS;
+        float fAPCS_fl = fAPCS * fbdiff;
+        if(fAPCS_fl > (fAPCS * 3.0)) {
+            fAPCS_fl = fAPCS * 3.0;
+        }
+        APCS = (int)fAPCS_fl;
+    } else {
+        // normal mode - flush with current speed
     }
     
     // now do add some tokens ?
