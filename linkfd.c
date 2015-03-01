@@ -930,6 +930,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         // normal mode - flush with current speed
     }
     
+    if(APCS < 10) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
+    
     // now do add some tokens ?
     
     struct timeval passed_tv;
