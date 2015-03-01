@@ -1053,7 +1053,9 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
                 return forced_rtt_reached;
-            } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+            } else if (timercmp(&tv_tmp, &max_latency_drop, >=)
+               && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
+            ) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
@@ -2153,7 +2155,9 @@ int write_buf_check_n_flush(int logical_channel) {
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
         if (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
-                      || ( timercmp(&tv_tmp, &max_latency_drop, >=) && (shm_conn_info->frames_buf[fprev].seq_num <= ))
+                      || (    timercmp(&tv_tmp, &max_latency_drop, >=) 
+                           && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
+                         )
                       || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
            ) {
             if (!cond_flag) {
@@ -2178,7 +2182,9 @@ int write_buf_check_n_flush(int logical_channel) {
                     vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d bl %"PRIu64" ts %ld.%06ld", info.flush_sequential,
                             shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len, info.current_time);
                     loss_flag = 1;
-                } else if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
+                } else if (timercmp(&tv_tmp, &max_latency_drop, >=) 
+                           && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
+                ) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO,
