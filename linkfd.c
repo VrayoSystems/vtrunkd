@@ -919,7 +919,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         return 1;
     }
     
-    if(max_buf_len = 0) { // need to flush huge buffer at maximum speed
+    if(max_buf_len == 0) { // need to flush huge buffer at maximum speed
         APCS = APCS * 3;
     } else if(buf_len >= max_buf_len) {
         float fbl = buf_len;
