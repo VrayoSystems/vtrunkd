@@ -6101,14 +6101,14 @@ int lfd_linker(void)
         if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
             tv.tv_sec = 0;
-            if(next_token_ms == 0) {
+            if( (next_token_ms == 0) || (next_token_ms > (SELECT_SLEEP_USEC / 1000))) {
                 tv.tv_usec = SELECT_SLEEP_USEC;
             } else {
                 tv.tv_usec = next_token_ms * 1000;
             }
         } else {
             tv.tv_sec = get_info_time.tv_sec;
-            if(next_token_ms == 0) {
+            if((next_token_ms == 0) || (next_token_ms > (get_info_time.tv_usec / 1000))) {
                 tv.tv_usec = get_info_time.tv_usec;
             } else {
                 tv.tv_usec = next_token_ms * 1000;
