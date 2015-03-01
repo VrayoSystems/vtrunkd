@@ -905,7 +905,13 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-           
+    int buf_len_real = shm_conn_info->write_buf[1].frames.length;
+    if(buf_len_real > buf_len) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
+    } else {
+        buf_len = buf_len_real;
+    }
+    
     int max_buf_len =  APCS * full_rtt / 1000;
     
     if((max_buf_len < 10) && (buf_len < 15)) {
