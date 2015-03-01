@@ -3276,6 +3276,7 @@ int print_flush_data() {
                 add_json(js_buf_fl, &js_cur_fl, "lsn_b", "%d", shm_conn_info->stats[p].local_seq_num_beforeloss);                        
                 add_json(js_buf_fl, &js_cur_fl, "prc_al", "%d", shm_conn_info->stats[p].packet_recv_counter_afterloss);  
                 add_json(js_buf_fl, &js_cur_fl, "rhd", "%d", shm_conn_info->stats[p].remote_head_channel);  
+                add_json(js_buf_fl, &js_cur_fl, "rhd_p", "%d", shm_conn_info->remote_head_pnum);  
             }   
         }
     }
@@ -6696,8 +6697,8 @@ if(drop_packet_flag) {
                                 if(chan_num2 >= 200) {
                                     shm_conn_info->last_head = info.current_time;
                                 }
+                                shm_conn_info->remote_head_pnum = info.process_num;
                             }
-                            shm_conn_info->remote_head_pnum = info.process_num;
                             gettimeofday(&info.current_time, NULL);
                             memcpy(&info.channel[chan_num].send_q_time, &info.current_time, sizeof(struct timeval));
                             memcpy(&tmp16_n, buf, sizeof(uint16_t));
