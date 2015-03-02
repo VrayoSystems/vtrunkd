@@ -929,7 +929,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int max_buf_len = APCS * full_rtt / 1000;
     
     if(full_rtt == 0) {
-        //APCS = APCS * 2;
+        APCS = APCS + APCS / 3;
     } else {
         //if(buf_len_real > buf_len) {
         //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
