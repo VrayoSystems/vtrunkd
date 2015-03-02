@@ -1093,7 +1093,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
-                return 1;
+                return forced_rtt_reached;
             } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
                 return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
             }
@@ -2189,13 +2189,13 @@ int write_buf_check_n_flush(int logical_channel) {
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (             (cond_flag && forced_rtt_reached) 
+        if (forced_rtt_reached && (             (cond_flag && forced_rtt_reached) 
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
                       || (    timercmp(&tv_tmp, &max_latency_drop, >=) 
                            && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
                            && timercmp(&since_write_tv, &max_latency_drop, >=)
                          )
-                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached )
+                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached ))
            ) {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
