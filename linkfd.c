@@ -925,32 +925,32 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    int max_buf_len =  APCS * full_rtt / 1000;
     
-    if((full_rtt == 0) && (buf_len >= 2)) {
-        max_buf_len = buf_len / 2;
-    }
+    int max_buf_len = APCS * full_rtt / 1000;
     
-    
-    //if(buf_len_real > buf_len) {
-    //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
-    //} else {
-    //    buf_len = buf_len_real;
-    //}
-    
-    if(buf_len >= max_buf_len) {
-        float fbl = buf_len;
-        float fmbl = max_buf_len;
-        float fAPCS = APCS;
-        
-        float fbdiff = fbl / fmbl - 1.0;
-        float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
-        if(fAPCS_fl > (fAPCS * 5.0)) {
-            fAPCS_fl = fAPCS * 5.0;
-        }
-        APCS = (int)fAPCS_fl;
+    if(full_rtt == 0) {
+        APCS = APCS * 5;
     } else {
-        // normal mode - flush with current speed
+        //if(buf_len_real > buf_len) {
+        //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
+        //} else {
+        //    buf_len = buf_len_real;
+        //}
+        
+        if(buf_len >= max_buf_len) {
+            float fbl = buf_len;
+            float fmbl = max_buf_len;
+            float fAPCS = APCS;
+            
+            float fbdiff = fbl / fmbl - 1.0;
+            float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
+            if(fAPCS_fl > (fAPCS * 5.0)) {
+                fAPCS_fl = fAPCS * 5.0;
+            }
+            APCS = (int)fAPCS_fl;
+        } else {
+            // normal mode - flush with current speed
+        }
     }
     
     if(APCS == 0) {
