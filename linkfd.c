@@ -5224,7 +5224,8 @@ int lfd_linker(void)
             }
             
             timersub(&info.current_time, &shm_conn_info->tpps_tick_tv, &tv_tmp);
-            if(timercmp(&tv_tmp, &((struct timeval) {0, 800000}), >=) && ((shm_conn_info->seq_counter[1] - info.tpps_old) > 150)) {
+            if ((timercmp(&tv_tmp, &((struct timeval) {0, 800000}), >=) && ((shm_conn_info->seq_counter[1] - info.tpps_old) > 150))
+                    || (timercmp(&tv_tmp, &((struct timeval) {5, 0}), >=))) {
                 tpps = (shm_conn_info->seq_counter[1] - info.tpps_old) * 1000 / tv2ms(&tv_tmp);
                 shm_conn_info->tpps = tpps;
                 info.tpps_old = shm_conn_info->seq_counter[1];
