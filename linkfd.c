@@ -915,7 +915,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     } 
-    /*
+    
     if(buf_len_real >= 50) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -925,11 +925,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    */
+    
     int max_buf_len = APCS * full_rtt / 1000;
     
     if(full_rtt == 0) {
-        APCS = APCS + APCS / 2;
+        APCS = APCS * 2;
     } else {
         //if(buf_len_real > buf_len) {
         //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
@@ -944,8 +944,8 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
             
             float fbdiff = fbl / fmbl - 1.0;
             float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
-            if(fAPCS_fl > (fAPCS * 2)) {
-                fAPCS_fl = fAPCS * 2;
+            if(fAPCS_fl > (fAPCS * 3)) {
+                fAPCS_fl = fAPCS * 3;
             }
             APCS = (int)fAPCS_fl;
         } else {
