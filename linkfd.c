@@ -953,9 +953,9 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         }
     }
     
-    shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
+    //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     
-    APCS = shm_conn_info->write_speed_avg;
+    //APCS = shm_conn_info->write_speed_avg;
     if(APCS == 0) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
