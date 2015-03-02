@@ -928,6 +928,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         max_buf_len = buf_len / 2;
     }
     
+    if(APCS == 0) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
+    
     //if(buf_len_real > buf_len) {
     //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
     //} else {
