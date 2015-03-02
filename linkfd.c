@@ -915,7 +915,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     } 
-    
+    /*
     if(buf_len_real >= 50) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -925,7 +925,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    
+    */
     int max_buf_len = APCS * full_rtt / 1000;
     
     if(full_rtt == 0) {
