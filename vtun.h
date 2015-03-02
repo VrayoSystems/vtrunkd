@@ -732,6 +732,7 @@ struct conn_info {
     int forced_rtt_remote;
     int rttvar_worst;
     int remote_head_pnum; // remote head local pnum (for TPC)
+    int write_speed_avg;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
