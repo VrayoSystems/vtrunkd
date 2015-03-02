@@ -952,7 +952,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(shm_conn_info->tokens < 0) {
         shm_conn_info->tokens = 0;
     }
-    if(shm_conn_info->tokens > max_buf_len) {
+    if((max_buf_len > 10) && (shm_conn_info->tokens > max_buf_len)) {
         shm_conn_info->tokens = max_buf_len;
     }
     shm_conn_info->tokens += tokens_to_add;
