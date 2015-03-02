@@ -905,40 +905,47 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
     int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-    //int buf_len_real = shm_conn_info->write_buf[1].frames.length;
+    int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length;
+    
+    struct timeval packet_dtv;
+    int BPCS = 0;
+    int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
+    
+    if((buf_len_real < 15) && (full_rtt == 0)) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    } 
+    
+    if(buf_len_real >= 15) {
+        timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
+        BPCS = buf_len_real * 1000 / tv2ms(&packet_dtv);
+    }
+    
+    APCS = (APCS > BPCS ? APCS : BPCS);
+    int max_buf_len =  APCS * full_rtt / 1000;
+    
+    if((full_rtt == 0) && (buf_len >= 2)) {
+        max_buf_len = buf_len / 2;
+    }
+    
     //if(buf_len_real > buf_len) {
     //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
     //} else {
     //    buf_len = buf_len_real;
     //}
     
-    int max_buf_len =  APCS * full_rtt / 1000;
-    
-    if((max_buf_len < 10) && (buf_len < 15)) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
-    }
-    
-    if(max_buf_len == 0) { // need to flush huge buffer at maximum speed
-        APCS = APCS * 3;
-    } else if(buf_len >= max_buf_len) {
+    if(buf_len >= max_buf_len) {
         float fbl = buf_len;
         float fmbl = max_buf_len;
-        float fbdiff = fbl / fmbl;
-        fbdiff *= fbdiff;
+        float fbdiff = fbl / fmbl - 1.0;
         float fAPCS = shm_conn_info->APCS;
-        float fAPCS_fl = fAPCS * fbdiff;
+        float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
         if(fAPCS_fl > (fAPCS * 3.0)) {
             fAPCS_fl = fAPCS * 3.0;
         }
         APCS = (int)fAPCS_fl;
     } else {
         // normal mode - flush with current speed
-    }
-    
-    if(APCS < 10) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
     }
     
     // now do add some tokens ?
