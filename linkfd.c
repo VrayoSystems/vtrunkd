@@ -916,7 +916,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         return 1;
     } 
     
-    if(buf_len_real >= 15) {
+    if(buf_len_real >= 50) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
         if(pdms > 50) {
@@ -941,11 +941,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(buf_len >= max_buf_len) {
         float fbl = buf_len;
         float fmbl = max_buf_len;
+        float fAPCS = APCS;
+        
         float fbdiff = fbl / fmbl - 1.0;
-        float fAPCS = shm_conn_info->APCS;
         float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
-        if(fAPCS_fl > (fAPCS * 3.0)) {
-            fAPCS_fl = fAPCS * 3.0;
+        if(fAPCS_fl > (fAPCS * 5.0)) {
+            fAPCS_fl = fAPCS * 5.0;
         }
         APCS = (int)fAPCS_fl;
     } else {
