@@ -934,7 +934,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         }
     }
     
-    //APCS = (APCS > BPCS ? APCS : BPCS);
+    APCS = (APCS > BPCS ? APCS : BPCS);
     
     int max_buf_len = APCS * full_rtt / 1000;
     
