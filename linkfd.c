@@ -5190,7 +5190,8 @@ int lfd_linker(void)
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
             if(shm_conn_info->max_rtt_lag > shm_conn_info->frtt_local_applied) {
-                shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
+                //shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
+                shm_conn_info->frtt_local_applied = (5 * shm_conn_info->frtt_local_applied + shm_conn_info->max_rtt_lag) / 6;
                 int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
             }
