@@ -912,7 +912,8 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int BPCS = 0;
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
     if(full_rtt == 0) {
-        full_rtt = shm_conn_info->stats[max_chan].rttvar;
+        //full_rtt = shm_conn_info->stats[max_chan].rttvar;
+        full_rtt = 20; // 20ms
     }
     /*
     if((buf_len_real < 15) && (full_rtt == 0)) {
@@ -1175,7 +1176,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     drtt_ms = shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
     // TODO what time is the expiration time? MLD diff or MAR?
     //mrl_ms = MAX_LATENCY_DROP_USEC / 1000 / 2;
-    mrl_ms = shm_conn_info->stats[shm_conn_info->max_chan].rttvar;
+    //mrl_ms = shm_conn_info->stats[shm_conn_info->max_chan].rttvar;
+    mrl_ms = 10; // 20 ms lag
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
         vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
