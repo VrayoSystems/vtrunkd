@@ -904,10 +904,10 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
-    //int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
-    int buf_len = shm_conn_info->write_buf[chan_num].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[chan_num].last_written_seq;
+    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
+    //int buf_len = shm_conn_info->write_buf[chan_num].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[chan_num].last_written_seq;
     int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length;
-    buf_len = buf_len_real; 
+    //buf_len = buf_len_real; 
     struct timeval packet_dtv;
     int BPCS = 0;
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
@@ -930,7 +930,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         }
     }
     
-    APCS = (APCS > BPCS ? APCS : BPCS);
+    //APCS = (APCS > BPCS ? APCS : BPCS);
     
     int max_buf_len = APCS * full_rtt / 1000;
     
