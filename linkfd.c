@@ -916,17 +916,15 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     //    return 1;
     //}
     
-    if(full_rtt == 0) {
-        //full_rtt = shm_conn_info->stats[max_chan].rttvar;
-        full_rtt = 20; // 20ms
-    }
+    //if(full_rtt == 0) {
+        ////full_rtt = shm_conn_info->stats[max_chan].rttvar;
+    //    full_rtt = 20; // 20ms
+    //}
     
-    /*
     if((buf_len_real < 15) && (full_rtt == 0)) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     } 
-    */
     if(buf_len_real >= 50) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
