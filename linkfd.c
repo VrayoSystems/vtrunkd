@@ -904,7 +904,8 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
-    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
+    //int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
+    int buf_len = shm_conn_info->write_buf[chan_num].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[chan_num].last_written_seq;
     int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length;
     
     struct timeval packet_dtv;
@@ -921,6 +922,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         int pdms = tv2ms(&packet_dtv);
         if(pdms > 50) {
             BPCS = buf_len_real * 1000 / pdms;
+            shm_conn_info->write_speed_b = BPCS;
         }
     }
     
@@ -954,6 +956,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
+    shm_conn_info->write_speed = APCS;
     
     //APCS = shm_conn_info->write_speed_avg;
     if(APCS == 0) {
@@ -5364,6 +5367,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
+            add_json(js_buf, &js_cur, "wspd", "%d", shm_conn_info->write_speed);
+            add_json(js_buf, &js_cur, "wspd_b", "%d", shm_conn_info->write_speed_b);
             add_json(js_buf, &js_cur, "ACS_ll", "%d", max_ACS2);
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
