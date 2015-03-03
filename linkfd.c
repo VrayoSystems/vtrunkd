@@ -911,14 +911,16 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     struct timeval packet_dtv;
     int BPCS = 0;
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
-    if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
-    }
+    //if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
+    //    shm_conn_info->tokens_lastadd_tv = info.current_time;
+    //    return 1;
+    //}
+    
     if(full_rtt == 0) {
         //full_rtt = shm_conn_info->stats[max_chan].rttvar;
         full_rtt = 20; // 20ms
     }
+    
     /*
     if((buf_len_real < 15) && (full_rtt == 0)) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
