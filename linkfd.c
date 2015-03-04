@@ -906,7 +906,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     return 1;
 }
 
-
+    
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
@@ -3629,6 +3629,48 @@ inline int get_rto_usec() {
         return sum_rtt;
     }
     return info.max_latency_drop.tv_usec;
+}
+
+// compute controlled - "lagger" based buf len
+int get_lbuf_len() {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
+       int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
+        //shm_conn_info->lbuf_len = lbl; // we are writing versus HEAD?
+        return lbl;
+    } else {
+        int min_rtt = INT32_MAX;
+        int min_rtt_chan = shm_conn_info->max_chan;
+        int max_rtt = 0;
+        int max_rtt_chan = shm_conn_info->max_chan;
+        int chamt = 0;
+        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+                if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                    min_rtt = shm_conn_info->stats[i].exact_rtt;
+                    min_rtt_chan = i;
+                }
+
+                if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                    max_rtt = shm_conn_info->stats[i].exact_rtt;
+                    max_rtt_chan = i;
+                }
+                chamt++;
+            }
+        }
+        if(chamt > 1) {
+            // now check that max_rtt_lag is adequate
+            if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
+                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
+            }
+            shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
+        } else {
+            shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
+        }
+        shm_conn_info->max_rtt_pnum = max_rtt_chan;
+        shm_conn_info->min_rtt_pnum = min_rtt_chan;
+    }
 }
 
 int set_rttlag() { // TODO: rewrite using get_rttlag
