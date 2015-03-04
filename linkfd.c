@@ -3646,39 +3646,8 @@ int get_lbuf_len() {
        int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
         //shm_conn_info->lbuf_len = lbl; // we are writing versus HEAD?
         return lbl;
-    } else {
-        int min_rtt = INT32_MAX;
-        int min_rtt_chan = shm_conn_info->max_chan;
-        int max_rtt = 0;
-        int max_rtt_chan = shm_conn_info->max_chan;
-        int chamt = 0;
-        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
-                if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                    min_rtt = shm_conn_info->stats[i].exact_rtt;
-                    min_rtt_chan = i;
-                }
-
-                if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
-                    max_rtt = shm_conn_info->stats[i].exact_rtt;
-                    max_rtt_chan = i;
-                }
-                chamt++;
-            }
-        }
-        if(chamt > 1) {
-            // now check that max_rtt_lag is adequate
-            if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
-                max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
-            }
-            shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
-        } else {
-            shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
-        }
-        shm_conn_info->max_rtt_pnum = max_rtt_chan;
-        shm_conn_info->min_rtt_pnum = min_rtt_chan;
     }
+    return info.least_rx_seq[1] - shm_conn_info->write_buf[1].last_written_seq;
 }
 
 int set_rttlag() { // TODO: rewrite using get_rttlag
@@ -4702,7 +4671,8 @@ int lfd_linker(void)
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
         #ifdef BUF_LEN_LOG
-                   int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
+                   //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
+                   int lbl = get_lbuf_len();
                    add_json_arr(jsBL_buf, &jsBL_cur, "%d", lbl);
         #endif
            fast_update_timer(jsSQ_timer, &info.current_time);
