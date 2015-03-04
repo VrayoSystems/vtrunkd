@@ -20,7 +20,7 @@ void computePID(float error, float *lastError, float *output, float *ITerm, floa
     /*Compute all the working error variables*/
     *ITerm += (Ki * error);
 
-    double dInput = (lastError - error);
+    double dInput = (*lastError - error);
     /*Compute PID Output*/
     *output = Kp * error + *ITerm - Kd * dInput;
 
