@@ -946,7 +946,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int max_buf_len = APCS * full_rtt / 1000;
     
     if(full_rtt == 0) {
-        APCS = APCS * 2;
+        APCS = APCS * 3;
     } else {
         //if(buf_len_real > buf_len) {
         //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
@@ -962,8 +962,8 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
             float fbdiff = fbl / fmbl - 1.0;
             //float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
             float fAPCS_fl = fAPCS * (1.5 - fbdiff + 0.5 * fbdiff * fbdiff); // slower slope
-            if(fAPCS_fl > (fAPCS * 2)) {
-                fAPCS_fl = fAPCS * 2;
+            if(fAPCS_fl > (fAPCS * 3)) {
+                fAPCS_fl = fAPCS * 3;
             }
             APCS = (int)fAPCS_fl;
         } else {
@@ -975,7 +975,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     shm_conn_info->write_speed = APCS;
     
     //APCS = shm_conn_info->write_speed_avg;
-    if(APCS <= 0) {
+    if(APCS <= 10) {
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
@@ -1037,10 +1037,12 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     max_latency_drop.tv_sec = rtou / 1000000;
     max_latency_drop.tv_usec = rtou % 1000000;
     struct timeval tv_tmp;
-    int any_lrx = 0, seq_loss = 0;
+    int head_lrx = 0, seq_loss = 0;
     struct timeval packet_wait_tv;
+    info.ploss_event_flag = 0; // TODO: remove ploss event check
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
         info.least_rx_seq[i] = UINT32_MAX;
+        /*
         seq_loss = 0;
         if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
             // means we're waiting for packet. Now check if it is lost!
@@ -1056,11 +1058,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 info.ploss_event_flag = 0;
             }
         }
-        
+        */
         for(int p=0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
             if (chan_mask & (1 << p)) {
-                if((any_lrx < shm_conn_info->write_buf[i].last_received_seq[p]) && (shm_conn_info->stats[p].remote_head_channel)) { // TODO: two heads possible?
-                    any_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
+                if((head_lrx < shm_conn_info->write_buf[i].last_received_seq[p]) && (shm_conn_info->stats[p].remote_head_channel)) { // TODO: two heads possible?
+                    head_lrx = shm_conn_info->write_buf[i].last_received_seq[p];
                 }
                 if(seq_loss && (shm_conn_info->write_buf[i].possible_seq_lost[p] > (shm_conn_info->write_buf[i].last_written_seq + seq_loss)) 
                 && (shm_conn_info->write_buf[i].possible_seq_lost[p] < (shm_conn_info->write_buf[i].last_written_seq + PLOSS_CHECK_PKTS))) {
@@ -1071,10 +1073,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     // TODO TODO: NOT JUST BIGGER SEQ NUM BUT SOME RANGE TO DETECT WITHIN
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
-                    if(shm_conn_info->stats[p].channel_dead  
-                            || ((shm_conn_info->stats[p].recv_mode == 0)
-                            && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
-                      ) { 
+                    if(    shm_conn_info->stats[p].channel_dead 
+                       || ((shm_conn_info->stats[p].exact_rtt - shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt) > (MAX_LATENCY_DROP_USEC / 1000))) { // do not wait for late packet only if drtt is > MLD or DEAD
+                    //        || ((shm_conn_info->stats[p].recv_mode == 0)
+                    //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
+                    //  ) { 
                         // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
                     }
@@ -1085,8 +1088,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
-            //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using any_lrx!");
-            info.least_rx_seq[i] = any_lrx; // do not detect any loss if head is unknown?
+            //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using head_lrx !");
+            info.least_rx_seq[i] = head_lrx; // do not detect any loss if head is unknown?
             //info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
             /* // TODO for #395
@@ -1109,7 +1112,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
                 return forced_rtt_reached;
-            } else if (timercmp(&tv_tmp, &max_latency_drop, >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=)
+            } else if (timercmp(&tv_tmp, &max_latency_drop, >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
                && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
             ) {
 #ifdef DEBUGG
@@ -1120,7 +1123,10 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
             }
         } else {
-            shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
+            if(shm_conn_info->write_buf[i].frames.length != 0) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
+                shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
+            }
         }
     }
     return 0;
@@ -1188,7 +1194,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     // TODO what time is the expiration time? MLD diff or MAR?
     //mrl_ms = MAX_LATENCY_DROP_USEC / 1000 / 2;
     //mrl_ms = shm_conn_info->stats[shm_conn_info->max_chan].rttvar;
-    mrl_ms = 10; // 20 ms lag
+    mrl_ms = 10; // 20 ms lag // should be zero
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
         vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
@@ -2213,13 +2219,15 @@ int write_buf_check_n_flush(int logical_channel) {
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
-        if (forced_rtt_reached && (             (cond_flag && forced_rtt_reached) 
-                      || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN)
-                      || (    timercmp(&tv_tmp, &max_latency_drop, >=) 
+        if (forced_rtt_reached && ( // smoothed buffer - allowed to write
+                        cond_flag // normal write
+                      || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
+                      || (    timercmp(&tv_tmp, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
                            && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
                            && timercmp(&since_write_tv, &max_latency_drop, >=)
-                         )
-                      || ( (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) && forced_rtt_reached ))
+                         )                                          // MLD several checks passed
+                      || (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
+                )
            ) {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
