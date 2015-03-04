@@ -85,6 +85,7 @@
 #include "netlink_socket_info.h"
 #include "speed_algo.h"
 #include "timer.h"
+#include "pid.h"
 
 #ifdef TESTING
 #include "testing.h"
@@ -195,10 +196,16 @@ int js_cur, js_cur_fl;
 
 #define PUSH_TO_TOP 5 // push Nth packet, 0 to disable
 #define SEND_Q_LOG
+#define BUF_LEN_LOG
 
 #ifdef SEND_Q_LOG
 char *jsSQ_buf; // for send_q compressor
 int jsSQ_cur;
+#endif
+
+#ifdef BUF_LEN_LOG
+char *jsBL_buf; // for send_q compressor
+int jsBL_cur;
 #endif
 
 char lossLog[JS_MAX] = { 0 }; // for send_q compressor
@@ -3630,16 +3637,20 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
         shm_conn_info->max_rtt_lag = 0;
     } else {
         int min_rtt = INT32_MAX;
+        int min_rtt_chan = shm_conn_info->max_chan;
         int max_rtt = 0;
+        int max_rtt_chan = shm_conn_info->max_chan;
         int chamt = 0;
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
                 if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
                     min_rtt = shm_conn_info->stats[i].exact_rtt;
+                    min_rtt_chan = i;
                 }
 
                 if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
                     max_rtt = shm_conn_info->stats[i].exact_rtt;
+                    max_rtt_chan = i;
                 }
                 chamt++;
             }
@@ -3654,6 +3665,8 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
         } else {
             shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
         }
+        shm_conn_info->max_rtt_pnum = max_rtt_chan;
+        shm_conn_info->min_rtt_pnum = min_rtt_chan;
     }
 }
 
@@ -3823,6 +3836,12 @@ int lfd_linker(void)
         struct timeval t1 = { 0, 300 }; // this time is crucial to detect send_q dops in case of long hold
         set_timer(jsSQ_timer, &t1);
         start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
+    #endif
+    #ifdef BUF_LEN_LOG
+        jsBL_buf = malloc(JS_MAX);
+        memset(jsBL_buf, 0, JS_MAX);
+        jsBL_cur = 0;
+        start_json_arr(jsBL_buf, &jsBL_cur, "buf_len");
     #endif
     
     struct timeval MAX_REORDER_LATENCY = { 0, 50000 };
@@ -4632,10 +4651,13 @@ int lfd_linker(void)
 #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
+        #ifdef BUF_LEN_LOG
+                   int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
+                   add_json_arr(jsBL_buf, &jsBL_cur, "%d", lbl);
+        #endif
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
 #endif
-
 
         // calculate on-line RTT: >>>
         if(ping_rcvd == 0) {
@@ -5494,6 +5516,10 @@ int lfd_linker(void)
             // now array
             print_json_arr(jsSQ_buf, &jsSQ_cur);
             start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
+            #endif
+            #ifdef BUF_LEN_LOG
+            print_json_arr(jsBL_buf, &jsBL_cur);
+            start_json_arr(jsBL_buf, &jsBL_cur, "buf_len");
             #endif
             
             json_timer = info.current_time;
@@ -7808,6 +7834,9 @@ if(drop_packet_flag) {
     free(js_buf);
     #ifdef SEND_Q_LOG
         free(jsSQ_buf);
+    #endif
+    #ifdef BUF_LEN_LOG
+        free(jsBL_buf);
     #endif
 
     /*memset(&sa, 0, sizeof(sigaction));

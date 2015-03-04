@@ -735,6 +735,8 @@ struct conn_info {
     int write_speed_avg;
     int write_speed;
     int write_speed_b;
+    int min_rtt_pnum;
+    int max_rtt_pnum;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
