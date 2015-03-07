@@ -922,16 +922,24 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     //    shm_conn_info->tokens_lastadd_tv = info.current_time;
     //    return 1;
     //}
+    int lbl = get_lbuf_len();
     
+    int tokens_in_out = lbl - shm_conn_info->max_stuck_buf_len;
     //if(full_rtt == 0) {
         ////full_rtt = shm_conn_info->stats[max_chan].rttvar;
     //    full_rtt = 20; // 20ms
     //}
     
-    if((buf_len_real < 15) && (full_rtt == 0)) {
+    if(APCS <= 10) { // TODO HERE: APCS_min! means this session transfer end ?!
+        shm_conn_info->max_stuck_buf_len = 0;
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
-    } 
+    }
+    
+    //if((buf_len_real < 15) && (full_rtt == 0)) {
+        //shm_conn_info->tokens_lastadd_tv = info.current_time;
+        //return 1;
+    //}
     if(buf_len_real >= 50) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -942,43 +950,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    
-    int max_buf_len = APCS * full_rtt / 1000;
-    
-    if(full_rtt == 0) {
-        APCS = APCS * 3;
-    } else {
-        //if(buf_len_real > buf_len) {
-        //    vtun_syslog(LOG_ERR, "ASSERT FAILED: buf_len_real > bufi_len! %d > %d", buf_len_real, buf_len);
-        //} else {
-        //    buf_len = buf_len_real;
-        //}
-        
-        if(buf_len >= max_buf_len) {
-            float fbl = buf_len;
-            float fmbl = max_buf_len;
-            float fAPCS = APCS;
-            
-            float fbdiff = fbl / fmbl - 1.0;
-            //float fAPCS_fl = fAPCS * (2.0 - 2.0 * fbdiff + fbdiff * fbdiff);
-            float fAPCS_fl = fAPCS * (1.5 - fbdiff + 0.5 * fbdiff * fbdiff); // slower slope
-            if(fAPCS_fl > (fAPCS * 3)) {
-                fAPCS_fl = fAPCS * 3;
-            }
-            APCS = (int)fAPCS_fl;
-        } else {
-            // normal mode - flush with current speed
-        }
-    }
-    
+    APCS /= 3; // flush constantly with speed slower than input
+   
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     shm_conn_info->write_speed = APCS;
     
     //APCS = shm_conn_info->write_speed_avg;
-    if(APCS <= 10) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
-    }
     
     // now do add some tokens ?
     
@@ -991,15 +968,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(shm_conn_info->tokens < 0) {
         shm_conn_info->tokens = 0;
     }
-    if((max_buf_len > 10) && (shm_conn_info->tokens > max_buf_len)) {
-        shm_conn_info->tokens = max_buf_len;
-    }
-    shm_conn_info->tokens += tokens_to_add;
+    shm_conn_info->tokens += tokens_to_add + tokens_in_out;
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
-        int ms_for_token = 1000 / APCS; 
+        int ms_for_token = 1000 / APCS;
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
         *next_token_ms = ms_for_token;
         return 0;
@@ -4761,6 +4735,7 @@ int lfd_linker(void)
                 shm_conn_info->idle = 0; 
             }
             */
+            shm_conn_info->max_stuck_buf_len -= 5; // drop 5 packets at a time
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 shm_conn_info->frtt_local_applied = 34 * shm_conn_info->frtt_local_applied / 35 + shm_conn_info->max_rtt_lag / 35;
