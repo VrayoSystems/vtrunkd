@@ -1087,9 +1087,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             */
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            sem_wait(&(shm_conn_info->write_buf_sem));
+            // no sync is needed: already has sync at the toplevel
             forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
-            sem_post(&(shm_conn_info->write_buf_sem));
     #ifdef FRTTDBG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
     #endif
