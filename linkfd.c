@@ -926,6 +926,9 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int lbl = get_lbuf_len();
     
     int tokens_in_out = lbl - shm_conn_info->max_stuck_buf_len;
+    if(tokens_in_out < 0) {
+        tokens_in_out = 0;
+    }
     //if(full_rtt == 0) {
         ////full_rtt = shm_conn_info->stats[max_chan].rttvar;
     //    full_rtt = 20; // 20ms
