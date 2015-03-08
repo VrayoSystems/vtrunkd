@@ -1015,7 +1015,9 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     struct timeval packet_wait_tv;
     info.ploss_event_flag = 0; // TODO: remove ploss event check
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
+    #ifdef FRTTDBG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
+    #endif
         info.least_rx_seq[i] = UINT32_MAX;
         /*
         seq_loss = 0;
@@ -1079,7 +1081,9 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
+    #ifdef FRTTDBG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
+    #endif
 
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &packet_wait_tv);
@@ -2156,7 +2160,9 @@ int write_buf_check_n_flush(int logical_channel) {
     struct timeval since_write_tv;
     int ts;
     forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
+    #ifdef FRTTDBG
                 vtun_syslog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
+    #endif
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
     //int buf_len = shm_conn_info->write_buf[logical_channel].frames.len; // disabled for #400
@@ -2181,7 +2187,9 @@ int write_buf_check_n_flush(int logical_channel) {
     FD_SET(info.tun_device, &fdset2);
     int sel_ret = select(info.tun_device + 1, NULL, &fdset2, NULL, &tv);
     if (sel_ret == 0) {
+    #ifdef FRTTDBG
         vtun_syslog(LOG_ERR, "write_buf_check_n_flush select - no select%d",errno);
+    #endif
         return 0; // save rtt!
     } else if (sel_ret == -1) {
         vtun_syslog(LOG_ERR, "write_buf_check_n_flush select error! errno %d",errno);
@@ -2204,6 +2212,9 @@ int write_buf_check_n_flush(int logical_channel) {
         timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
         timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv);
         int cond_flag = shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1) ? 1 : 0;
+    #ifdef FRTTDBG
+        vtun_syslog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
+    #endif
         if (forced_rtt_reached && ( // smoothed buffer - allowed to write
                         cond_flag // normal write
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
@@ -6172,7 +6183,9 @@ int lfd_linker(void)
             pfdset_w = NULL;
         }
         sem_post(write_buf_sem);
+        #ifdef FRTTDBG
             vtun_syslog(LOG_INFO, "next_token_ms %d", next_token_ms);
+        #endif
         FD_ZERO(&fdset);
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
