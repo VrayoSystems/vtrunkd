@@ -954,7 +954,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    //APCS /= 3; // flush constantly with speed slower than input
+    APCS /= 3; // flush constantly with speed slower than input
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     shm_conn_info->write_speed = APCS;
@@ -5397,6 +5397,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "MAR", "%d", shm_conn_info->max_allowed_rtt);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
+            add_json(js_buf, &js_cur, "lbl", "%d", get_lbuf_len());
             add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted);
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
