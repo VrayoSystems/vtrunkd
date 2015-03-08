@@ -3629,7 +3629,6 @@ int get_lbuf_len() {
     }
     return info.least_rx_seq[1] - shm_conn_info->write_buf[1].last_written_seq;
 }
-
 int set_rttlag() { // TODO: rewrite using get_rttlag
     uint32_t chan_mask = shm_conn_info->channels_mask;
     if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
@@ -3740,36 +3739,33 @@ int assert_packet_ipv4(const char *desc, char *data, int len) {
 
 
 int compute_max_allowed_rtt() {
-    // return max frtt in ms
-    
-    int sum_rsr = 0;
-    int min_rtt = INT32_MAX;
-    int max_rtt = 0;
-    int rtt_diff = 0;
+    int max_gsend_q = 0;
+    int max_gsend_q_chan = -1;
+    int gsq;
+    int chamt = 0;
     struct timeval tv_tmp;
+    // TODO HERE: immunity timer
+    // 1. in case of no AG - the drop is done by head channel
+    // 2. in case of AG - we should take the most lagging chan+LBL
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-        if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && ((i == shm_conn_info->max_chan) || (shm_conn_info->ag_mask & (1 << i)))) { 
+        if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && ((i == shm_conn_info->max_chan) || (shm_conn_info->ag_mask & (1 << i)))) {
             timersub(&info.current_time, &shm_conn_info->stats[i].agon_time, &tv_tmp);
-            if((i == shm_conn_info->max_chan) || (tv2ms(&tv_tmp) > shm_conn_info->stats[i].exact_rtt)) {
-                sum_rsr += shm_conn_info->stats[i].sqe_mean;
+            if(tv2ms(&tv_tmp) <= 2*shm_conn_info->stats[i].exact_rtt) {
+                // TODO: calculate real time needed for buffer to be recalculated and received
+                continue; // immunity time for recalculate - wait for buffer to pripagate and to return new value
             }
-            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                min_rtt = shm_conn_info->stats[i].exact_rtt;
+            gsq = shm_conn_info->seq_counter - shm_conn_info->stats[i].la_sqn;
+            if(max_gsend_q < gsq) {
+                max_gsend_q = gsq; 
             }
-            if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
-                max_rtt = shm_conn_info->stats[i].exact_rtt;
-            }
+            chamt++;
         }
     }
-    if(sum_rsr == 0) return 0;
-    if((min_rtt < INT32_MAX) && (max_rtt > 0)) {
-        rtt_diff = max_rtt - min_rtt;
-    } else {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! max_allwed_rtt no chan alive max_rtt %d min_rtt %d", max_rtt, min_rtt);
-    }
-    int spd = shm_conn_info->tpps * info.eff_len;
+    // TODO: possible problem here: the channel may be in AG mode but head will resend all its packets anyway if it is not in AG itself
+    int full_cwnd = max_gsend_q + shm_conn_info->lbuf_len_recv;
+    int spd = shm_conn_info->tpps;
     if(spd == 0) return 0;
-    int max_frtt = sum_rsr * 1000 / spd + rtt_diff; // in ms
+    int max_frtt = full_cwnd * 1000 / spd; // in ms
     return max_frtt;
 }
 
@@ -5626,13 +5622,17 @@ int lfd_linker(void)
                 tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
-                memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
+                memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //ag_mask
 //                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d", buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                 tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                 memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
-                tmp32_n = htons(buf_len_real);
                 buf_len_real = shm_conn_info->write_buf[1].frames.length;
+                tmp32_n = htons(buf_len_real);
                 memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
+                tmp16_n = htons(get_lbuf_len());
+                memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
+                tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
+                memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -5640,7 +5640,7 @@ int lfd_linker(void)
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((7 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -5744,6 +5744,10 @@ int lfd_linker(void)
                     tmp32_n = htons(buf_len_real);
                     buf_len_real = shm_conn_info->write_buf[1].frames.length;
                     memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
+                    tmp16_n = htons(get_lbuf_len());
+                    memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
+                    tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
+                    memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -5752,7 +5756,7 @@ int lfd_linker(void)
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((7 * sizeof(uint16_t) + 4 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
 
                     if (len_ret < 0) {
@@ -6864,6 +6868,11 @@ if(drop_packet_flag) {
                             }
                             //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
+                            memcpy(&tmp16_n, buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); 
+                            shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
+                            memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t)); 
+                            shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
+                            // now recalculate MAR is possible...
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
                                             1000 * (info.channel[chan_num].local_seq_num - info.channel[chan_num].packet_seq_num_acked) : 0;

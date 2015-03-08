@@ -425,6 +425,7 @@ struct conn_stats {
     int pbl_lossed_saved;
     int pbl_lossed_cnt_saved;
     int remote_head_channel;
+    uint32_t la_sqn; // last received global seq_num ACK
 };
 /**
  * Structure for garbage statistic and information
@@ -738,6 +739,7 @@ struct conn_info {
     int min_rtt_pnum;
     int max_rtt_pnum;
     int max_stuck_buf_len;
+    int lbuf_len_recv; // received lbuf_len
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
