@@ -909,7 +909,6 @@ int check_rtt_latency_drop_chan(int chan_num) {
     
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     // TODO: may be sync on write_buf is required??
-    //sem_wait(&(shm_conn_info->frtt)); // TODO: how to do w/o sync??
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
@@ -976,7 +975,6 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     shm_conn_info->tokens += tokens_to_add + tokens_in_out;
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
-        sem_post(&(shm_conn_info->write_buf_sem));
         return 1;
     } else {
         int ms_for_token = 1000 / APCS;
@@ -984,7 +982,6 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         *next_token_ms = ms_for_token;
         return 0;
     }
-    //sem_post(&(shm_conn_info->frtt)); // TODO: how to do w/o sync??
 }
 
 int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
