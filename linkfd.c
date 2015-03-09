@@ -937,6 +937,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(APCS <= 10) { // TODO HERE: APCS_min! means this session transfer end ?!
         shm_conn_info->max_stuck_buf_len = 0;
         shm_conn_info->tokens_lastadd_tv = info.current_time;
+        vtun_syslog(LOG_ERR, "APCS <=10 warning: flushing infspeed: %d", APCS);
         return 1;
     }
     
@@ -954,7 +955,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    APCS /= 3; // flush constantly with speed slower than input
+    APCS /= 5; // flush constantly with speed slower than input
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     shm_conn_info->write_speed = APCS;
