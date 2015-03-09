@@ -5263,9 +5263,11 @@ int lfd_linker(void)
                 set_Wu_to(RSR_TOP/2);
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
-            if(shm_conn_info->drtt < shm_conn_info->forced_rtt) {
+            /*
+            if(shm_conn_info->drtt < shm_conn_info->forced_rtt) { // WTF??
                 shm_conn_info->forced_rtt = shm_conn_info->drtt;
             }
+            */
             
             // compute perceived loss probability
             if(info.p_lost > 0 && info.r_lost > 0) {
@@ -5375,8 +5377,8 @@ int lfd_linker(void)
             start_json(js_buf, &js_cur);
             add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
             add_json(js_buf, &js_cur, "pnum", "%d", info.process_num);
-            add_json(js_buf, &js_cur, "hsnum", "%d", shm_conn_info->stats[info.process_num].hsnum);
-            add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl);
+            //add_json(js_buf, &js_cur, "hsnum", "%d", shm_conn_info->stats[info.process_num].hsnum);
+            //add_json(js_buf, &js_cur, "l_pbl", "%d", shm_conn_info->stats[info.process_num].l_pbl);
             add_json(js_buf, &js_cur, "hd", "%d", info.head_channel);
             add_json(js_buf, &js_cur, "rhd", "%d", shm_conn_info->stats[info.process_num].remote_head_channel);
             add_json(js_buf, &js_cur, "super", "%d", super);
@@ -5391,57 +5393,57 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rtt2", "%d", info.rtt2);
             //add_json(js_buf, &js_cur, "srtt2_10", "%d", info.srtt2_10);
             add_json(js_buf, &js_cur, "rtt2var", "%d", info.srtt2var);
-            add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
-            add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
+            //add_json(js_buf, &js_cur, "alat", "%d", info.mean_latency_us/1000);
+            //add_json(js_buf, &js_cur, "Mlat", "%d", info.max_latency_us/1000);
             info.max_latency_us = 0;
-            add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
-            add_json(js_buf, &js_cur, "plp2u", "%d", cur_plp_unrec);
+            //add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
+            //add_json(js_buf, &js_cur, "plp2u", "%d", cur_plp_unrec);
             add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
-            add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
-            add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
+            //add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
+            //add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
             add_json(js_buf, &js_cur, "MAR", "%d", shm_conn_info->max_allowed_rtt);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
             add_json(js_buf, &js_cur, "msbl", "%d", shm_conn_info->max_stuck_buf_len);
-            add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted);
+            //add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted); // used for PROTUP only...
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
-            add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
+            //add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
-            add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100);
+            //add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100); // TCP modle RTT?
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)buf_len_real);
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
-            add_json(js_buf, &js_cur, "sql2", "%d", temp_sql_copy2);
+            //add_json(js_buf, &js_cur, "sql2", "%d", temp_sql_copy2);
             add_json(js_buf, &js_cur, "pump_adj", "%d", pump_adj);
             add_json(js_buf, &js_cur, "rtt_shift", "%d", rtt_shift);
             add_json(js_buf, &js_cur, "W_cubic", "%d", info.send_q_limit_cubic);
-            add_json(js_buf, &js_cur, "Wu_cubic", "%d", shm_conn_info->stats[info.process_num].W_cubic_u);
+            //add_json(js_buf, &js_cur, "Wu_cubic", "%d", shm_conn_info->stats[info.process_num].W_cubic_u); // unused whole caluclation
             add_json(js_buf, &js_cur, "W_cubic_copy", "%d", info.W_cubic_copy);
-            add_json(js_buf, &js_cur, "Wu_cubic_copy", "%d", info.Wu_cubic_copy);
+            //add_json(js_buf, &js_cur, "Wu_cubic_copy", "%d", info.Wu_cubic_copy); // unused -||-
             //add_json(js_buf, &js_cur, "W_cubic_appl", "%d", info.send_q_limit_cubic_apply);
-            add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold);
+            //add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold); // long-unused (CDT only)
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
             add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg);
             add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
-            add_json(js_buf, &js_cur, "wspd", "%d", shm_conn_info->write_speed);
-            add_json(js_buf, &js_cur, "wspd_b", "%d", shm_conn_info->write_speed_b);
+            //add_json(js_buf, &js_cur, "wspd", "%d", shm_conn_info->write_speed); // re-implent neede to be useful
+            //add_json(js_buf, &js_cur, "wspd_b", "%d", shm_conn_info->write_speed_b); // not useful
             add_json(js_buf, &js_cur, "ACS_ll", "%d", max_ACS2);
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len);
-            add_json(js_buf, &js_cur, "ACS2", "%d", temp_acs_copy );
+            //add_json(js_buf, &js_cur, "ACS2", "%d", temp_acs_copy ); // self-check only
             add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
-            add_json(js_buf, &js_cur, "PCS_fast", "%u", (unsigned int)info.channel[1].packet_download); // TMP REMOVE
+            // add_json(js_buf, &js_cur, "PCS_fast", "%u", (unsigned int)info.channel[1].packet_download); //  PCS fast incorrect, TODO fix it
             add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%u", (unsigned int)shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
-            add_json(js_buf, &js_cur, "pupload", "%d", shm_conn_info->stats[info.process_num].packet_upload_spd);
+            add_json(js_buf, &js_cur, "pupload", "%d", shm_conn_info->stats[info.process_num].packet_upload_spd); // should be = upload/eff_len ??
             //add_json(js_buf, &js_cur, "dropping", "%d", (shm_conn_info->dropping || shm_conn_info->head_lossing));
-            add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below)
+            //add_json(js_buf, &js_cur, "CLD", "%d", check_rtt_latency_drop()); // TODO: DUP? remove! (see CL below) // now even unused atall??
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag
             add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed
@@ -5450,12 +5452,12 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
             add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
             //add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
-            add_json(js_buf, &js_cur, "sel_imd", "%d", info.select_immediate);
-            info.select_immediate = 0;
-            add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt);
-            add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_remote);
-            add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100);
-            add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num)));
+            //add_json(js_buf, &js_cur, "sel_imd", "%d", info.select_immediate); // experimetn failed - TODO REMOVE
+            info.select_immediate = 0; // this too as above
+            //add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt); // unused, all the related WTF code to be removed
+            add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_remote); // received remote frtt, only for server-side logger analysis
+            //add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100); // dup of tmrtt??
+            //add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num))); // xhi experiment failed
 
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
@@ -5501,7 +5503,7 @@ int lfd_linker(void)
                 }
             }
             //add_json(js_buf, &js_cur, "m_lsn", "%ld", m_lsn);
-            add_json(js_buf, &js_cur, "loss_in", "%d", lmax);
+            //add_json(js_buf, &js_cur, "loss_in", "%d", lmax); // never used
             
             lmax = 0;
             for(int i=0; i<info.channel_amount; i++) {
@@ -5509,7 +5511,7 @@ int lfd_linker(void)
                     lmax = info.channel[i].packet_loss;
                 }
             }                
-            add_json(js_buf, &js_cur, "loss_out", "%d", lmax);
+            //add_json(js_buf, &js_cur, "loss_out", "%d", lmax); // never used, dunno if works
             int Ch = 0;
             int Cs = 0;
             sem_wait(&(shm_conn_info->stats_sem));
@@ -5528,8 +5530,8 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "slope", "%d", slope);
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
             add_json(js_buf, &js_cur, "lssqn[?]", "%lu", last_sent_packet_num[1].seq_num);
-            add_json(js_buf, &js_cur, "lssqn[0]", "%lu", shm_conn_info->stats[0].lssqn);
-            add_json(js_buf, &js_cur, "dlssqn[?]", "%d", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn);
+            //add_json(js_buf, &js_cur, "lssqn[0]", "%lu", shm_conn_info->stats[0].lssqn); // for debg only
+            //add_json(js_buf, &js_cur, "dlssqn[?]", "%d", shm_conn_info->stats[0].lssqn - shm_conn_info->stats[1].lssqn); // for debug only
             add_json(js_buf, &js_cur, "rsqn[?]", "%lu", seq_num);
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
