@@ -3651,7 +3651,7 @@ int get_lbuf_len() {
         //shm_conn_info->lbuf_len = lbl; // we are writing versus HEAD?
         return lbl;
     }
-    return info.least_rx_seq[1] - shm_conn_info->write_buf[1].last_written_seq;
+    return info.least_rx_seq[1] - shm_conn_info->write_buf[1].last_written_seq; // this can result in negative values when AG-on switch happens
 }
 int set_rttlag() { // TODO: rewrite using get_rttlag
     uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -3767,6 +3767,7 @@ int compute_max_allowed_rtt() {
     int max_gsend_q_chan = -1;
     int gsq;
     int chamt = 0;
+    int full_cwnd;
     struct timeval tv_tmp;
     // TODO HERE: immunity timer
     // 1. in case of no AG - the drop is done by head channel
@@ -3786,7 +3787,11 @@ int compute_max_allowed_rtt() {
         }
     }
     // TODO: possible problem here: the channel may be in AG mode but head will resend all its packets anyway if it is not in AG itself
-    int full_cwnd = max_gsend_q + shm_conn_info->lbuf_len_recv;
+    if(shm_conn_info->lbuf_len_recv > 0) {
+        full_cwnd = max_gsend_q + shm_conn_info->lbuf_len_recv;
+    } else {
+        full_cwnd = max_gsend_q;
+    }
     int spd = shm_conn_info->tpps;
     if(spd == 0) return 0;
     int max_frtt = full_cwnd * 1000 / spd; // in ms
@@ -5397,7 +5402,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "MAR", "%d", shm_conn_info->max_allowed_rtt);
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
-            add_json(js_buf, &js_cur, "lbl", "%d", get_lbuf_len());
+            add_json(js_buf, &js_cur, "msbl", "%d", shm_conn_info->max_stuck_buf_len);
             add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted);
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
@@ -5529,6 +5534,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "lsn[1]", "%lu", info.channel[1].local_seq_num);
             add_json(js_buf, &js_cur, "rlsn[1]", "%lu", info.channel[1].local_seq_num_recv);
             add_json(js_buf, &js_cur, "lalsn[1]", "%lu", info.channel[1].packet_seq_num_acked);
+            add_json(js_buf, &js_cur, "lasqn?", "%lu", shm_conn_info->stats[info.process_num].la_sqn);
             add_json(js_buf, &js_cur, "ver", "\"%s\"", VERSION);
             
             print_json(js_buf, &js_cur);
