@@ -933,13 +933,13 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         ////full_rtt = shm_conn_info->stats[max_chan].rttvar;
     //    full_rtt = 20; // 20ms
     //}
-    
+    /*
     if(APCS <= 10) { // TODO HERE: APCS_min! means this session transfer end ?!
         shm_conn_info->max_stuck_buf_len = 0;
         shm_conn_info->tokens_lastadd_tv = info.current_time;
         vtun_syslog(LOG_ERR, "APCS <=10 warning: flushing infspeed: %d", APCS);
         return 1;
-    }
+    }*/
     
     //if((buf_len_real < 15) && (full_rtt == 0)) {
         //shm_conn_info->tokens_lastadd_tv = info.current_time;
