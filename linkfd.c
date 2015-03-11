@@ -1096,10 +1096,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
 
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &packet_wait_tv);
-            if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
-                    != (shm_conn_info->write_buf[i].last_written_seq + 1)) {
+            if (forced_rtt_reached && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
+                    != (shm_conn_info->write_buf[i].last_written_seq + 1))) {
                 // packets not fully assembled before flush
-                int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - info.least_rx_seq[i];
+                //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - info.least_rx_seq[i];
+                int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
                 if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
             }
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
