@@ -1195,7 +1195,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     mrl_ms = 10; // 20 ms lag // should be zero
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
-        vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
+        //vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
         return -1; // we can get no frames; handle this above
     }
     ms2tv(&max_latency, expiration_ms_fromnow);
@@ -1595,7 +1595,7 @@ int retransmit_send(char *out2, int n_to_send) {
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
-                vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
+                //vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
                 send_counter++;
                 continue; // do not send anything at all
             }
@@ -1654,7 +1654,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 // else there is no way we can deliver anything in time; now get latest packet
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
                 // TODO: counter here -->
-                vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
+                //vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
