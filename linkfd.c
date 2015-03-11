@@ -956,6 +956,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     
     APCS = (APCS > BPCS ? APCS : BPCS);
     APCS /= 5; // flush constantly with speed slower than input
+    if(APCS < 100) APCS = 100; // make minimal speed ~= 1MBit/s
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     shm_conn_info->write_speed = APCS;
