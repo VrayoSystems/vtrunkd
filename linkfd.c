@@ -3649,6 +3649,8 @@ inline int get_rto_usec() {
 // compute controlled - "lagger" based buf len
 int get_lbuf_len() {
     uint32_t chan_mask = shm_conn_info->channels_mask;
+    int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[1].frames.rel_tail].seq_num - shm_conn_info->write_buf[1].last_written_seq;
+    return pktdiff; // always return ibl
     if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
        int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
         //shm_conn_info->lbuf_len = lbl; // we are writing versus HEAD?
