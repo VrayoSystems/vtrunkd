@@ -865,7 +865,7 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     }
     if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider + shm_conn_info->forced_rtt)) ) {
         // no way to deliver in time
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
+        //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
         return 0;
     }
     //vtun_syslog(LOG_ERR, "CDT OK");
@@ -4918,10 +4918,12 @@ int lfd_linker(void)
             // TODO: rtt_shift and pump_adj are essentially the same - we should join them one day...
             double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
             
-            //double d_mld_ms = MAX_LATENCY_DROP_USEC;
-            //d_mld_ms /= 1000000.0;
-            double d_mld_ms = shm_conn_info->max_allowed_rtt;
-            d_mld_ms /= 1000.0;
+            double d_mld_ms = MAX_LATENCY_DROP_USEC / 1000;
+            //d_mld_ms /= 1000000.0; 
+            if(shm_conn_info->max_allowed_rtt < d_mld_ms) {
+                d_mld_ms = shm_conn_info->max_allowed_rtt;
+            }
+            d_mld_ms /= 1000.0; // to seconds
             
             //d_mld_ms += d_frtt; // ?
             //double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
