@@ -3774,23 +3774,29 @@ int assert_packet_ipv4(const char *desc, char *data, int len) {
 int compute_max_allowed_rtt() {
     int max_gsend_q = 0;
     int max_gsend_q_chan = -1;
+    int min_gsend_q = INT32_MAX;
+    int min_gsend_q_chan = -1;
     int gsq;
     int chamt = 0;
     int full_cwnd;
     struct timeval tv_tmp;
-    // TODO HERE: immunity timer
     // 1. in case of no AG - the drop is done by head channel
     // 2. in case of AG - we should take the most lagging chan+LBL
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && ((i == shm_conn_info->max_chan) || (shm_conn_info->ag_mask & (1 << i)))) {
             timersub(&info.current_time, &shm_conn_info->stats[i].agon_time, &tv_tmp);
-            if(tv2ms(&tv_tmp) <= 2*shm_conn_info->stats[i].exact_rtt) {
+            if(tv2ms(&tv_tmp) <= 2*shm_conn_info->stats[i].exact_rtt) { // switch immunity time
                 // TODO: calculate real time needed for buffer to be recalculated and received
                 continue; // immunity time for recalculate - wait for buffer to pripagate and to return new value
             }
             gsq = shm_conn_info->seq_counter - shm_conn_info->stats[i].la_sqn;
             if(max_gsend_q < gsq) {
                 max_gsend_q = gsq; 
+                max_gsend_q_chan = i;
+            }
+            if(min_gsend_q > gsq) {
+                min_gsend_q = gsq; 
+                min_gsend_q_chan = i;
             }
             chamt++;
         }
