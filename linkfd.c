@@ -970,7 +970,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int ms_passed = tv2ms(&passed_tv);
     int tokens_to_add = APCS * ms_passed / 1000;
     
-    if(tokens_to_add > 0) shm_conn_info->tokens_lastadd_tv = info.current_time;
+    if(tokens_to_add != 0) shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
     if(shm_conn_info->tokens < 0) {
         shm_conn_info->tokens = 0;
     }
@@ -6480,6 +6480,7 @@ if(drop_packet_flag) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
                                 uint32_t chan_mask = shm_conn_info->channels_mask;
                                 vtun_syslog(LOG_INFO, "zeroing counters old - %u new remote hash - %u",shm_conn_info->session_hash_remote, session_hash_remote );
+                                shm_conn_info->tokens_lastadd_tv = info.current_time;
                                 sem_post(&(shm_conn_info->AG_flags_sem));
                                 info.session_hash_remote = session_hash_remote;
                                 for (int i = 0; i < 32; i++) {
