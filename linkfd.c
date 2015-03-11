@@ -5441,7 +5441,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg); // this is actually required!
             add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
-            //add_json(js_buf, &js_cur, "wspd", "%d", shm_conn_info->write_speed); // re-implent neede to be useful
+            add_json(js_buf, &js_cur, "wspd", "%d", shm_conn_info->write_speed); // re-implent neede to be useful
             //add_json(js_buf, &js_cur, "wspd_b", "%d", shm_conn_info->write_speed_b); // not useful
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", max_ACS2); // albeit monster calculations for TODO remove;  this is the same as just 'ACS'
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
