@@ -5125,6 +5125,7 @@ int lfd_linker(void)
         if(ag_flag_local == AG_MODE) {
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
+                // here we decide on whether to hold or not to hold
                 drop_packet_flag = 0;
                 if (send_q_eff > info.rsr) {
                     if(check_drop_period_unsync()) { // Remember to have large txqueue!
@@ -5133,6 +5134,18 @@ int lfd_linker(void)
                         hold_mode = 1; // TODO WARNING here is where infinite looping occurs
                     }
                     //vtun_syslog(LOG_INFO, "AG_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d (  %d)", send_q_eff, info.rsr, send_q_limit_cubic_apply,info.send_q_limit_cubic );
+                }
+                // warning the whole block is not sync
+                if((shm_conn_info->ag_mask & (~(1 << info.process_num))) !=  // hope that ag_mask is consistent with chan_mask
+                        ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) )){ 
+                    // exclude current head from comparison (it may not be consistent about flags with mode/hold)
+                    // hold_mask is negative: 1 means send allowed
+                    hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
+                    // TODO HERE: may have problems in case of 
+                    // 1. incorrect detection of chan RSR/W
+                    // 2. channel for some reason can not reach hold (any reasons?)
+                    // 3. possible problems with HEAD detect in case there will be no packets available to send for HEAD to support top speed
+                    // may be implement a 'soft' hold for head (push other chans to top (APTT) - not by going 100% committed to hold if not pushed
                 }
             } else {
                 drop_packet_flag = 0;
