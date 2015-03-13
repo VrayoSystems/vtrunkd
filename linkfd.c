@@ -204,8 +204,10 @@ int jsSQ_cur;
 #endif
 
 #ifdef BUF_LEN_LOG
-char *jsBL_buf; // for send_q compressor
+char *jsBL_buf; // for lbl compressor
 int jsBL_cur;
+char *jsAC_buf; // for APCS_cnt compressor
+int jsAC_cur;
 #endif
 
 char lossLog[JS_MAX] = { 0 }; // for send_q compressor
@@ -3881,6 +3883,10 @@ int lfd_linker(void)
         memset(jsBL_buf, 0, JS_MAX);
         jsBL_cur = 0;
         start_json_arr(jsBL_buf, &jsBL_cur, "buf_len");
+        jsAC_buf = malloc(JS_MAX);
+        memset(jsAC_buf, 0, JS_MAX);
+        jsAC_cur = 0;
+        start_json_arr(jsAC_buf, &jsAC_cur, "pkts_in");
     #endif
     
     struct timeval MAX_REORDER_LATENCY = { 0, 50000 };
@@ -4694,6 +4700,7 @@ int lfd_linker(void)
                    //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
                    int lbl = get_lbuf_len();
                    add_json_arr(jsBL_buf, &jsBL_cur, "%d", lbl);
+                   add_json_arr(jsAC_buf, &jsAC_cur, "%d", shm_conn_info->APCS_cnt);
         #endif
            fast_update_timer(jsSQ_timer, &info.current_time);
         }
@@ -5580,6 +5587,8 @@ int lfd_linker(void)
             #ifdef BUF_LEN_LOG
             print_json_arr(jsBL_buf, &jsBL_cur);
             start_json_arr(jsBL_buf, &jsBL_cur, "buf_len");
+            print_json_arr(jsAC_buf, &jsAC_cur);
+            start_json_arr(jsAC_buf, &jsAC_cur, "pkts_in");
             #endif
             
             json_timer = info.current_time;
@@ -7914,6 +7923,7 @@ if(drop_packet_flag) {
     #endif
     #ifdef BUF_LEN_LOG
         free(jsBL_buf);
+        free(jsAC_buf);
     #endif
 
     /*memset(&sa, 0, sizeof(sigaction));
