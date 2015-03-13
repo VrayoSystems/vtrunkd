@@ -4782,7 +4782,9 @@ int lfd_linker(void)
                 shm_conn_info->idle = 0; 
             }
             */
-            shm_conn_info->max_stuck_buf_len -= 5; // drop 5 packets at a time
+            if(shm_conn_info->max_stuck_buf_len > 0) { 
+                shm_conn_info->max_stuck_buf_len -= 5; // drop 5 packets at a time
+            }
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 shm_conn_info->frtt_local_applied = 34 * shm_conn_info->frtt_local_applied / 35 + shm_conn_info->max_rtt_lag / 35;
