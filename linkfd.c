@@ -921,47 +921,50 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     struct timeval packet_dtv;
     int BPCS = 0;
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
+    struct timeval packet_wait_tv;
     //if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
     //    shm_conn_info->tokens_lastadd_tv = info.current_time;
     //    return 1;
     //}
-    int lbl = get_lbuf_len();
     
-    int tokens_in_out = lbl - shm_conn_info->max_stuck_buf_len;
+    // now check rtt
+    timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].time_stamp, &packet_wait_tv);
+    //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
+    int pktdiff = buf_len_real;
+    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].current_rtt;
+    if(packet_rtt < shm_conn_info->max_stuck_rtt) {
+        shm_conn_info->tokens = 0;
+        if(shm_conn_info->max_stuck_rtt < tv2ms(&packet_wait_tv)) {
+            shm_conn_info->max_stuck_rtt = tv2ms(&packet_wait_tv);
+        }
+        if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
+        *next_token_ms = shm_conn_info->max_stuck_rtt - packet_rtt;
+        return 0;
+    }
+    
+    int tokens_in_out = pktdiff - shm_conn_info->max_stuck_buf_len;
     if(tokens_in_out < 0) {
         tokens_in_out = 0;
     }
-    //if(full_rtt == 0) {
-        ////full_rtt = shm_conn_info->stats[max_chan].rttvar;
-    //    full_rtt = 20; // 20ms
-    //}
-    /*
-    if(APCS <= 10) { // TODO HERE: APCS_min! means this session transfer end ?!
-        shm_conn_info->max_stuck_buf_len = 0;
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        vtun_syslog(LOG_ERR, "APCS <=10 warning: flushing infspeed: %d", APCS);
-        return 1;
-    }*/
-    
-    //if((buf_len_real < 15) && (full_rtt == 0)) {
-        //shm_conn_info->tokens_lastadd_tv = info.current_time;
-        //return 1;
-    //}
-    if(buf_len_real >= 50) {
+    if(buf_len_real >= 10) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
-        if(pdms > 50) {
+        if(pdms > 50) { // TODO: is it required??
             BPCS = buf_len_real * 1000 / pdms;
             shm_conn_info->write_speed_b = BPCS;
         }
     }
     
     APCS = (APCS > BPCS ? APCS : BPCS);
-    APCS /= 5; // flush constantly with speed slower than input
-    if(APCS < 100) APCS = 100; // make minimal speed ~= 1MBit/s
+    APCS /= 2; // flush constantly with speed slower than input
+    //if(APCS < 100) APCS = 100; // make minimal speed ~= 1MBit/s
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
-    shm_conn_info->write_speed = APCS;
+    if(APCS > 0) {
+        shm_conn_info->write_speed = APCS;
+    } else {
+        APCS = shm_conn_info->write_speed; // remember last velue of APCS
+    }
     
     //APCS = shm_conn_info->write_speed_avg;
     
@@ -1099,13 +1102,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
 
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
             timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &packet_wait_tv);
-            if (forced_rtt_reached && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
-                    != (shm_conn_info->write_buf[i].last_written_seq + 1))) {
-                // packets not fully assembled before flush
-                //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - info.least_rx_seq[i];
-                int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
-                if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
-            }
+            
+            //if (forced_rtt_reached && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
+            //        != (shm_conn_info->write_buf[i].last_written_seq + 1))) {
+            //}
+            
             if (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
                     == (shm_conn_info->write_buf[i].last_written_seq + 1)) {
 #ifdef DEBUGG
@@ -2172,10 +2173,6 @@ int write_buf_check_n_flush(int logical_channel) {
     struct timeval tv;
     struct timeval since_write_tv;
     int ts;
-    forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
-    #ifdef FRTTDBG
-                vtun_syslog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
-    #endif
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
     //int buf_len = shm_conn_info->write_buf[logical_channel].frames.len; // disabled for #400
@@ -2219,6 +2216,10 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
     acnt = 0;
     if (fprev > -1) {
+        forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
+        #ifdef FRTTDBG
+        vtun_syslog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
+        #endif
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
@@ -4775,7 +4776,7 @@ int lfd_linker(void)
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-            // FAST TIMER HERE
+            // FAST TIMER HERE: 50 ticks per second
             /* 
             if( (shm_conn_info->stats[info.process_num].sqe_mean > SEND_Q_EFF_WORK) 
                     || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
@@ -4784,6 +4785,9 @@ int lfd_linker(void)
             */
             if(shm_conn_info->max_stuck_buf_len > 0) { 
                 shm_conn_info->max_stuck_buf_len -= 5; // drop 5 packets at a time
+            }
+            if(shm_conn_info->max_stuck_rtt > 0) { 
+                shm_conn_info->max_stuck_rtt -= 1; // drop 1 ms at a time
             }
             timersub(&info.current_time, &shm_conn_info->frtt_smooth_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {

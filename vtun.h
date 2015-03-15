@@ -740,6 +740,7 @@ struct conn_info {
     int min_rtt_pnum;
     int max_rtt_pnum;
     int max_stuck_buf_len;
+    int max_stuck_rtt;
     int lbuf_len_recv; // received lbuf_len
 #ifdef SHM_DEBUG
     char void13[4096];
