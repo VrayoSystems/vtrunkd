@@ -5491,7 +5491,9 @@ int lfd_linker(void)
             info.max_latency_us = 0;
             //add_json(js_buf, &js_cur, "plp2", "%d", cur_plp);
             //add_json(js_buf, &js_cur, "plp2u", "%d", cur_plp_unrec);
-            add_json(js_buf, &js_cur, "plp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
+            add_json(js_buf, &js_cur, "lplp", "%d", shm_conn_info->stats[info.process_num].l_pbl);
+            add_json(js_buf, &js_cur, "plp", "%d", plp_avg_pbl_unrecoverable(info.process_num)); // this one is actually used
+            
             //add_json(js_buf, &js_cur, "rplp", "%d", info.i_rplp);
             //add_json(js_buf, &js_cur, "frtt_Pus", "%d", shm_conn_info->frtt_ms);
             add_json(js_buf, &js_cur, "MAR", "%d", shm_conn_info->max_allowed_rtt);
