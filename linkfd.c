@@ -926,18 +926,27 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     //    shm_conn_info->tokens_lastadd_tv = info.current_time;
     //    return 1;
     //}
-    
+
+    int pktdiff = buf_len_real; // current diff is just the real buf_len
     // now check rtt
     timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].time_stamp, &packet_wait_tv);
-    //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
-    int pktdiff = buf_len_real;
-    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].current_rtt;
-    if(packet_rtt < shm_conn_info->max_stuck_rtt) {
-        shm_conn_info->tokens = 0;
+
+    // detect stuck condition
+    // stuck means that we are not allowed to drop due to packet not available
+    // whenever we have no packet to drop - we are stuck - even if it is not the time to drop yet
+
+    if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].seq_num
+            != (shm_conn_info->write_buf[chan_num].last_written_seq + 1)) {
         if(shm_conn_info->max_stuck_rtt < tv2ms(&packet_wait_tv)) {
             shm_conn_info->max_stuck_rtt = tv2ms(&packet_wait_tv);
         }
         if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
+    }
+        
+    //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
+    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].current_rtt;
+    if(packet_rtt < shm_conn_info->max_stuck_rtt) {
+        shm_conn_info->tokens = 0;
         *next_token_ms = shm_conn_info->max_stuck_rtt - packet_rtt;
         return 0;
     }
@@ -5448,6 +5457,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "frtt_appl", "%d", info.frtt_us_applied);
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
             add_json(js_buf, &js_cur, "msbl", "%d", shm_conn_info->max_stuck_buf_len);
+            add_json(js_buf, &js_cur, "msrt", "%d", shm_conn_info->max_stuck_rtt);
             //add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted); // used for PROTUP only...
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             //add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
