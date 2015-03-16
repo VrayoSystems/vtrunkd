@@ -133,7 +133,8 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 8// was 4
 #define RSR_TOP 2990000 // now infinity...
-#define PLP_UNRECOVERABLE_CUTOFF 1000 // in theory about 50 mbit/s at 20ms 
+// TODO HERE: TCP Model requried ---vvv
+#define PLP_UNRECOVERABLE_CUTOFF 10000 // in theory about 50 mbit/s at 20ms  // was 1000 - 1000 is okay for like rtt 20ms but not for 100ms
 #define PSL_RECOVERABLE 2 // we can recover this amount of loss
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
@@ -925,10 +926,10 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int BPCS = 0;
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
     struct timeval packet_wait_tv;
-    //if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
-    //    shm_conn_info->tokens_lastadd_tv = info.current_time;
-    //    return 1;
-    //}
+    if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
 
     int pktdiff = buf_len_real; // current diff is just the real buf_len
     // now check rtt
