@@ -911,6 +911,9 @@ int check_rtt_latency_drop_chan(int chan_num) {
     
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     // TODO: may be sync on write_buf is required??
+    if(chan_num != 1) {
+        return 1; // for all other chans (e.g. 0-service channel) return drop allowed
+    }
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
