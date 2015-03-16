@@ -980,8 +980,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     } else {
         APCS = shm_conn_info->write_speed; // remember last velue of APCS
     }
+    if(APCS == 0) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
+        return 1;
+    }
     
-    //APCS = shm_conn_info->write_speed_avg;
     
     // now do add some tokens ?
     
