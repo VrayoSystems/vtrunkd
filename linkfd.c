@@ -4792,8 +4792,10 @@ int lfd_linker(void)
                 shm_conn_info->idle = 0; 
             }
             */
-            if(shm_conn_info->max_stuck_buf_len > 0) { 
-                shm_conn_info->max_stuck_buf_len -= 5; // drop 5 packets at a time
+            if(shm_conn_info->max_stuck_buf_len >= 5) { 
+                shm_conn_info->max_stuck_buf_len -= 1; // drop 5 packets at a time
+            } else {
+                shm_conn_info->max_stuck_buf_len = 0;
             }
             if(shm_conn_info->max_stuck_rtt > 0) { 
                 shm_conn_info->max_stuck_rtt -= 1; // drop 1 ms at a time
