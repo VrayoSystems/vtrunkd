@@ -5544,6 +5544,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             //add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag - can be inferred from txa
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
+#ifndef CLIENTONLY
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full/1024); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
@@ -5565,14 +5566,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "PL", "%d", ag_stat.PL);
             //add_json(js_buf, &js_cur, "Xi", "%d", !shm_conn_info->stats[info.process_num].brl_ag_enabled);
             memset((void *)&ag_stat, 0, sizeof(ag_stat));
-            skip=0;
-            if(PCS == 0 && PCS_aux != 0) {
-                vtun_syslog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
-            }
-            PCS = 0; // WARNING! chan amt=1 hard-coded here!
-            PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
-            info.fast_pcs_old=0;
-            // bandwidth utilization extimation experiment
+           // bandwidth utilization extimation experiment
             //add_json(js_buf, &js_cur, "bdp", "%d", tv2ms(&shm_conn_info->stats[info.process_num].bdp1));
             /*
             int exact_rtt = (info.rtt2 < info.rtt ? info.rtt2 : info.rtt);
@@ -5635,6 +5629,14 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "lalsn[1]", "%lu", info.channel[1].packet_seq_num_acked);
             add_json(js_buf, &js_cur, "lasqn?", "%lu", shm_conn_info->stats[info.process_num].la_sqn);
             add_json(js_buf, &js_cur, "ver", "\"%s\"", VERSION);
+#endif
+            skip=0;
+            if(PCS == 0 && PCS_aux != 0) {
+                vtun_syslog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
+            }
+            PCS = 0; // WARNING! chan amt=1 hard-coded here!
+            PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
+            info.fast_pcs_old=0;
             
             print_json(js_buf, &js_cur);
 #endif
