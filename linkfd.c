@@ -937,11 +937,13 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     // detect stuck condition
     // stuck means that we are not allowed to drop due to packet not available
     // whenever we have no packet to drop - we are stuck - even if it is not the time to drop yet
+    int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
 
     if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].seq_num
             != (shm_conn_info->write_buf[chan_num].last_written_seq + 1)) {
-        if(shm_conn_info->max_stuck_rtt < tv2ms(&packet_wait_tv)) {
-            shm_conn_info->max_stuck_rtt = tv2ms(&packet_wait_tv);
+        int packet_lag = tv2ms(&packet_wait_tv);
+        if(shm_conn_info->max_stuck_rtt < packet_lag && packet_lag < max_total_rtt){
+            shm_conn_info->max_stuck_rtt = packet_lag;
         }
         if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
     }
@@ -3716,6 +3718,38 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
     }
 }
 
+int set_rttlag_total() { 
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    int min_rtt = INT32_MAX;
+    int min_rtt_var = INT32_MAX;
+    int min_rtt_chan = shm_conn_info->max_chan;
+    int max_rtt = 0;
+    int max_rtt_var = 0;
+    int max_rtt_chan = shm_conn_info->max_chan;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        // TODO HERE: WARNING: here we determine max allowed channels latency difference as MLD*2 milliseconds (see #659)
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && 
+                (shm_conn_info->stats[i].exact_rtt - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt < MAX_LATENCY_DROP_USEC/500)) { // get total possible lag
+            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                min_rtt = shm_conn_info->stats[i].exact_rtt;
+                min_rtt_var = shm_conn_info->stats[i].rttvar;
+                min_rtt_chan = i;
+            }
+
+            if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                max_rtt = shm_conn_info->stats[i].exact_rtt;
+                max_rtt_var = shm_conn_info->stats[i].rttvar;
+                max_rtt_chan = i;
+            }
+        }
+    }
+    shm_conn_info->total_min_rtt = min_rtt;
+    shm_conn_info->total_min_rtt_var = min_rtt_var;
+    shm_conn_info->total_max_rtt = max_rtt;
+    shm_conn_info->total_max_rtt_var = max_rtt_var;
+    vtun_syslog(LOG_INFO, "computed max_rtt: %d, max_rtt_var: %d, min_rtt %d, min_rtt_var: %d", max_rtt, max_rtt_var, min_rtt, min_rtt_var);
+}
+
 int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
     // Search write_buf for lost seq_num
     int ms_token;
@@ -4788,7 +4822,8 @@ int lfd_linker(void)
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-            // FAST TIMER HERE: 50 ticks per second
+            // FAST TIMER HERE: 20 ticks per second
+            // #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
             /* 
             if( (shm_conn_info->stats[info.process_num].sqe_mean > SEND_Q_EFF_WORK) 
                     || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
@@ -5300,6 +5335,7 @@ int lfd_linker(void)
         if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 500000}), >=)) {
             int json_ms = tv2ms(&tv_tmp_tmp_tmp);
             set_rttlag();
+            set_rttlag_total();
             if(shm_conn_info->max_rtt_lag > shm_conn_info->frtt_local_applied) {
                 //shm_conn_info->frtt_local_applied = shm_conn_info->max_rtt_lag;
                 shm_conn_info->frtt_local_applied = (5 * shm_conn_info->frtt_local_applied + shm_conn_info->max_rtt_lag) / 6;
