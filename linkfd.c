@@ -5603,19 +5603,7 @@ int lfd_linker(void)
                 }
             }                
             //add_json(js_buf, &js_cur, "loss_out", "%d", lmax); // never used, dunno if works
-            int Ch = 0;
-            int Cs = 0;
-            sem_wait(&(shm_conn_info->stats_sem));
-            max_chan = shm_conn_info->max_chan;
-            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
-                Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
-                Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
-            }
-            sem_post(&(shm_conn_info->stats_sem));
             
-            //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
-            //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
-
             // now get slope
             //int slope = get_slope(&smalldata);
             //add_json(js_buf, &js_cur, "slope", "%d", slope);
@@ -5630,6 +5618,21 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "lasqn?", "%lu", shm_conn_info->stats[info.process_num].la_sqn);
             add_json(js_buf, &js_cur, "ver", "\"%s\"", VERSION);
 #endif
+            int Ch = 0;
+            int Cs = 0;
+            sem_wait(&(shm_conn_info->stats_sem));
+            max_chan = shm_conn_info->max_chan;
+            /*
+            if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
+                Ch = 100*shm_conn_info->stats[info.process_num].srtt2_10/shm_conn_info->stats[max_chan].srtt2_10;
+                Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
+            }
+            */
+            sem_post(&(shm_conn_info->stats_sem));
+            
+            //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
+            //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
+
             skip=0;
             if(PCS == 0 && PCS_aux != 0) {
                 vtun_syslog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
