@@ -3843,7 +3843,7 @@ int compute_max_allowed_rtt() {
                 // TODO: calculate real time needed for buffer to be recalculated and received
                 continue; // immunity time for recalculate - wait for buffer to pripagate and to return new value
             }
-            gsq = shm_conn_info->seq_counter - shm_conn_info->stats[i].la_sqn;
+            gsq = shm_conn_info->seq_counter[1] - shm_conn_info->stats[i].la_sqn;
             if(max_gsend_q < gsq) {
                 max_gsend_q = gsq; 
                 max_gsend_q_chan = i;
@@ -5562,6 +5562,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
             
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[i].la_sqn));
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
