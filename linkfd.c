@@ -953,6 +953,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].current_rtt;
     if(packet_rtt < shm_conn_info->max_stuck_rtt) {
         shm_conn_info->tokens = 0;
+        if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff; // TODO: use unconditoinal set or not??
         *next_token_ms = shm_conn_info->max_stuck_rtt - packet_rtt;
         return 0;
     }
