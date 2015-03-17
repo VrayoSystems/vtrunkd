@@ -5560,7 +5560,10 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             //add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag - can be inferred from txa
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
+            
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
+            add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full/1024); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
