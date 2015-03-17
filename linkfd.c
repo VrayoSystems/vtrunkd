@@ -3862,6 +3862,7 @@ int compute_max_allowed_rtt() {
         full_cwnd = max_gsend_q;
     }
     int spd = shm_conn_info->tpps;
+    shm_conn_info->full_cwnd = full_cwnd;
     if(spd == 0) return 0;
     int max_frtt = full_cwnd * 1000 / spd; // in ms
     return max_frtt;
@@ -5563,6 +5564,7 @@ int lfd_linker(void)
             
 #ifndef CLIENTONLY
             add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[i].la_sqn));
+            add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode

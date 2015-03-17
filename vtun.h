@@ -746,6 +746,7 @@ struct conn_info {
     int total_max_rtt_var;
     int total_min_rtt;
     int total_min_rtt_var;
+    int full_cwnd;
     struct timeval msbl_tick;
     struct timeval msrt_tick;
 #ifdef SHM_DEBUG
