@@ -4750,8 +4750,9 @@ int lfd_linker(void)
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
         #ifdef BUF_LEN_LOG
                    //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
-                   int lbl = get_lbuf_len();
-                   add_json_arr(jsBL_buf, &jsBL_cur, "%d", lbl);
+                   //int lbl = get_lbuf_len();
+                   int buf_len_real = shm_conn_info->write_buf[1].frames.length;
+                   add_json_arr(jsBL_buf, &jsBL_cur, "%d", buf_len_real);
                    add_json_arr(jsAC_buf, &jsAC_cur, "%d", shm_conn_info->APCS_cnt);
         #endif
            fast_update_timer(jsSQ_timer, &info.current_time);
