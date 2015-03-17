@@ -943,10 +943,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].seq_num
             != (shm_conn_info->write_buf[chan_num].last_written_seq + 1)) {
         int packet_lag = tv2ms(&packet_wait_tv);
-        if(shm_conn_info->max_stuck_rtt < packet_lag && packet_lag < max_total_rtt){
-            shm_conn_info->max_stuck_rtt = packet_lag;
-        }
-        if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
+        // TODO: unused as this method resulted to failure
+        // we should rather use this info to continue to smoothly push up the value
+        //if(shm_conn_info->max_stuck_rtt < packet_lag && packet_lag < max_total_rtt){
+        //    shm_conn_info->max_stuck_rtt = packet_lag;
+        //}
+        //if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
     }
         
     //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
@@ -4849,10 +4851,18 @@ int lfd_linker(void)
             }
             
             timersub(&info.current_time, &shm_conn_info->msrt_tick, &tv_tmp_tmp_tmp);
-            if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC*4 }), >=)) {
-                if(shm_conn_info->max_stuck_rtt > 0) { 
-                    shm_conn_info->max_stuck_rtt -= 1; // drop 1 ms at a time
+            if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
+                if(shm_conn_info->idle) {
+                    if(shm_conn_info->max_stuck_rtt > 0) { 
+                        shm_conn_info->max_stuck_rtt -= 1; // drop 1 ms at a time
+                    }
+                } else {
+                    int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
+                    if(shm_conn_info->max_stuck_rtt < max_total_rtt) {
+                        shm_conn_info->max_stuck_rtt += 1;
+                    }
                 }
+                    
                 shm_conn_info->msrt_tick = info.current_time;
             }
             
