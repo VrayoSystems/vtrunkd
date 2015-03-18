@@ -749,6 +749,7 @@ struct conn_info {
     int full_cwnd;
     struct timeval msbl_tick;
     struct timeval msrt_tick;
+    int tokens_in_out;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

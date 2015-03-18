@@ -911,6 +911,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
 
     
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
+    shm_conn_info->tokens_in_out = 0;
     // TODO: may be sync on write_buf is required??
     if(chan_num != 1) {
         return 1; // for all other chans (e.g. 0-service channel) return drop allowed
@@ -933,7 +934,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
 
     int pktdiff = buf_len_real; // current diff is just the real buf_len
     // now check rtt
-    timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].time_stamp, &packet_wait_tv);
+    timersub(&info.current_time, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_wait_tv);
 
     // detect stuck condition
     // stuck means that we are not allowed to drop due to packet not available
@@ -952,7 +953,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
         
     //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
-    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].current_rtt;
+    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[head_idx].current_rtt;
     if(packet_rtt < shm_conn_info->max_stuck_rtt) {
         shm_conn_info->tokens = 0;
         if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff; // TODO: use unconditoinal set or not??
@@ -964,6 +965,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(tokens_in_out < 0) {
         tokens_in_out = 0;
     }
+    shm_conn_info->tokens_in_out = tokens_in_out;
     if(buf_len_real >= 10) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -4860,7 +4862,7 @@ int lfd_linker(void)
                     //int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
                     int rhd = shm_conn_info->remote_head_pnum;
                     int max_total_rtt = shm_conn_info->stats[rhd].exact_rtt * RTT_THRESHOLD_MULTIPLIER;
-                    if(shm_conn_info->max_stuck_rtt < max_total_rtt) {
+                    if(shm_conn_info->max_stuck_rtt < max_total_rtt && shm_conn_info->tokens_in_out > 0) {
                         shm_conn_info->max_stuck_rtt += 1;
                     }
                 }
