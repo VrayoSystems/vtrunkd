@@ -118,7 +118,7 @@ struct my_ip {
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 //#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
 #define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
-#define RTT_THRESHOLD_MULTIPLIER 5 // cut-off by RTT only
+#define RTT_THRESHOLD_MULTIPLIER 3 // cut-off by RTT only
 #define RTT_THRESHOLD_GOOD 50 // cut-off by RTT ms
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
@@ -4857,7 +4857,9 @@ int lfd_linker(void)
                         shm_conn_info->max_stuck_rtt -= 1; // drop 1 ms at a time
                     }
                 } else {
-                    int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
+                    //int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
+                    int rhd = shm_conn_info->remote_head_pnum;
+                    int max_total_rtt = shm_conn_info->stats[rhd].exact_rtt * RTT_THRESHOLD_MULTIPLIER;
                     if(shm_conn_info->max_stuck_rtt < max_total_rtt) {
                         shm_conn_info->max_stuck_rtt += 1;
                     }
