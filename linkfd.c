@@ -3828,8 +3828,7 @@ int assert_packet_ipv4(const char *desc, char *data, int len) {
     return 1;
 }
 
-
-int compute_max_allowed_rtt() {
+int get_cwnd() {
     int max_gsend_q = 0;
     int max_gsend_q_chan = -1;
     int min_gsend_q = INT32_MAX;
@@ -3865,6 +3864,11 @@ int compute_max_allowed_rtt() {
     } else {
         full_cwnd = max_gsend_q;
     }
+    return full_cwnd;
+}
+
+int compute_max_allowed_rtt() {
+    int full_cwnd = get_cwnd();
     int spd = shm_conn_info->tpps;
     shm_conn_info->full_cwnd = full_cwnd;
     if(spd == 0) return 0;
@@ -4698,6 +4702,22 @@ int lfd_linker(void)
         } 
 #endif
         // <<< END SEND_Q_EFF CALC
+        
+        // SLOW START DETECTOR >>>
+        sem_wait(&(shm_conn_info->write_buf_sem));
+        int gsq = get_cwnd();
+        info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
+        if(shm_conn_info->ssd_pkts_sent >= 50) {
+            if(info.gsend_q_grow >= 40) {
+                shm_conn_info->slow_start = 1;
+            } else {
+                shm_conn_info->slow_start = 0;
+            }
+            shm_conn_info->ssd_pkts_sent = 0;
+            shm_conn_info->ssd_gsq_old = gsq;
+        }
+        sem_post(&(shm_conn_info->write_buf_sem));
+        // <<< END
         
 
                 
@@ -5581,6 +5601,8 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
             
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "gsq_grw", "%d", info.gsend_q_grow);
+            add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
             add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[i].la_sqn));
             add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);

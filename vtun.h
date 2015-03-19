@@ -607,6 +607,7 @@ struct phisical_status { // A.K.A. "info"
     int select_immediate; /** immediate select times counter */
     int Wmax_saved;
     struct timeval Wmax_tv;
+    int gsend_q_grow;
 };
 
 #define LOSS_ARRAY 80
@@ -750,6 +751,9 @@ struct conn_info {
     struct timeval msbl_tick;
     struct timeval msrt_tick;
     int tokens_in_out;
+    int ssd_gsq_old;
+    int ssd_pkts_sent;
+    int slow_start;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
