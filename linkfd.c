@@ -962,6 +962,10 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     int tokens_in_out = pktdiff - shm_conn_info->max_stuck_buf_len;
+    if(shm_conn_info->slow_start_recv) {
+        shm_conn_info->max_stuck_buf_len += shm_conn_info->write_buf[chan_num].last_written_seq - shm_conn_info->write_buf[chan_num].wr_lws;
+        shm_conn_info->write_buf[chan_num].wr_lws = shm_conn_info->write_buf[chan_num].last_written_seq;
+    }
     if(tokens_in_out < 0) {
         tokens_in_out = 0;
     }
@@ -4713,6 +4717,10 @@ int lfd_linker(void)
             } else {
                 shm_conn_info->slow_start = 0;
             }
+            if(shm_conn_info->slow_start != shm_conn_info->slow_start_prev) {
+                need_send_FCI = 1;
+                shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
+            }
             shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
             shm_conn_info->ssd_gsq_old = gsq;
         }
@@ -5600,6 +5608,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag - can be inferred from txa
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
             
+            add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
 #ifndef CLIENTONLY
             add_json(js_buf, &js_cur, "gsq_grw", "%d", info.gsend_q_grow);
             add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
@@ -5832,6 +5841,8 @@ int lfd_linker(void)
                 memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
+                tmp16_n = htons(shm_conn_info->slow_start); 
+                memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -5839,7 +5850,7 @@ int lfd_linker(void)
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((9 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -5947,6 +5958,8 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
+                    tmp16_n = htons(shm_conn_info->slow_start); 
+                    memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -5955,7 +5968,7 @@ int lfd_linker(void)
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((9 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
 
                     if (len_ret < 0) {
@@ -7062,6 +7075,8 @@ if(drop_packet_flag) {
                             shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t)); 
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
+                            memcpy(&tmp16_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t)); 
+                            shm_conn_info->slow_start_recv = ntohl(tmp16_n);
                             // now recalculate MAR is possible...
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?

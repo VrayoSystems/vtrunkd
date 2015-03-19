@@ -309,6 +309,7 @@ struct _write_buf {
     //struct frame_llist free_frames; /* init all elements here */
     struct frame_llist now; // maybe unused
     unsigned long last_written_seq; // last pack number has written into device
+    unsigned long wr_lws; // last pack number has written into device
     unsigned long last_received_seq[MAX_TCP_PHYSICAL_CHANNELS]; // max of 30 physical channels
     unsigned long last_received_seq_shadow[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
     unsigned long possible_seq_lost[MAX_TCP_PHYSICAL_CHANNELS]; // used for max_reorder
@@ -754,6 +755,8 @@ struct conn_info {
     int ssd_gsq_old;
     int ssd_pkts_sent;
     int slow_start;
+    int slow_start_recv;
+    int slow_start_prev;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
