@@ -4707,13 +4707,13 @@ int lfd_linker(void)
         sem_wait(&(shm_conn_info->write_buf_sem));
         int gsq = get_cwnd();
         info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
-        if(shm_conn_info->ssd_pkts_sent >= 50) {
+        if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
             if(info.gsend_q_grow >= 40) {
                 shm_conn_info->slow_start = 1;
             } else {
                 shm_conn_info->slow_start = 0;
             }
-            shm_conn_info->ssd_pkts_sent = 0;
+            shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
             shm_conn_info->ssd_gsq_old = gsq;
         }
         sem_post(&(shm_conn_info->write_buf_sem));
