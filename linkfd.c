@@ -6855,7 +6855,7 @@ if(drop_packet_flag) {
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
                                 //if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) { // this is for fairness model #407
-                                if(psl <= 2) {
+                                if(psl <= 20) {
                                     // now find chan with smallest RTT
                                     int min_rtt = INT32_MAX;
                                     int min_rtt_chan = 0;
@@ -6869,23 +6869,10 @@ if(drop_packet_flag) {
                                     }
                                     if(min_rtt_chan == info.process_num) {
                                         // now do retransmit
-                                        sem_wait(&(shm_conn_info->resend_buf_sem));
                                         int mypid;
-                                        int len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
-                                        if (len == -1) {
-                                            vtun_syslog(LOG_ERR, "WARNING could not retransmit packet %lu - not found", sqn);
-                                            sem_post(&(shm_conn_info->resend_buf_sem));
-                                        } else {
-                                            memcpy(out_buf, out2, len);
-                                            sem_post(&(shm_conn_info->resend_buf_sem));
-                                            vtun_syslog(LOG_INFO, "resending packet %lu len %d", sqn, len);
-                                            assert_packet_ipv4("resend1", out2, len);
-                                           send_packet(1, out_buf, len);
-                                        }
-                                        if(psl == 2) {
-                                            sqn++; 
+                                        for(uint32_t sqn_s = sqn; sqn_s < sqn + psl; sqn_s++) {
                                             sem_wait(&(shm_conn_info->resend_buf_sem));
-                                            len = get_resend_frame_unconditional(1, &sqn, &out2, &mypid);
+                                            len = get_resend_frame_unconditional(1, &sqn_s, &out2, &mypid);
                                             if (len == -1) {
                                                 vtun_syslog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
