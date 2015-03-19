@@ -607,7 +607,6 @@ struct phisical_status { // A.K.A. "info"
     int select_immediate; /** immediate select times counter */
     int Wmax_saved;
     struct timeval Wmax_tv;
-    int send_q_eff_previous;
 };
 
 #define LOSS_ARRAY 80

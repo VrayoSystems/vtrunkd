@@ -4688,22 +4688,6 @@ int lfd_linker(void)
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass : 0;
-        if(ag_flag_local == AG_MODE && !info.head_channel) {
-            if(send_q_eff < info.send_q_eff_previous && !hold_mode && agag > 195) {
-                struct timeval hold_period, tv_agsub, tv_rtt;
-                ms2tv(&tv_rtt, info.exact_rtt);
-                timersub(&info.current_time, &info.hold_time, &hold_period);
-                if(timercmp(&hold_period, &tv_rtt, >=)) { 
-                    // Means we have packet deficit
-                    ptt_allow_once = 1;
-                    struct timeval tv_agsub;
-                    // 2550 ms to full AG, so if we plan to set agag to 200 - we need to shift time to 2000 ms back
-                    ms2tv(&tv_agsub, 2000);
-                    timersub(&info.current_time, &tv_agsub, &agon_time);
-                }
-            }
-        }
-        info.send_q_eff_previous = send_q_eff;
 #ifdef DEBUGG
         if(drop_packet_flag) {
         vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
