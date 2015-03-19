@@ -3931,7 +3931,11 @@ int lfd_linker(void)
         memset(jsSQ_buf, 0, JS_MAX);
         jsSQ_cur = 0;
         struct timer_obj *jsSQ_timer = create_timer();
+        #ifdef CLIENTONLY
+        struct timeval t1 = { 0, 1000}; // this time is crucial to detect send_q dops in case of long hold
+        #else
         struct timeval t1 = { 0, 300 }; // this time is crucial to detect send_q dops in case of long hold
+        #endif
         set_timer(jsSQ_timer, &t1);
         start_json_arr(jsSQ_buf, &jsSQ_cur, "send_q");
     #endif
