@@ -757,6 +757,8 @@ struct conn_info {
     int slow_start;
     int slow_start_recv;
     int slow_start_prev;
+    int slow_start_allowed;
+    struct timeval slow_start_tv;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

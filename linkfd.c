@@ -4709,15 +4709,30 @@ int lfd_linker(void)
         
         // SLOW START DETECTOR >>>
         sem_wait(&(shm_conn_info->write_buf_sem));
+        struct timeval ss_runtime;
+        struct timeval ss_immune = {0, 100000};
+        struct timeval ss_max_run = {0, 500000};
+        timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
+        shm_conn_info->slow_start_allowed = 1;
+        if(timercmp(&ss_runtime, &ss_max_run, >=)) {
+            shm_conn_info->slow_start_allowed = 0;
+        }
+        if(timercmp(&ss_runtime, &ss_immune, >=)) {
+            shm_conn_info->slow_start_allowed = 1;
+        }
+            
         int gsq = get_cwnd();
         info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
         if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
-            if(info.gsend_q_grow >= 40) {
+            if(info.gsend_q_grow >= 40 && shm_conn_info->slow_start_allowed) {
                 shm_conn_info->slow_start = 1;
             } else {
                 shm_conn_info->slow_start = 0;
             }
             if(shm_conn_info->slow_start != shm_conn_info->slow_start_prev) {
+                if(shm_conn_info->slow_start) {
+                    shm_conn_info->slow_start_tv = info.current_time;
+                }
                 need_send_FCI = 1;
                 shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
             }
