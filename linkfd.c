@@ -962,12 +962,14 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     
     int tokens_in_out = pktdiff - shm_conn_info->max_stuck_buf_len;
-    if(shm_conn_info->slow_start_recv) {
-        shm_conn_info->max_stuck_buf_len += shm_conn_info->write_buf[chan_num].last_written_seq - shm_conn_info->write_buf[chan_num].wr_lws;
-        shm_conn_info->write_buf[chan_num].wr_lws = shm_conn_info->write_buf[chan_num].last_written_seq;
-    }
     if(tokens_in_out < 0) {
         tokens_in_out = 0;
+    }
+    if(shm_conn_info->slow_start_recv) {
+        if(tokens_in_out) {
+            shm_conn_info->max_stuck_buf_len += 1;
+        }
+        //shm_conn_info->write_buf[chan_num].wr_lws = shm_conn_info->write_buf[chan_num].last_written_seq;
     }
     shm_conn_info->tokens_in_out = tokens_in_out;
     if(buf_len_real >= 10) {
