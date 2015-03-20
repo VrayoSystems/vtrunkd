@@ -916,6 +916,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(chan_num != 1) {
         return 1; // for all other chans (e.g. 0-service channel) return drop allowed
     }
+    int ms_for_token = 1; 
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     int APCS = shm_conn_info->APCS;
     int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
@@ -986,14 +987,18 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     //if(APCS < 100) APCS = 100; // make minimal speed ~= 1MBit/s
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
-    if(APCS > 0) {
-        shm_conn_info->write_speed = APCS;
+    if(shm_conn_info->slow_start_recv) {
+        APCS = 0;
     } else {
-        APCS = shm_conn_info->write_speed; // remember last velue of APCS
-    }
-    if(APCS == 0) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
-        return 1;
+        if(APCS > 0) {
+            shm_conn_info->write_speed = APCS;
+        } else {
+            APCS = shm_conn_info->write_speed; // remember last velue of APCS
+        }
+        if(APCS == 0) {
+            shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
+            return 1;
+        }
     }
     
     
@@ -1016,7 +1021,11 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
-        int ms_for_token = 1000 / APCS;
+        if(APCS == 0) { // i=n caseof ss
+            ms_for_token = 50; // ms before packet drop? (zero speed)
+        } else {
+            ms_for_token = 1000 / APCS;
+        }
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
         *next_token_ms = ms_for_token;
         return 0;
