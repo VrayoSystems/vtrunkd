@@ -5197,7 +5197,9 @@ int lfd_linker(void)
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
         //ag_flag_local = R_MODE;
-
+        if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
+            ag_flag_local = AG_MODE;
+        }
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
         } else {
