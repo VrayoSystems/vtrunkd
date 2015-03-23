@@ -4735,7 +4735,7 @@ int lfd_linker(void)
         int gsq = get_cwnd();
         info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
         if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
-            if(info.gsend_q_grow >= 30 && info.send_q_grow < 100 && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
+            if(info.gsend_q_grow >= 30 && info.gsend_q_grow < 100 && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
                 shm_conn_info->slow_start = 1;
             } else {
                 shm_conn_info->slow_start = 0;
