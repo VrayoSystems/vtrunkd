@@ -3173,6 +3173,7 @@ int set_IDLE() {
         shm_conn_info->idle = 0; 
     } else {
         shm_conn_info->idle = 1;
+        shm_conn_info->slow_start = 0;
     }
     
     if(shm_conn_info->idle) {
@@ -4727,6 +4728,10 @@ int lfd_linker(void)
         shm_conn_info->slow_start_allowed = 1;
         if(timercmp(&ss_runtime, &ss_max_run, >=)) {
             shm_conn_info->slow_start_allowed = 0;
+            if(shm_conn_info->slow_start) {
+                shm_conn_info->slow_start = 0;
+                need_send_FCI = 1;
+            }
         }
         if(timercmp(&ss_runtime, &ss_immune, >=)) {
             shm_conn_info->slow_start_allowed = 1;
@@ -5192,9 +5197,6 @@ int lfd_linker(void)
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
         //ag_flag_local = R_MODE;
-        if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
-            ag_flag_local = AG_MODE;
-        }
 
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
