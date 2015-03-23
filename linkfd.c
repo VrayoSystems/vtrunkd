@@ -5192,7 +5192,7 @@ int lfd_linker(void)
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
         //ag_flag_local = R_MODE;
-        if(info.head_channel) {
+        if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
 
