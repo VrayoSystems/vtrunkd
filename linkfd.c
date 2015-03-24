@@ -988,7 +988,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
    
     //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
     if(shm_conn_info->slow_start_recv) {
-        APCS = 0;
+        //APCS = 0; // we should never do a STUCK in write!
     } else {
         if(APCS > 0) {
             shm_conn_info->write_speed = APCS;
