@@ -1809,6 +1809,7 @@ int select_net_write(chan_num) {
  *
  */
 int select_devread_send(char *buf, char *out2) {
+    if(hold_mode) return TRYWAIT_NOTIFY; // no send in HOLD
     int len, len_sum, select_ret, idx;
     uint32_t tmp_seq_counter = 0;
     int chan_num;
