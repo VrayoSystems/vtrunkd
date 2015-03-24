@@ -5397,7 +5397,12 @@ int lfd_linker(void)
         shm_conn_info->stats[info.process_num].hold = hold_mode;
         sem_post(&(shm_conn_info->stats_sem));
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
-        if(hold_mode == 1) was_hold_mode = 1; // for JSON ONLY!
+        if(hold_mode == 1) {
+            was_hold_mode = 1; // for JSON ONLY!
+            info.whm_send_q = send_q_eff;
+            info.whm_cubic = send_q_limit_cubic_apply;
+            info.whm_rsr = info.rsr;
+        }
         
         /*
         if (fast_check_timer(packet_speed_timer, &info.current_time)) { // TODO: Disabled?! Incorrect operation - see code at JSON 0.5s
@@ -5644,6 +5649,10 @@ int lfd_linker(void)
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "wS", "%d", info.whm_send_q);
+            add_json(js_buf, &js_cur, "wC", "%d", info.whm_cubic);
+            add_json(js_buf, &js_cur, "wR", "%d", info.whm_rsr);
+
             add_json(js_buf, &js_cur, "gsq_grw", "%d", info.gsend_q_grow);
             add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
             add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[i].la_sqn));

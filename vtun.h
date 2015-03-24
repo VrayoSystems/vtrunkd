@@ -609,6 +609,9 @@ struct phisical_status { // A.K.A. "info"
     int Wmax_saved;
     struct timeval Wmax_tv;
     int gsend_q_grow;
+    int whm_cubic;
+    int whm_rsr;
+    int whm_send_q;
 };
 
 #define LOSS_ARRAY 80
