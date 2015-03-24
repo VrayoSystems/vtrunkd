@@ -195,7 +195,7 @@ char *js_buf_fl;
 int js_cur, js_cur_fl;
 
 
-#define PUSH_TO_TOP 5 // push Nth packet, 0 to disable
+#define PUSH_TO_TOP 2 // push Nth packet, 0 to disable
 #define SEND_Q_LOG
 #define BUF_LEN_LOG
 
