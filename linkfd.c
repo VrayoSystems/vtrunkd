@@ -156,7 +156,7 @@ struct my_ip {
 #define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
-#define HEAD_REDETECT_HYSTERESIS_TV {1,300000} // timeval (interval) for chan speed redetect
+#define HEAD_REDETECT_HYSTERESIS_TV {0,800000} // timeval (interval) for chan speed redetect
 #define SPEED_REDETECT_IMMUNE_SEC 5 // (interval seconds) before next auto-redetection can occur after PROTUP - added to above timer!
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
