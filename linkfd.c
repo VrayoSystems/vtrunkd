@@ -2649,7 +2649,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     }
     int tcp_seq = getTcpSeq(out);
     int tcp_seq2 = 0;
-    unsigned int hash = get_tcp_hash(out, tcp_seq2);
+    unsigned int hash = get_tcp_hash(out, &tcp_seq2);
     if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq > tcp_seq) {
         struct timeval tv_tmp;
         timersub(&info.current_time, &shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts, &tv_tmp);
