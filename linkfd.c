@@ -1369,7 +1369,7 @@ unsigned int get_tcp_hash(char *buf, int *tcp_seq) {
         tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
         hash += tcp->source;
         hash += tcp->dest;
-        *tcp_seq = tcp->seq;
+        *tcp_seq = ntohl(tcp->seq);
     }
     if (ip->ip_p == 17) { // UDP...
         udp = (struct udphdr*) (buf + sizeof(struct my_ip));
