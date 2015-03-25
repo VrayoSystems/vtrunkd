@@ -36,6 +36,7 @@
 #include <syslog.h>
 #include <errno.h>
 #include <math.h>
+#include <netinet/tcp.h>
 
 #include "vtun.h"
 #include "linkfd.h"
@@ -45,6 +46,23 @@ volatile sig_atomic_t __io_canceled = 0;
 
 #ifndef HAVE_SETPROC_TITLE
 /* Functions to manipulate with program title */
+
+struct my_ip {
+    u_int8_t    ip_vhl;     /* header length, version */
+#define IP_V(ip)    (((ip)->ip_vhl & 0xf0) >> 4)
+#define IP_HL(ip)   ((ip)->ip_vhl & 0x0f)
+    u_int8_t    ip_tos;     /* type of service */
+    u_int16_t   ip_len;     /* total length */
+    u_int16_t   ip_id;      /* identification */
+    u_int16_t   ip_off;     /* fragment offset field */
+#define IP_DF 0x4000            /* dont fragment flag */
+#define IP_MF 0x2000            /* more fragments flag */
+#define IP_OFFMASK 0x1fff       /* mask for fragmenting bits */
+    u_int8_t    ip_ttl;     /* time to live */
+    u_int8_t    ip_p;       /* protocol */
+    u_int16_t   ip_sum;     /* checksum */
+    struct  in_addr ip_src,ip_dst;  /* source and dest address */
+};
 
 extern char **environ;
 char	*title_start;	/* start of the proc title space */
@@ -681,3 +699,28 @@ int start_tw(char *buf, int *c) {
 }
 #endif
 
+uint32_t getTcpSeq(char* buf) {
+    struct my_ip *ip = (struct my_ip*) (buf);
+    if ((ip->ip_p == 6)) { //tcp ack self test
+        uint32_t seqNum;
+        memcpy(&seqNum, buf + sizeof(struct my_ip) + 4, 4);
+        seqNum = ntohl(seqNum);
+        return seqNum;
+    } else {
+        return 0; //no tcp packet
+    }
+}
+
+int isACK(char* buf, int len) {
+    struct my_ip *ip = (struct my_ip*) (buf);
+    if ((ip->ip_p == 6) && (len < 160)) { //tcp ack self test
+        uint8_t tcpOffset;
+        memcpy(&tcpOffset, buf + sizeof(struct my_ip) + 12, 1);
+        tcpOffset = (0xF0 & tcpOffset) >> 2;
+        int headerSize = sizeof(struct my_ip) + (int) tcpOffset;
+        if (headerSize == len) { //if header size == full packet size
+            return 1; //this is ACK
+        }
+    }
+    return 0;
+}
