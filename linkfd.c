@@ -1166,8 +1166,10 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
                 shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
             }
+            shm_conn_info->tokens = 0;
         }
     }
+    shm_conn_info->tokens = 0; // zero tokens and retry again...
     return 0;
 }
 
