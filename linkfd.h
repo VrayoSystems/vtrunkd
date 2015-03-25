@@ -106,5 +106,6 @@ extern struct lfd_mod lfd_encrypt;
 extern struct lfd_mod lfd_shaper;
 
 
+unsigned int get_tcp_hash(char *buf, int *tcp_seq);
 
 #endif

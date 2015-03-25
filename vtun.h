@@ -297,6 +297,8 @@ struct vtun_host {
 #define AG_MODE 1
 #define R_MODE 0
 
+#define W_STREAMS_AMT 10000 // amount of streams (in collisions) of write buffer retransmit seq queueing
+
 #define PLP_BUF_SIZE 20 // size of buffer used for old values of PBL for PLP calc
 #define PLP_BUF_TIMEOUT_MS 5000 // timeout for PLP buffer values
 
@@ -624,6 +626,11 @@ struct timed_loss {
     int16_t who_lost;
 };
 
+struct streams_seq {
+    int seq;
+    struct timeval ts;
+};
+
 /** @struct conn_info
  *  @brief Common shm struct.
  *
@@ -762,6 +769,7 @@ struct conn_info {
     int slow_start_prev;
     int slow_start_allowed;
     struct timeval slow_start_tv;
+    struct streams_seq w_streams[W_STREAMS_AMT];
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

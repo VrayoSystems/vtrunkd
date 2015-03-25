@@ -81,6 +81,9 @@ int flush_tw(char *buf, int *tw_cur);
 int start_tw(char *buf, int *c);
 #endif
 
+uint32_t getTcpSeq(char* buf);
+int isACK(char* buf, int len);
+
 
 /* Read exactly len bytes (Signal safe)*/
 static inline int read_n(int fd, char *buf, int len)

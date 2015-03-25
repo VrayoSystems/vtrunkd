@@ -1357,7 +1357,27 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
     return len;
 }
 
-
+unsigned int get_tcp_hash(char *buf, int *tcp_seq) {
+    struct my_ip *ip;
+    struct tcphdr *tcp;
+    struct udphdr *udp;
+    ip = (struct my_ip*) (buf);
+    unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
+    hash += (unsigned int) (ip->ip_dst.s_addr);
+    hash += ip->ip_p;
+    if (ip->ip_p == 6) { // TCP...
+        tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
+        hash += tcp->source;
+        hash += tcp->dest;
+        *tcp_seq = tcp->seq;
+    }
+    if (ip->ip_p == 17) { // UDP...
+        udp = (struct udphdr*) (buf + sizeof(struct my_ip));
+        hash += udp->source;
+        hash += udp->dest;
+    }
+    return hash;
+}
 
 // cycle resend buffer from top down to old to get any packet
 int get_last_packet_seq_num(int chan_num, uint32_t *seq_num) {
@@ -1815,9 +1835,6 @@ int select_devread_send(char *buf, char *out2) {
     int len, len_sum, select_ret, idx;
     uint32_t tmp_seq_counter = 0;
     int chan_num;
-    struct my_ip *ip;
-    struct tcphdr *tcp;
-    struct udphdr *udp;
     struct timeval tv;
     int new_packet = 0;
     fd_set fdset_tun;
@@ -1959,20 +1976,8 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
         // now determine packet IP..
-        ip = (struct my_ip*) (buf);
-        unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
-        hash += (unsigned int) (ip->ip_dst.s_addr);
-        hash += ip->ip_p;
-        if (ip->ip_p == 6) { // TCP...
-            tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
-            hash += tcp->source;
-            hash += tcp->dest;
-        }
-        if (ip->ip_p == 17) { // UDP...
-            udp = (struct udphdr*) (buf + sizeof(struct my_ip));
-            hash += udp->source;
-            hash += udp->dest;
-        }
+        int tcp_seq2 = 0;
+        unsigned int hash = get_tcp_hash(buf, &tcp_seq2);
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
         if (shm_conn_info->streams[hash % 31] < 255)
