@@ -2456,7 +2456,13 @@ int write_buf_check_n_flush(int logical_channel) {
                 vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
                         shm_conn_info->write_buf[logical_channel].last_written_seq, tv_tmp.tv_sec, tv_tmp.tv_usec);
             }
-#endif
+#endif            
+            // calculate this stream TCP_seq_nums etc.
+            int tcp_seq2 = 0;
+            unsigned int hash = get_tcp_hash(frame_seq_tmp.out, &tcp_seq2);
+            int tcp_seq = getTcpSeq(frame_seq_tmp.out);
+            shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
+            shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -2478,9 +2484,9 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
             
             if (debug_trace) {
-                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d", buf_len, incomplete_seq_len,
+                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d, tcp_seq %d == %d, hs %u", buf_len, incomplete_seq_len,
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
-                        weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens);
+                        weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
             if (shm_conn_info->tokens > 0) {
                 shm_conn_info->tokens--; // remove a token...
@@ -2640,6 +2646,31 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 #endif
         *succ_flag = -2;
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+    }
+    int tcp_seq = getTcpSeq(out);
+    int tcp_seq2 = 0;
+    unsigned int hash = get_tcp_hash(out, tcp_seq2);
+    if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq > tcp_seq) {
+        struct timeval tv_tmp;
+        timersub(&info.current_time, &shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts, &tv_tmp);
+        if(timercmp(&tv_tmp, &((struct timeval) {5, 0}), >=)) { // 5 seconds session timeout
+            shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = 0;
+        } else {
+            int len_ret = dev_write(info.tun_device, out, len);
+            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %d == %d last tseq: %d, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
+            if (len_ret < 0) {
+                vtun_syslog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
+                if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
+                    vtun_syslog(LOG_ERR, "ERROR tcprxm dev write not EAGAIN or EINTR");
+                } else {
+                    vtun_syslog(LOG_ERR, "ERROR tcprxm dev write intr - need cont");
+                }
+
+            } else if (len_ret < len) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED! tcprxm could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
+            }
+
+        }
     }
 
     // now check if we can find it in write buf current .. inline!
