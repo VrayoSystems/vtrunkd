@@ -627,7 +627,7 @@ struct timed_loss {
 };
 
 struct streams_seq {
-    int seq;
+    unsigned int seq;
     struct timeval ts;
 };
 

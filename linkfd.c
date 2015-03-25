@@ -1357,7 +1357,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
     return len;
 }
 
-unsigned int get_tcp_hash(char *buf, int *tcp_seq) {
+unsigned int get_tcp_hash(char *buf, unsigned int *tcp_seq) {
     struct my_ip *ip;
     struct tcphdr *tcp;
     struct udphdr *udp;
@@ -1976,7 +1976,7 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
         // now determine packet IP..
-        int tcp_seq2 = 0;
+        unsigned int tcp_seq2 = 0;
         unsigned int hash = get_tcp_hash(buf, &tcp_seq2);
         chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
@@ -2458,9 +2458,9 @@ int write_buf_check_n_flush(int logical_channel) {
             }
 #endif            
             // calculate this stream TCP_seq_nums etc.
-            int tcp_seq2 = 0;
+            unsigned int tcp_seq2 = 0;
             unsigned int hash = get_tcp_hash(frame_seq_tmp.out, &tcp_seq2);
-            int tcp_seq = getTcpSeq(frame_seq_tmp.out);
+            unsigned int tcp_seq = getTcpSeq(frame_seq_tmp.out);
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
@@ -2484,7 +2484,7 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
             
             if (debug_trace) {
-                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d, tcp_seq %d == %d, hs %u", buf_len, incomplete_seq_len,
+                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d, tcp_seq %u == %u, hs %u", buf_len, incomplete_seq_len,
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
@@ -2647,8 +2647,8 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         *succ_flag = -2;
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
-    int tcp_seq = getTcpSeq(out);
-    int tcp_seq2 = 0;
+    unsigned int tcp_seq = getTcpSeq(out);
+    unsigned int tcp_seq2 = 0;
     unsigned int hash = get_tcp_hash(out, &tcp_seq2);
     if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq > tcp_seq) {
         struct timeval tv_tmp;
@@ -2657,7 +2657,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = 0;
         } else {
             int len_ret = dev_write(info.tun_device, out, len);
-            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %d == %d last tseq: %d, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
+            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %d, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
