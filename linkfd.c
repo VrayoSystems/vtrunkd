@@ -2462,7 +2462,9 @@ int write_buf_check_n_flush(int logical_channel) {
             unsigned int hash = get_tcp_hash(frame_seq_tmp.out, &tcp_seq2);
             unsigned int tcp_seq = getTcpSeq(frame_seq_tmp.out);
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
-            shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
+            if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
+                shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
+            }
             if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                 vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
