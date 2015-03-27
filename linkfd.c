@@ -972,6 +972,13 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         }
         //shm_conn_info->write_buf[chan_num].wr_lws = shm_conn_info->write_buf[chan_num].last_written_seq;
     }
+    
+    //int max_msbl = max_msrt_mul * rtt_min * smooth_ACPS;
+    // TOP the MSBL TODO HERE
+    int max_msbl = 1000;
+    if(shm_conn_info->max_stuck_buf_len > max_msbl) {
+        shm_conn_info->max_stuck_buf_len = max_msbl;
+    }
     shm_conn_info->tokens_in_out = tokens_in_out;
     if(buf_len_real >= 10) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
