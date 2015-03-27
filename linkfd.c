@@ -5698,6 +5698,7 @@ int lfd_linker(void)
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "ssf", "%d", shm_conn_info->slow_start_force); 
             add_json(js_buf, &js_cur, "wS", "%d", info.whm_send_q);
             add_json(js_buf, &js_cur, "wC", "%d", info.whm_cubic);
             add_json(js_buf, &js_cur, "wR", "%d", info.whm_rsr);
