@@ -4691,6 +4691,14 @@ int lfd_linker(void)
         if( (send_q_eff_mean > SEND_Q_EFF_WORK) || (shm_conn_info->stats[info.process_num].ACK_speed > ACS_NOT_IDLE) ) {
             shm_conn_info->idle = 0; // exit IDLE immediately for all chans    
         }
+        if(info.previous_idle && !shm_conn_info->idle) { // usnig local previos flag to avoid need of syncing this op!
+            // detect IDLE exit and CWR-1S
+            shm_conn_info->cwr_tv = info.current_time; // warning this will race into value
+            info.previous_idle = 0;
+        }
+        if(shm_conn_info->idle) {
+            info.previous_idle = 1;
+        }
         // <<< END IDLE EXIT
         
         // EXACT_RTT >>>
@@ -4781,10 +4789,11 @@ int lfd_linker(void)
         int gsq = get_cwnd();
         info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
         if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
-            if(info.gsend_q_grow >= 30 && info.gsend_q_grow < 100 && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
+            if((shm_conn_info->slow_start_force || (info.gsend_q_grow >= 30 && info.gsend_q_grow < 100)) && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
                 shm_conn_info->slow_start = 1;
             } else {
                 shm_conn_info->slow_start = 0;
+                shm_conn_info->slow_start_force = 0;
             }
             if(shm_conn_info->slow_start != shm_conn_info->slow_start_prev) {
                 if(shm_conn_info->slow_start) {
@@ -6977,7 +6986,17 @@ if(drop_packet_flag) {
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
                                 //if((psl <= 2) && (who_lost != shm_conn_info->max_chan)) { // this is for fairness model #407
-                                if(psl <= 20) {
+                                struct timeval cwr_diff;
+                                timersub(&info.current_time, &shm_conn_info->cwr_tv, &cwr_diff);
+                                
+                                if((psl <= 20) || timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
+                                    if(timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
+                                        // force slow_start till the end of period
+                                        shm_conn_info->slow_start = 1;
+                                        shm_conn_info->slow_start_force = 1;
+                                        need_send_FCI = 1;
+                                        shm_conn_info->slow_start_tv = info.current_time;
+                                    }
                                     // now find chan with smallest RTT
                                     int min_rtt = INT32_MAX;
                                     int min_rtt_chan = 0;

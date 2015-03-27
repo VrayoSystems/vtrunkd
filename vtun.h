@@ -614,6 +614,7 @@ struct phisical_status { // A.K.A. "info"
     int whm_cubic;
     int whm_rsr;
     int whm_send_q;
+    int previous_idle;
 };
 
 #define LOSS_ARRAY 80
@@ -768,8 +769,10 @@ struct conn_info {
     int slow_start_recv;
     int slow_start_prev;
     int slow_start_allowed;
+    int slow_start_force;
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
+    struct timeval cwr_tv; // for CWND Reserve 1s
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];
