@@ -1159,7 +1159,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
 #endif
                 return forced_rtt_reached;
             } else if (timercmp(&tv_tmp, &max_latency_drop, >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
-               && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
+               //&& (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
             ) {
 #ifdef DEBUGG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
@@ -2286,7 +2286,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         cond_flag // normal write
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
                       || (    timercmp(&tv_tmp, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
-                           && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
+                      //     && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
                            && timercmp(&since_write_tv, &max_latency_drop, >=)
                          )                                          // MLD several checks passed
                       || (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
