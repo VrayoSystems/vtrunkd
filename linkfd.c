@@ -967,25 +967,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         *next_token_ms = shm_conn_info->max_stuck_rtt - packet_rtt;
         return 0;
     }
-    
-    int tokens_in_out = pktdiff - shm_conn_info->max_stuck_buf_len;
-    if(tokens_in_out < 0) {
-        tokens_in_out = 0;
-    }
-    if(shm_conn_info->slow_start_recv) {
-        if(tokens_in_out) {
-            shm_conn_info->max_stuck_buf_len += 1;
-        }
-        //shm_conn_info->write_buf[chan_num].wr_lws = shm_conn_info->write_buf[chan_num].last_written_seq;
-    }
-    
     //int max_msbl = max_msrt_mul * rtt_min * smooth_ACPS;
     // TOP the MSBL TODO HERE
     int max_msbl = 1000;
     if(shm_conn_info->max_stuck_buf_len > max_msbl) {
         shm_conn_info->max_stuck_buf_len = max_msbl;
     }
-    shm_conn_info->tokens_in_out = tokens_in_out;
     if(buf_len_real >= 10) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -1027,9 +1014,9 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         shm_conn_info->tokens = 0;
     }
     #ifdef FRTTDBG
-    vtun_syslog(LOG_ERR, "adding tokens: %d + %d", tokens_to_add, tokens_in_out);
+    vtun_syslog(LOG_ERR, "adding tokens: %d ", tokens_to_add);
     #endif
-    shm_conn_info->tokens += tokens_to_add + tokens_in_out;
+    shm_conn_info->tokens += tokens_to_add;
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
@@ -1179,7 +1166,6 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
                 shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
             }
-            shm_conn_info->tokens = 0;
         }
     }
     shm_conn_info->tokens = 0; // zero tokens and retry again...
@@ -2753,6 +2739,18 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
     shm_conn_info->APCS_cnt++;
+    int buf_len_real = shm_conn_info->write_buf[conn_num].frames.length;
+    int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
+    if(tokens_in_out > 0) {
+        #ifdef FRTTDBG
+        vtun_syslog(LOG_ERR, "adding token+1");
+        #endif
+        shm_conn_info->tokens++;
+        if(shm_conn_info->slow_start_recv) {
+           shm_conn_info->max_stuck_buf_len += 1;
+        }
+    }
+    
     if(i<0) {
         // expensive op; may be optimized!
         shm_conn_info->frames_buf[newf].rel_next = -1;
