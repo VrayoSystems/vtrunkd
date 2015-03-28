@@ -296,6 +296,12 @@ struct {
     int bytes_rcvd_chan[MAX_TCP_LOGICAL_CHANNELS];
 } statb;
 
+
+struct {
+    int expiration_ms_fromnow;
+    int expnum;
+} log_tmp;
+
 struct {
     int v_min;
     int v_avg;
@@ -1278,7 +1284,8 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
         // this will work just because hold is not likely to kick in before ACS is recalculated
         expnum = (mrl_ms - drtt_ms) * (shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) / 1000; // send them all to top within MLD!
     }
- 
+    log_tmp.expiration_ms_fromnow = expiration_ms_fromnow;
+    log_tmp.expnum = expnum;
     
     // clamp to high end, clamp to low end AND respect seq_num that we want - otherwise return oldest that we can afford
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
@@ -3953,6 +3960,7 @@ int lfd_linker(void)
 {
     int tpps=0;
     memset((void *)&ag_stat, 0, sizeof(ag_stat));
+    memset((void *)&log_tmp, 0, sizeof(log_tmp));
     #ifdef TIMEWARP
         timewarp = malloc(TW_MAX); // 10mb time-warp
         memset(timewarp, 0, TW_MAX);
@@ -5705,6 +5713,8 @@ int lfd_linker(void)
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "enum", "%d", log_tmp.expnum); 
+            add_json(js_buf, &js_cur, "emsd", "%d", log_tmp.expiration_ms_fromnow); 
             add_json(js_buf, &js_cur, "ssf", "%d", shm_conn_info->slow_start_force); 
             add_json(js_buf, &js_cur, "wS", "%d", info.whm_send_q);
             add_json(js_buf, &js_cur, "wC", "%d", info.whm_cubic);
