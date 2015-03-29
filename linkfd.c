@@ -5720,7 +5720,7 @@ int lfd_linker(void)
 
             add_json(js_buf, &js_cur, "gsq_grw", "%d", info.gsend_q_grow);
             add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
-            add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[1].la_sqn));
+            add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[info.process_num].la_sqn));
             add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
