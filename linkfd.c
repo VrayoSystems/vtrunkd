@@ -2659,7 +2659,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = 0;
         } else {
             int len_ret = dev_write(info.tun_device, out, len);
-            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %d, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
+            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %u, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
