@@ -2321,10 +2321,10 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     vtun_syslog(LOG_INFO,
-                            "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) lat %"PRIu64" ms since_w %d ts %ld.%06ld %s",
+                            "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) lat %"PRIu64" ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, tv2ms(&tv_tmp), tv2ms(&since_write_tv), info.current_time, js_buf_fl);
+                            info.least_rx_seq[logical_channel], buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, tv2ms(&tv_tmp), info.current_time, js_buf_fl);
                     loss_flag = 1;
 
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
@@ -2465,20 +2465,24 @@ int write_buf_check_n_flush(int logical_channel) {
             if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
                 shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             }
-            if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
-                vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
-                if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                    vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+            if(frame_seq_tmp.len > 0) {
+                if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
+                    vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
+                    if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
+                        vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                    } else {
+                        vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                        return 0;
+                    }
+    
                 } else {
-                    vtun_syslog(LOG_ERR, "dev write intr - need cont");
-                    return 0;
+                    if (len < frame_seq_tmp.len) {
+                        vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
+                                shm_conn_info->frames_buf[fprev].len);
+                    }
                 }
-
             } else {
-                if (len < frame_seq_tmp.len) {
-                    vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
-                            shm_conn_info->frames_buf[fprev].len);
-                }
+                vtun_syslog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
             }
 #ifdef DEBUGG
             gettimeofday(&work_loop2, NULL );
@@ -2748,6 +2752,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->tokens++;
         if(shm_conn_info->slow_start_recv) {
            shm_conn_info->max_stuck_buf_len += 1;
+        }
+        if(shm_conn_info->max_stuck_buf_len == 950) {
+            // drop exactly one packet (at least try to)
+            shm_conn_info->frames_buf[newf].len = 0;
         }
     }
     
