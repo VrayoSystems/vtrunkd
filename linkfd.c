@@ -7180,7 +7180,7 @@ if(drop_packet_flag) {
                             
                             sem_wait(write_buf_sem);
                             //shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n); // temporarily commented out to enable logs for remote frtt monitoring
-                            shm_conn_info->head_send_q_shift_recv = (int) ntohs(tmp16_n); // TODO parse hsqs here
+                            shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
                             /*
                             if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
                                 ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select
