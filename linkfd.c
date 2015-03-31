@@ -918,6 +918,7 @@ int check_rtt_latency_drop_chan(int chan_num) {
     
 static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
     shm_conn_info->tokens_in_out = 0;
+    int tokens_in_out = 0;
     // TODO: may be sync on write_buf is required??
     if(chan_num != 1) {
         return 1; // for all other chans (e.g. 0-service channel) return drop allowed
@@ -961,12 +962,14 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         
     //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
     int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[head_idx].current_rtt;
+    /*
     if(packet_rtt < shm_conn_info->max_stuck_rtt) {
         shm_conn_info->tokens = 0;
         if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff; // TODO: use unconditoinal set or not??
         *next_token_ms = shm_conn_info->max_stuck_rtt - packet_rtt;
         return 0;
     }
+    */
     //int max_msbl = max_msrt_mul * rtt_min * smooth_ACPS;
     // TOP the MSBL TODO HERE
     int max_msbl = 1000;
@@ -1013,10 +1016,13 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(shm_conn_info->tokens < 0) {
         shm_conn_info->tokens = 0;
     }
+    if(buf_len_real - shm_conn_info->max_stuck_buf_len > 5) { // support for flushing packets w/o packets coming in
+        tokens_in_out = 1;
+    }
     #ifdef FRTTDBG
-    vtun_syslog(LOG_ERR, "adding tokens: %d ", tokens_to_add);
+    vtun_syslog(LOG_ERR, "adding tokens: %d  + %d", tokens_to_add, tokens_in_out);
     #endif
-    shm_conn_info->tokens += tokens_to_add;
+    shm_conn_info->tokens += tokens_to_add + tokens_in_out;
     
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
