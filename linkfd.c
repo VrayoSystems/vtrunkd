@@ -4977,7 +4977,7 @@ int lfd_linker(void)
             }
             */
             // calculate hsqs
-            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].max_send_q / info.eff_len;
+            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
                 need_send_FCI = 1;
                 info.head_send_q_shift_old = info.head_send_q_shift;
