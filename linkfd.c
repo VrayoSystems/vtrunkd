@@ -3246,7 +3246,7 @@ int set_IDLE() {
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
         shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
-        shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
+        shm_conn_info->stats[info.process_num].loss_send_q = 0;
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -5558,7 +5558,7 @@ int lfd_linker(void)
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
                 set_Wu_to(RSR_TOP/2);
-                shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
+                shm_conn_info->stats[info.process_num].loss_send_q = 0;
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
             /*
