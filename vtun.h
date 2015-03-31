@@ -429,6 +429,7 @@ struct conn_stats {
     int pbl_lossed_cnt_saved;
     int remote_head_channel;
     uint32_t la_sqn; // last received global seq_num ACK
+    int loss_send_q;
 };
 /**
  * Structure for garbage statistic and information
@@ -615,6 +616,8 @@ struct phisical_status { // A.K.A. "info"
     int whm_rsr;
     int whm_send_q;
     int previous_idle;
+    int head_send_q_shift;
+    int head_send_q_shift_old;
 };
 
 #define LOSS_ARRAY 80
@@ -773,6 +776,7 @@ struct conn_info {
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
     struct timeval cwr_tv; // for CWND Reserve 1s
+    int head_send_q_shift_recv; 
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

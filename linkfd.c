@@ -122,7 +122,7 @@ struct my_ip {
 #define RTT_THRESHOLD_GOOD 50 // cut-off by RTT ms
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
-
+#define LOSS_SEND_Q_MAX 1000 // maximum send_q allowed is now 1000 (for head?)
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -3240,6 +3240,7 @@ int set_IDLE() {
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
         shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
+        shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -4975,13 +4976,31 @@ int lfd_linker(void)
                 shm_conn_info->idle = 0; 
             }
             */
+            // calculate hsqs
+            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - send_q_eff / info.eff_len;
+            if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
+                need_send_FCI = 1;
+                info.head_send_q_shift_old = info.head_send_q_shift;
+            }
             
             timersub(&info.current_time, &shm_conn_info->msbl_tick, &tv_tmp_tmp_tmp);
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
+                int iK;
+                if(shm_conn_info->head_send_q_shift_recv > 0) {
+                    iK = 100; // push down
+                } else {
+                    iK = 500; // push up
+                }
+                int msbl_K = shm_conn_info->head_send_q_shift_recv / iK; 
+                if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) msbl_K = shm_conn_info->head_send_q_shift_recv / shm_conn_info->head_send_q_shift_recv; // sign?
+                
                 if(shm_conn_info->max_stuck_buf_len >= 5) { 
-                    shm_conn_info->max_stuck_buf_len -= 1; // drop 5 packets at a time
+                    shm_conn_info->max_stuck_buf_len -= msbl_K;
                 } else {
                     shm_conn_info->max_stuck_buf_len = 0;
+                }
+                if(shm_conn_info->max_stuck_buf_len > 1000) {
+                    shm_conn_info->max_stuck_buf_len = 1000;
                 }
                 shm_conn_info->msbl_tick = info.current_time;
             }
@@ -5527,6 +5546,7 @@ int lfd_linker(void)
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
                 set_Wu_to(RSR_TOP/2);
+                shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
             /*
@@ -5719,6 +5739,9 @@ int lfd_linker(void)
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "lossq", "%d", shm_conn_info->stats[info.process_num].loss_send_q);
+            add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
+            add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift);
             add_json(js_buf, &js_cur, "enum", "%d", log_tmp.expnum); 
             add_json(js_buf, &js_cur, "emsd", "%d", log_tmp.expiration_ms_fromnow); 
             add_json(js_buf, &js_cur, "ssf", "%d", shm_conn_info->slow_start_force); 
@@ -5943,7 +5966,8 @@ int lfd_linker(void)
                 sem_post(write_buf_sem);
                 tmp16_n = htons(tmp16); //forced_rtt here
                 */
-                tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
+                //tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here // replacing this with hsqs
+                tmp16_n = htons(info.head_send_q_shift);
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //ag_mask
@@ -6059,7 +6083,8 @@ int lfd_linker(void)
                     sem_post(write_buf_sem);
                     tmp16_n = htons(tmp16); //forced_rtt here
                     */
-                    tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
+                    //tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here
+                    tmp16_n = htons(info.head_send_q_shift);
                     memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                     tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
@@ -7154,7 +7179,7 @@ if(drop_packet_flag) {
                             
                             sem_wait(write_buf_sem);
                             //shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n); // temporarily commented out to enable logs for remote frtt monitoring
-                            shm_conn_info->forced_rtt_remote = (int) ntohs(tmp16_n);
+                            shm_conn_info->head_send_q_shift_recv = (int) ntohs(tmp16_n); // TODO parse hsqs here
                             /*
                             if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
                                 ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select
@@ -7329,6 +7354,11 @@ if(drop_packet_flag) {
                                         }
                                     }
                                 }
+                                if(info.send_q_limit_cubic_max / info.eff_len < LOSS_SEND_Q_MAX) {
+                                    shm_conn_info->stats[info.process_num].loss_send_q = info.send_q_limit_cubic_max / info.eff_len; // packets in network at loss
+                                } else {
+                                    shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
+                                } 
                                 t = 0;
                                 info.max_send_q = 0;
                                 //waste Cubic recalc
