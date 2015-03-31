@@ -4994,13 +4994,18 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    iK = 300; // push down
+                    iK = 30; // push down
                 } else {
-                    iK = 1000; // push up
+                    iK = 100; // push up
                 }
                 int msbl_K = shm_conn_info->head_send_q_shift_recv / iK; 
-                if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) msbl_K = shm_conn_info->head_send_q_shift_recv / shm_conn_info->head_send_q_shift_recv; // sign?
-                
+                if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) {
+                    if(shm_conn_info->head_send_q_shift_recv > 0) {
+                        msbl_K = 1;
+                    } else {
+                        msbl_K = -1;
+                    }
+                }
                 if(shm_conn_info->max_stuck_buf_len >= 5) { 
                     shm_conn_info->max_stuck_buf_len -= msbl_K;
                 } else {
