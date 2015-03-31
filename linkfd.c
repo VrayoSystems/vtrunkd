@@ -4793,7 +4793,7 @@ int lfd_linker(void)
         // SLOW START DETECTOR >>>
         sem_wait(&(shm_conn_info->write_buf_sem));
         struct timeval ss_runtime;
-        struct timeval ss_immune = {0, 100000};
+        struct timeval ss_immune = {10, 100000};
         struct timeval ss_max_run = {0, 500000};
         timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
         shm_conn_info->slow_start_allowed = 1;
@@ -4987,9 +4987,9 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    iK = 100; // push down
+                    iK = 300; // push down
                 } else {
-                    iK = 500; // push up
+                    iK = 1000; // push up
                 }
                 int msbl_K = shm_conn_info->head_send_q_shift_recv / iK; 
                 if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) msbl_K = shm_conn_info->head_send_q_shift_recv / shm_conn_info->head_send_q_shift_recv; // sign?
