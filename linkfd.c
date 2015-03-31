@@ -4977,7 +4977,8 @@ int lfd_linker(void)
             }
             */
             // calculate hsqs
-            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+            //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
             if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
                 need_send_FCI = 1;
                 info.head_send_q_shift_old = info.head_send_q_shift;
@@ -7355,7 +7356,8 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 if(info.send_q_limit_cubic_max / info.eff_len < LOSS_SEND_Q_MAX) {
-                                    shm_conn_info->stats[info.process_num].loss_send_q = info.send_q_limit_cubic_max / info.eff_len; // packets in network at loss
+                                    //shm_conn_info->stats[info.process_num].loss_send_q = info.send_q_limit_cubic_max / info.eff_len; // packets in network at loss
+                                    shm_conn_info->stats[info.process_num].loss_send_q = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // SQE expreiment
                                 } else {
                                     shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
                                 } 
