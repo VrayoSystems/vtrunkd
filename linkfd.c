@@ -4818,7 +4818,7 @@ int lfd_linker(void)
         sem_wait(&(shm_conn_info->write_buf_sem));
         struct timeval ss_runtime;
         struct timeval ss_immune = {10, 100000};
-        struct timeval ss_max_run = {0, 500000};
+        struct timeval ss_max_run = {3, 500000};
         timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
         shm_conn_info->slow_start_allowed = 1;
         if(timercmp(&ss_runtime, &ss_max_run, >=)) {
@@ -4832,9 +4832,9 @@ int lfd_linker(void)
             shm_conn_info->slow_start_allowed = 1;
         }
             
-        int gsq = get_cwnd();
-        info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
         if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
+            int gsq = get_cwnd();
+            info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
             if((shm_conn_info->slow_start_force || (info.gsend_q_grow >= 30 && info.gsend_q_grow < 100)) && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
                 shm_conn_info->slow_start = 1;
             } else {
