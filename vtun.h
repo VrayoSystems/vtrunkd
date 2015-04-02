@@ -777,6 +777,8 @@ struct conn_info {
     struct streams_seq w_streams[W_STREAMS_AMT];
     struct timeval cwr_tv; // for CWND Reserve 1s
     int head_send_q_shift_recv; 
+    struct timeval head_change_htime_tv;
+    int head_change_htime;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

@@ -144,6 +144,8 @@ struct my_ip {
 #define CUBIC_T_DIV 50
 #define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
+#define MSBL_PUSHDOWN_K 30
+#define MSBL_PUSHUP_K 100
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -2937,8 +2939,17 @@ int check_plp_ok(int pnum, int32_t chan_mask) { // TODO TCP model => remove
     }
 }
 
+int transition_period_time(int hsqs) {
+    int j=0;
+    int i;
+    int min_diff = 10; // TODO: variable/constant
+    for(i=hsqs; i>min_diff; i=i-i/5) j++; // TODO: same constant as in MSBL
+    return j * (SELECT_SLEEP_USEC/1000); // return milliseconds to converge
+}
+
 int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is only used to change head!
     int fixed = 0;
+    int htime = 0;
     int Ch = 0;
     int Cs = 0;
      // This is AG_MODE algorithm
@@ -3098,13 +3109,20 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
     if(new_max_chan != shm_conn_info->max_chan_new) {
         shm_conn_info->head_detected_ts = info.current_time;
         shm_conn_info->max_chan_new = new_max_chan;
-        vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        // TODO HERE: for AG_MODE use different hsqs calc! see #731
+        int hsqs = shm_conn_info->stats[shm_conn_info->max_chan].sqe_mean - shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean;
+        if(hsqs <= 0) htime = 0;
+        else htime = transition_period_time(hsqs);
+        if(htime < 800) shm_conn_info->head_change_htime = 800; // ms? // TODO: variable constant!
+        ms2tv(&shm_conn_info->head_change_htime_tv, shm_conn_info->head_change_htime);
+        vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d TIME=%d ms", shm_conn_info->max_chan, exclude, shm_conn_info->head_change_htime);
     } else {
         vtun_syslog(LOG_INFO, "Head detect - New head is not new - NO WAIT max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
     }
     
     timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp);
-    if(timercmp(&tv_tmp, &((struct timeval) HEAD_REDETECT_HYSTERESIS_TV), >=)) {
+    //if(timercmp(&tv_tmp, &((struct timeval) HEAD_REDETECT_HYSTERESIS_TV), >=)) {
+    if(timercmp(&tv_tmp, &shm_conn_info->head_change_htime_tv, >=)) {
         vtun_syslog(LOG_INFO, "Head detect - wait timer triggered max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
         shm_conn_info->max_chan = shm_conn_info->max_chan_new;
         shm_conn_info->head_detected_ts = info.current_time;
@@ -4984,7 +5002,15 @@ int lfd_linker(void)
             */
             // calculate hsqs
             //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-            info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+            timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
+            int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 200000}), >=); // protect from immediate dolbejka TODO: need more precise timing
+            if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok) { // TODO HERE: another method in AG_MODE
+                info.head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+                need_send_FCI = 1;
+            } else { 
+                info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+            }
             if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
                 need_send_FCI = 1;
                 info.head_send_q_shift_old = info.head_send_q_shift;
@@ -4994,9 +5020,14 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    iK = 30; // push down
+                    iK = MSBL_PUSHDOWN_K; // push down
                 } else {
-                    iK = 100; // push up
+                    if(shm_conn_info->head_send_q_shift_recv < 10000) {
+                        iK = 5; // push up FAST
+                        shm_conn_info->head_send_q_shift_recv += 10000; // fix it back
+                    } else {
+                        iK = MSBL_PUSHUP_K; // push up
+                    }
                 }
                 int msbl_K = shm_conn_info->head_send_q_shift_recv / iK; 
                 if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) {
