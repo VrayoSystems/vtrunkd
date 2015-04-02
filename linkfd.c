@@ -4740,6 +4740,8 @@ int lfd_linker(void)
         if(info.previous_idle && !shm_conn_info->idle) { // usnig local previos flag to avoid need of syncing this op!
             // detect IDLE exit and CWR-1S
             shm_conn_info->cwr_tv = info.current_time; // warning this will race into value
+            shm_conn_info->slow_start = 1;
+            shm_conn_info->slow_start_tv = info.current_time;
             info.previous_idle = 0;
         }
         if(shm_conn_info->idle) {
@@ -4831,7 +4833,7 @@ int lfd_linker(void)
         if(timercmp(&ss_runtime, &ss_immune, >=)) {
             shm_conn_info->slow_start_allowed = 1;
         }
-            
+           /* // this is slow-start -unidle KISS experiment (do a slow start on each new connection?) 
         if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
             int gsq = get_cwnd();
             info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
@@ -4851,6 +4853,7 @@ int lfd_linker(void)
             shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
             shm_conn_info->ssd_gsq_old = gsq;
         }
+        */
         sem_post(&(shm_conn_info->write_buf_sem));
         // <<< END
         
@@ -5022,7 +5025,7 @@ int lfd_linker(void)
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
                     iK = MSBL_PUSHDOWN_K; // push down
                 } else {
-                    if(shm_conn_info->head_send_q_shift_recv < 10000) {
+                    if(shm_conn_info->head_send_q_shift_recv < -10000) {
                         iK = 5; // push up FAST
                         shm_conn_info->head_send_q_shift_recv += 10000; // fix it back
                     } else {
