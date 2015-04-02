@@ -4846,8 +4846,8 @@ int lfd_linker(void)
                     shm_conn_info->slow_start_tv = info.current_time;
                 }
                 need_send_FCI = 1;
-                shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
             }
+            shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
             shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
             shm_conn_info->ssd_gsq_old = gsq;
         }
