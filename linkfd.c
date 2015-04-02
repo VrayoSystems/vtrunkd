@@ -145,7 +145,7 @@ struct my_ip {
 #define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
-#define MSBL_PUSHUP_K 100
+#define MSBL_PUSHUP_K 80
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -5040,9 +5040,8 @@ int lfd_linker(void)
                         msbl_K = -1;
                     }
                 }
-                if(shm_conn_info->max_stuck_buf_len >= 5) { 
-                    shm_conn_info->max_stuck_buf_len -= msbl_K;
-                } else {
+                shm_conn_info->max_stuck_buf_len -= msbl_K;
+                if(shm_conn_info->max_stuck_buf_len < 0) { 
                     shm_conn_info->max_stuck_buf_len = 0;
                 }
                 if(shm_conn_info->max_stuck_buf_len > 1000) {
