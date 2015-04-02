@@ -3258,13 +3258,13 @@ int set_IDLE() {
         shm_conn_info->idle = 0; 
     } else {
         shm_conn_info->idle = 1;
-        shm_conn_info->slow_start = 0;
+        shm_conn_info->slow_start = 0; // Second slow_start exit here: at IDLE - just in case. No specific purpose.
     }
     
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
         shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
-        shm_conn_info->stats[info.process_num].loss_send_q = 0;
+        shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -4827,6 +4827,14 @@ int lfd_linker(void)
             shm_conn_info->slow_start_allowed = 0;
             if(shm_conn_info->slow_start) {
                 shm_conn_info->slow_start = 0;
+                // The ONLY slow start EXIT here!
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                        if(shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_MAX) {
+                            shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[i].sqe_mean / info.eff_len;
+                        }
+                    }
+                }
                 need_send_FCI = 1;
             }
         }
@@ -5023,7 +5031,11 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    iK = MSBL_PUSHDOWN_K; // push down
+                    if(shm_conn_info->slow_start_recv) {
+                        iK = 10000; // zero push in slow start
+                    } else {
+                        iK = MSBL_PUSHDOWN_K; // push down
+                    }
                 } else {
                     if(shm_conn_info->head_send_q_shift_recv < -10000) {
                         iK = 5; // push up FAST
@@ -5591,7 +5603,7 @@ int lfd_linker(void)
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
                 set_W_to(RSR_TOP / 2, 1, &loss_time); // protect from overflow??
                 set_Wu_to(RSR_TOP/2);
-                shm_conn_info->stats[info.process_num].loss_send_q = 0;
+                shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
             /*
