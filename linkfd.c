@@ -5021,7 +5021,11 @@ int lfd_linker(void)
                 info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
                 need_send_FCI = 1;
             } else { 
-                info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
+                    info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                } else {
+                    info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
+                } 
             }
             if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
                 need_send_FCI = 1;
