@@ -4744,9 +4744,10 @@ int lfd_linker(void)
             shm_conn_info->slow_start_tv = info.current_time;
             info.previous_idle = 0;
         }
-        if(shm_conn_info->idle) {
-            info.previous_idle = 1;
+        if(shm_conn_info->idle && !info.previous_idle) {
+            vtun_syslog(LOG_INFO, "Entering IDLE");
         }
+        info.previous_idle = shm_conn_info->idle;
         // <<< END IDLE EXIT
         
         // EXACT_RTT >>>
