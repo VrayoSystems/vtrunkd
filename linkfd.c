@@ -2360,11 +2360,11 @@ int write_buf_check_n_flush(int logical_channel) {
                     } else {
                         sprintf(printLine, "sum for seq %"PRIu32" not found", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                     }
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d %s bl-loc %d fl %d jwb %d lat %"PRIu64" ms ts %ld.%06ld %s",
+                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d %s bl-loc %d fl %d jwb %d lat %"PRIu64" ms wlag %"PRIu64" ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], printLine, shm_conn_info->write_buf[logical_channel].frames.length,
-                            shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, tv2ms(&tv_tmp), info.current_time, js_buf_fl);
+                            shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, tv2ms(&tv_tmp), tv2ms(&since_write_tv), info.current_time, js_buf_fl);
 
                     loss_flag = 1;
                 } else if (!info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
@@ -2380,10 +2380,10 @@ int write_buf_check_n_flush(int logical_channel) {
                         }
                         return 0;
                     }
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
+                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" wlag %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
-                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp),  shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
+                            info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tv2ms(&since_write_tv), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
                     loss_flag = 1;
                 } else {
                     vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", js_buf_fl);
