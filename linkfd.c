@@ -123,6 +123,7 @@ struct my_ip {
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 #define LOSS_SEND_Q_MAX 1000 // maximum send_q allowed is now 1000 (for head?)
+#define LOSS_SEND_Q_UNKNOWN -1 // unknown value
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -3264,7 +3265,7 @@ int set_IDLE() {
     if(shm_conn_info->idle) {
         shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX; // when idling, PBL is unknown!
         shm_conn_info->stats[info.process_num].l_pbl_tmp_unrec = INT32_MAX; // when idling, PBL is unknown!
-        shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
+        shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_UNKNOWN;
     }
     
     sem_post(&(shm_conn_info->stats_sem));
@@ -4830,10 +4831,11 @@ int lfd_linker(void)
                 shm_conn_info->slow_start = 0;
                 // The ONLY slow start EXIT here!
                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                        if(shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_MAX) {
-                            shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[i].sqe_mean / info.eff_len;
-                        }
+                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) {
+                        // leave lossq as unknown
+                        //if(shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_MAX) {
+                            //shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[i].sqe_mean / info.eff_len;
+                        //}
                     }
                 }
                 need_send_FCI = 1;
@@ -5017,12 +5019,23 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 200000}), >=); // protect from immediate dolbejka TODO: need more precise timing
             if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok) { // TODO HERE: another method in AG_MODE
-                info.head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
-                need_send_FCI = 1;
+                int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+                if(head_send_q_shift < 0) {
+                    info.head_send_q_shift = head_send_q_shift;
+                    vtun_syslog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
+                    info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+                    need_send_FCI = 1;
+                } else {
+                    vtun_syslog(LOG_INFO, "Entering head transition with NO hsqs change");
+                }
             } else { 
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
-                    info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                    if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
+                        info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                    } else {
+                        // in unknown value - set HSQS to 1 to push remote buf to net slowly
+                        info.head_send_q_shift = 1;
+                    }
                 } else {
                     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
                 } 
