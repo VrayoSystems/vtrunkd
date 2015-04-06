@@ -127,6 +127,7 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
+#define MAX_NETWORK_STALL { 0, 50000 } // 50ms maximum network stall
 #define MAX_LATENCY_DROP_USEC 200000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_DROP_SHIFT 100 // ms. to add to forced_rtt - or use above
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
@@ -1160,7 +1161,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
                 return forced_rtt_reached;
-            } else if (timercmp(&tv_tmp, &max_latency_drop, >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
+            } else if (timercmp(&tv_tmp, &((struct timeval) MAX_NETWORK_STALL), >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
                //&& (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
             ) {
 #ifdef DEBUGG
@@ -2289,7 +2290,7 @@ int write_buf_check_n_flush(int logical_channel) {
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
                       || (    timercmp(&tv_tmp, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
                       //     && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
-                           && timercmp(&since_write_tv, &max_latency_drop, >=)
+                           && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=)
                          )                                          // MLD several checks passed
                       || (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
                 )
