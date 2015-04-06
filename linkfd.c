@@ -7114,8 +7114,10 @@ if(drop_packet_flag) {
                                 struct timeval cwr_diff;
                                 timersub(&info.current_time, &shm_conn_info->cwr_tv, &cwr_diff);
                                 
-                                if((psl <= 20) || timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
-                                    if(timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
+                                if((psl <= 2) 
+                                        //|| timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=) 
+                                        || shm_conn_info->slow_start) { // CWR_PERIOD HERE
+                                    if(0 && timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
                                         // force slow_start till the end of period
                                         shm_conn_info->slow_start = 1;
                                         shm_conn_info->slow_start_force = 1;
