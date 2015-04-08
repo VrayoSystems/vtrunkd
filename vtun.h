@@ -779,6 +779,7 @@ struct conn_info {
     int head_send_q_shift_recv; 
     struct timeval head_change_htime_tv;
     int head_change_htime;
+    int tokenbuf;
 #ifdef SHM_DEBUG
     char void13[4096];
     char void3[4096];

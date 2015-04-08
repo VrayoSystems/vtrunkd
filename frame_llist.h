@@ -42,12 +42,14 @@ struct frame_seq {
     struct timeval flush_time;
     int current_rtt;
     uint32_t marker;
+    int stub_counter; // amount of stub packets before this one to skip
 };
 
 struct frame_llist{
 	int rel_head;
 	int rel_tail;
     int length;
+    int stub_total; // not controlled by standard methods; total stub packets in buffer 
 };
 
 void frame_llist_fill(struct frame_llist *l, struct frame_seq flist[], int len);
