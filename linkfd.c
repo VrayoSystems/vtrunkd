@@ -2409,7 +2409,7 @@ int write_buf_check_n_flush(int logical_channel) {
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tv2ms(&since_write_tv), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
                     loss_flag = 1;
                 } else {
-                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s %s", js_buf_fl);
+                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! %s", js_buf_fl);
                 }
 #ifdef TRACE_BUF_LEN
                 int check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
