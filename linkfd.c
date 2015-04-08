@@ -2285,8 +2285,7 @@ int write_buf_check_n_flush(int logical_channel) {
     #ifdef FRTTDBG
         vtun_syslog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
     #endif
-        if ( !(shm_conn_info->frames_buf[fprev].len) || (
-            forced_rtt_reached && ( // smoothed buffer - allowed to write
+        if (forced_rtt_reached && ( // smoothed buffer - allowed to write
                         cond_flag // normal write
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
                       || (    timercmp(&tv_tmp, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
@@ -2294,7 +2293,6 @@ int write_buf_check_n_flush(int logical_channel) {
                            && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=)
                          )                                          // MLD several checks passed
                       || (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
-                    )
                 )
            ) {
             if (!cond_flag) {
@@ -2506,7 +2504,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
-            if (shm_conn_info->tokens > 0 && frame_seq_tmp.len) {
+            if (shm_conn_info->tokens > 0) {
                 shm_conn_info->tokens--; // remove a token...
             }
             shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
@@ -2675,7 +2673,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = 0;
         } else {
             int len_ret = dev_write(info.tun_device, out, len);
-            len = 0; // drop the packet later
             vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %u, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vtun_syslog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
@@ -2690,7 +2687,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             }
 
         }
-        return 0;
     }
 
     // now check if we can find it in write buf current .. inline!
