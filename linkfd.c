@@ -148,7 +148,7 @@ struct my_ip {
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
 #define MSBL_PUSHUP_K 120
-#define MAX_STUB_JITTER 40 // maximum packet jitter that we allow on buffer to happen
+#define MAX_STUB_JITTER 140 // maximum packet jitter that we allow on buffer to happen
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
