@@ -2788,6 +2788,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
     shm_conn_info->APCS_cnt++;
+    if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
     int buf_len_real = shm_conn_info->write_buf[conn_num].frames.length;
     int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
     if(tokens_in_out > 0) {
@@ -2795,7 +2796,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_ERR, "adding token+1");
         #endif
         shm_conn_info->tokens++;
-        if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
         if(shm_conn_info->slow_start_recv && ((seq_num % 2) == 0)) {
            shm_conn_info->max_stuck_buf_len += 1;
         }
