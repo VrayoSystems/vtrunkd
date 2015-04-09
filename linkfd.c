@@ -5812,7 +5812,6 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             //add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100); // TCP modle RTT?
-            add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)buf_len_real);
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
@@ -5828,7 +5827,6 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold); // long-unused (CDT only)
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
-            add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg); // this is actually required!
             add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
@@ -5852,7 +5850,10 @@ int lfd_linker(void)
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
             add_json(js_buf, &js_cur, "tbf", "%d", shm_conn_info->tokenbuf);
+            add_json(js_buf, &js_cur, "stt", "%d", shm_conn_info->write_buf[1].frames.stub_total);
+            
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "lossq", "%d", shm_conn_info->stats[info.process_num].loss_send_q);
             add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
             add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift);
@@ -5869,6 +5870,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
+            add_json(js_buf, &js_cur, "tpps", "%d", tpps);
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full/1024); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
