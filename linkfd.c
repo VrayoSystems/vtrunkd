@@ -4067,7 +4067,7 @@ int lfd_linker(void)
         jsSQ_cur = 0;
         struct timer_obj *jsSQ_timer = create_timer();
         #ifdef CLIENTONLY
-        struct timeval t1 = { 0, 1000}; // this time is crucial to detect send_q dops in case of long hold
+        struct timeval t1 = { 0, 15000}; // this time is crucial to detect send_q dops in case of long hold
         #else
         struct timeval t1 = { 0, 300 }; // this time is crucial to detect send_q dops in case of long hold
         #endif
