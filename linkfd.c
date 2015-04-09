@@ -2795,7 +2795,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_ERR, "adding token+1");
         #endif
         shm_conn_info->tokens++;
-        shm_conn_info->tokenbuf--;
+        if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
         if(shm_conn_info->slow_start_recv && ((seq_num % 2) == 0)) {
            shm_conn_info->max_stuck_buf_len += 1;
         }
