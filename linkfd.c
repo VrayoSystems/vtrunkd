@@ -148,7 +148,7 @@ struct my_ip {
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
 #define MSBL_PUSHUP_K 120
-#define MAX_STUB_JITTER 140 // maximum packet jitter that we allow on buffer to happen
+#define MAX_STUB_JITTER 40 // maximum packet jitter that we allow on buffer to happen
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -922,32 +922,28 @@ int check_rtt_latency_drop_chan(int chan_num) {
 }
 
     
-static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms) {
-    shm_conn_info->tokens_in_out = 0;
-    int tokens_in_out = 0;
+static inline int add_tokens(int chan_num, int *next_token_ms) {
+    //shm_conn_info->tokens_in_out = 0;
+    //int tokens_in_out = 0;
     // TODO: may be sync on write_buf is required??
     if(chan_num != 1) {
         return 1; // for all other chans (e.g. 0-service channel) return drop allowed
     }
     int ms_for_token = 1; 
-    int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
-    int APCS = shm_conn_info->APCS;
-    int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
-    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
+    //int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
+    //int tail_idx = shm_conn_info->write_buf[chan_num].frames.rel_tail;
+    //int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq;
     //int buf_len = shm_conn_info->write_buf[chan_num].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[chan_num].last_written_seq;
-    int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
-    if(tokens_above_thresh < 0) tokens_above_thresh = 0;
-    int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length + shm_conn_info->write_buf[chan_num].frames.stub_total + tokens_above_thresh;
+    //int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
+    //if(tokens_above_thresh < 0) tokens_above_thresh = 0;
+    //int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length + shm_conn_info->write_buf[chan_num].frames.stub_total + tokens_above_thresh;
     //buf_len = buf_len_real; 
-    struct timeval packet_dtv;
-    int BPCS = 0;
-    int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
-    struct timeval packet_wait_tv;
-    if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
-        return 1;
-    }
+    //struct timeval packet_dtv;
+    //int BPCS = 0;
+    //int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
+    //struct timeval packet_wait_tv;
 
+    /*
     int pktdiff = buf_len_real; // current diff is just the real buf_len
     // now check rtt
     timersub(&info.current_time, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_wait_tv);
@@ -955,8 +951,8 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     // detect stuck condition
     // stuck means that we are not allowed to drop due to packet not available
     // whenever we have no packet to drop - we are stuck - even if it is not the time to drop yet
+    
     int max_total_rtt = (shm_conn_info->total_max_rtt+shm_conn_info->total_max_rtt_var) - (shm_conn_info->total_min_rtt - shm_conn_info->total_min_rtt_var); 
-
     if (shm_conn_info->frames_buf[shm_conn_info->write_buf[chan_num].frames.rel_head].seq_num
             != (shm_conn_info->write_buf[chan_num].last_written_seq + 1)) {
         int packet_lag = tv2ms(&packet_wait_tv);
@@ -967,9 +963,10 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         //}
         //if(shm_conn_info->max_stuck_buf_len < pktdiff) shm_conn_info->max_stuck_buf_len = pktdiff;
     }
+    */
         
     //int pktdiff = shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].seq_num - shm_conn_info->write_buf[i].last_written_seq;
-    int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[head_idx].current_rtt;
+    //int packet_rtt = tv2ms(&packet_wait_tv) + shm_conn_info->frames_buf[head_idx].current_rtt;
     /*
     if(packet_rtt < shm_conn_info->max_stuck_rtt) {
         shm_conn_info->tokens = 0;
@@ -979,11 +976,12 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     }
     */
     //int max_msbl = max_msrt_mul * rtt_min * smooth_ACPS;
-    // TOP the MSBL TODO HERE
+    // TOP the MSBL TODO: move out of HERE 
     int max_msbl = 1000;
     if(shm_conn_info->max_stuck_buf_len > max_msbl) {
         shm_conn_info->max_stuck_buf_len = max_msbl;
     }
+    /*
     if(buf_len_real >= 10) {
         timersub(&shm_conn_info->frames_buf[tail_idx].time_stamp, &shm_conn_info->frames_buf[head_idx].time_stamp, &packet_dtv);
         int pdms = tv2ms(&packet_dtv);
@@ -992,28 +990,9 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
             shm_conn_info->write_speed_b = BPCS;
         }
     }
+    */
     
-    //APCS = (APCS > BPCS ? APCS : BPCS);
-    //APCS /= 5; // flush constantly with speed slower than input
-    APCS = APCS * 7 / 10; // 0.7 of APCS to add to tokenbuf
-    //if(APCS < 100) APCS = 100; // make minimal speed ~= 1MBit/s
-  /* 
-  // TODO HERE: fix possible zero write problem
-    //shm_conn_info->write_speed_avg = (70 * shm_conn_info->write_speed_avg + APCS) / 80;
-    if(shm_conn_info->slow_start_recv) {
-        //APCS = 0; // we should never do a STUCK in write!
-    } else {
-        if(APCS > 0) {
-            shm_conn_info->write_speed = APCS;
-        } else {
-            APCS = shm_conn_info->write_speed; // remember last velue of APCS
-        }
-        if(APCS == 0) {
-            shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
-            return 1;
-        }
-    }
-   */ 
+    int APCS = shm_conn_info->APCS * 7 / 10; // 0.7 of APCS to add to tokenbuf
     
     // now do add some tokens ?
     
@@ -1026,17 +1005,10 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
     if(shm_conn_info->tokens < 0) {
         shm_conn_info->tokens = 0;
     }
-    if(buf_len_real > shm_conn_info->max_stuck_buf_len) { // support for flushing packets w/o packets coming in
-        tokens_in_out = 1; // TODO: tokens accumulate here if we were unable to flush due to some reason?
-    }
     shm_conn_info->tokenbuf += tokens_to_add;
-    tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
-    tokens_above_thresh = (tokens_above_thresh > 0 ? tokens_above_thresh : 0);
-    #ifdef FRTTDBG
-    // TODO HERE: fix this log
-    vtun_syslog(LOG_ERR, "adding tokens: %d  + %d", tokens_above_thresh, tokens_in_out);
-    #endif
-    shm_conn_info->tokens += tokens_in_out;
+    if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) {
+        shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
+    }
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
@@ -1049,6 +1021,22 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         *next_token_ms = ms_for_token;
         return 0;
     }
+}
+
+int check_tokens(int chan_num) {
+    if(shm_conn_info->tokens > 0) return 1;
+    int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
+    if(tokens_above_thresh < 0) tokens_above_thresh = 0;
+    int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length + shm_conn_info->write_buf[chan_num].frames.stub_total + tokens_above_thresh;
+    if(buf_len_real > shm_conn_info->max_stuck_buf_len) { // support for flushing packets w/o packets coming in
+        return 1;
+    }
+    int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
+    if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+        return 1;
+    }
+    return 0; 
 }
 
 int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
@@ -1152,7 +1140,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
             // no sync is needed: already has sync at the toplevel
-            forced_rtt_reached=check_force_rtt_max_wait_time(i, next_token_ms);
+            forced_rtt_reached=check_tokens(i);
     #ifdef FRTTDBG
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
     #endif
@@ -2283,7 +2271,7 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
     acnt = 0;
     if (fprev > -1) {
-        forced_rtt_reached = check_force_rtt_max_wait_time(logical_channel, &ts);
+        forced_rtt_reached=check_tokens(logical_channel);
         #ifdef FRTTDBG
         vtun_syslog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
         #endif
@@ -6634,6 +6622,7 @@ int lfd_linker(void)
         */
         int next_token_ms;
         next_token_ms = 0;
+        add_tokens(1, &next_token_ms);
 
         FD_ZERO(&fdset_w);
         if (get_write_buf_wait_data(chan_mask, &next_token_ms) || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
