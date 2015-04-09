@@ -299,6 +299,7 @@ struct {
     int max_latency_drops; // new
     int bytes_sent_chan[MAX_TCP_LOGICAL_CHANNELS];
     int bytes_rcvd_chan[MAX_TCP_LOGICAL_CHANNELS];
+    int tokens_max;
 } statb;
 
 
@@ -1026,7 +1027,7 @@ static inline int check_force_rtt_max_wait_time(int chan_num, int *next_token_ms
         shm_conn_info->tokens = 0;
     }
     if(buf_len_real > shm_conn_info->max_stuck_buf_len) { // support for flushing packets w/o packets coming in
-        tokens_in_out = 1;
+        tokens_in_out = 1; // TODO: tokens accumulate here if we were unable to flush due to some reason?
     }
     shm_conn_info->tokenbuf += tokens_to_add;
     tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
@@ -4660,6 +4661,9 @@ int lfd_linker(void)
  * Main program loop
  */
     while( !linker_term ) {
+        if(statb.tokens_max < shm_conn_info->tokens) {
+            statb.tokens_max = shm_conn_info->tokens; // TODO: for debug only - remove!
+        }
         shm_conn_info->stats[info.process_num].lssqn = last_sent_packet_num[1].seq_num;
         errno = 0;
         super++;
@@ -5852,6 +5856,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
             add_json(js_buf, &js_cur, "tbf", "%d", shm_conn_info->tokenbuf);
             add_json(js_buf, &js_cur, "stt", "%d", shm_conn_info->write_buf[1].frames.stub_total);
+            add_json(js_buf, &js_cur, "tks", "%d", statb.tokens_max);
+            statb.tokens_max = 0;
             
 #ifndef CLIENTONLY
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
