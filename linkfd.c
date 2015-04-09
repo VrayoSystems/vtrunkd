@@ -2515,6 +2515,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 }
             } else {
                 vtun_syslog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
+                shm_conn_info->write_buf[logical_channel].frames.stub_total--;
             }
 #ifdef DEBUGG
             gettimeofday(&work_loop2, NULL );
