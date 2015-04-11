@@ -4012,8 +4012,8 @@ int compute_max_allowed_rtt() {
 
 int mawmar_allowed() {
     if(info.head_channel) return 1;
+    int BL = (int)shm_conn_info->buf_len_recv; // or lbuf_len_recv ???
     /*
-    int bl = (int)shm_conn_info->buf_len_recv; // or lbuf_len_recv ???
     int sql;
     // count all RSR/cubics?
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -4033,7 +4033,7 @@ int mawmar_allowed() {
     int MAW = my_limit + head_limit;
     int MAR = (shm_conn_info->stats[max_chan].exact_rtt - info.exact_rtt) * shm_conn_info->tpps;
     if(MAR < 0) MAR = 0; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
-    return MAW + MAR > cwnd ? 1 : 0;
+    return (MAW + MAR < cwnd) && (MAR < BL);
 }
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
