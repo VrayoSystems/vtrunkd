@@ -3990,11 +3990,15 @@ int get_cwnd() {
     }
     // TODO: possible problem here: the channel may be in AG mode but head will resend all its packets anyway if it is not in AG itself
     if(shm_conn_info->lbuf_len_recv > 0) {
-        full_cwnd = max_gsend_q + shm_conn_info->lbuf_len_recv;
+        full_cwnd = min_gsend_q + shm_conn_info->lbuf_len_recv;
     } else {
         full_cwnd = max_gsend_q;
     }
     return full_cwnd;
+}
+
+int get_cwnd2() {
+    return shm_conn_info->seq_counter[1] - shm_conn_info->write_buf[1].remote_lws;
 }
 
 int compute_max_allowed_rtt() {
@@ -4006,6 +4010,31 @@ int compute_max_allowed_rtt() {
     return max_frtt;
 }
 
+int mawmar_allowed() {
+    if(info.head_channel) return 1;
+    /*
+    int bl = (int)shm_conn_info->buf_len_recv; // or lbuf_len_recv ???
+    int sql;
+    // count all RSR/cubics?
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask & (1 << i))) { // hope this works..
+            sql = 
+        }
+    }
+    int MAW = (info.rsr > info.send_q_limit_cubic ? info.rsr : info.send_q_limit_cubic);
+    int MAR = () * shm_conn_info->tpps; 
+    */
+    // implementing binary MSWMAR here for two channels only:
+    int cwnd = get_cwnd();
+    // we are not head here...
+    int max_chan = shm_conn_info->max_chan;
+    int head_limit = (shm_conn_info->stats[max_chan].rsr < shm_conn_info->stats[max_chan].W_cubic ? shm_conn_info->stats[max_chan].rsr : shm_conn_info->stats[max_chan].W_cubic);
+    int my_limit = (info.rsr < info.send_q_limit_cubic ? info.rsr : info.send_q_limit_cubic);
+    int MAW = my_limit + head_limit;
+    int MAR = (shm_conn_info->stats[max_chan].exact_rtt - info.exact_rtt) * shm_conn_info->tpps;
+    if(MAR < 0) MAR = 0; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
+    return MAW + MAR > cwnd ? 1 : 0;
+}
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
 |  |_/ ____\__| _/    |  | |__| ____ |  | __ ___________    /  /  \  \   
@@ -5374,7 +5403,8 @@ int lfd_linker(void)
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                            || ( channel_dead )
                            || ( shm_conn_info->idle )
-                           || ( info.head_change_safe && !check_rtt_latency_drop() )
+                           //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
+                           || !mawmar_allowed()
                            || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
                            //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
@@ -5388,13 +5418,14 @@ int lfd_linker(void)
         //if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
         if( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) ag_stat.PL = 1; // pseudo-model cut-off
         if(channel_dead) ag_stat.D = 1;
-        if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
+        //if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
+        if(!mawmar_allowed()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
         if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
-        ag_flag_local = R_MODE;
+        //ag_flag_local = R_MODE;
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
         } else {
@@ -5863,6 +5894,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
             add_json(js_buf, &js_cur, "GSQ", "%d", (shm_conn_info->seq_counter[1] - shm_conn_info->stats[info.process_num].la_sqn));
             add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
+            add_json(js_buf, &js_cur, "cwnd2", "%d",  get_cwnd2());
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
             add_json(js_buf, &js_cur, "tpps", "%d", tpps);
