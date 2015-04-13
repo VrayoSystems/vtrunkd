@@ -5317,19 +5317,21 @@ int lfd_linker(void)
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
             
             // TODO: rtt_shift and pump_adj are essentially the same - we should join them one day...
-            double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
+            //double d_rtt_diff = (d_rtt_h - d_rtt_h_var) - (d_rtt + d_rtt_var);
+            double d_rtt_diff = d_rtt_h - d_rtt;
             
-            double d_mld_ms = MAX_LATENCY_DROP_USEC / 1000;
-            //d_mld_ms /= 1000000.0; 
+            //double d_mld_ms = MAX_LATENCY_DROP_USEC / 1000;
+            double d_msbl_overdrive = 50 * info.eff_len; // packets?
+            /*d_mld_ms /= 1000000.0; 
             if(shm_conn_info->max_allowed_rtt < d_mld_ms) {
                 d_mld_ms = shm_conn_info->max_allowed_rtt;
             }
             d_mld_ms /= 1000.0; // to seconds
-            
+            */
             //d_mld_ms += d_frtt; // ?
             //double d_pump_adj = d_ACS * ( d_mld_ms + d_rtt_diff );
-            double d_pump_adj = d_ACS * ( d_mld_ms - d_rtt );
-            if(d_pump_adj < 0) d_pump_adj = 0;
+            //double d_pump_adj = d_ACS * ( d_mld_ms - d_rtt );
+            //if(d_pump_adj < 0) d_pump_adj = 0;
             
             //double d_rtt_shift = ((d_rtt + d_rtt_var) - d_rtt_h) * d_ACS_h;
             double d_rtt_shift = (d_rtt - d_rtt_h) * d_ACS_h; // rttvar seems to be causing high RSR jitter
@@ -5339,7 +5341,8 @@ int lfd_linker(void)
                 d_sql = SEND_Q_LIMIT_MINIMAL;
             }
             
-            d_sql += d_pump_adj;
+            //d_sql += d_pump_adj;
+            d_sql += (double)(shm_conn_info->buf_len_recv / 3) + d_msbl_overdrive;
             temp_sql_copy2 = (int) d_sql; 
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
@@ -5351,10 +5354,10 @@ int lfd_linker(void)
             
             if(d_rsr < 0) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
-                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
+                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
-                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, d_mld_ms, d_pump_adj, d_rtt_shift, info.rsr);
+                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             }
            
            /*
@@ -5387,7 +5390,7 @@ int lfd_linker(void)
             t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
             shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
             
-            pump_adj = (int) d_pump_adj;
+            //pump_adj = (int) d_pump_adj;
             rtt_shift = (int) d_rtt_shift;
         }
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
