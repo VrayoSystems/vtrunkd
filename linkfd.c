@@ -5087,12 +5087,12 @@ int lfd_linker(void)
                 } else {
                     vtun_syslog(LOG_INFO, "Entering head transition with NO hsqs change");
                 }
-            } else if(ag_flag_local == R_MODE && agag > 0) { 
-                int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
-                info.head_send_q_shift = head_send_q_shift;
-                vtun_syslog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
-                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
-                need_send_FCI = 1;
+            //} else if(ag_flag_local == R_MODE && agag > 0) { 
+            //    int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
+            //    info.head_send_q_shift = head_send_q_shift;
+            //    vtun_syslog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
+            //    info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+            //    need_send_FCI = 1;
             } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
@@ -5512,7 +5512,7 @@ int lfd_linker(void)
             }
             // first calculate agag
             timersub(&info.current_time, &agon_time, &tv_tmp);
-            agag = 255 - tv2ms(&tv_tmp) / 10; // WARNING: overflow may happen here
+            agag = 255 - tv2ms(&tv_tmp) / 30; // WARNING: overflow may happen here // 3x times slower for NVR to be able to collect CWND before loss
             // TODO: dup code - may be optimized!
             if(agag > 0) {
                 if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
