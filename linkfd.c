@@ -5087,7 +5087,13 @@ int lfd_linker(void)
                 } else {
                     vtun_syslog(LOG_INFO, "Entering head transition with NO hsqs change");
                 }
-            } else { 
+            } else if(ag_flag_local == R_MODE && agag > 0) { 
+                int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
+                info.head_send_q_shift = head_send_q_shift;
+                vtun_syslog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
+                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+                need_send_FCI = 1;
+            } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
                         info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
@@ -5493,14 +5499,35 @@ int lfd_linker(void)
             }
             // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
         } else {
-            agag = 0;
             if(ag_flag == AG_MODE) {
                 vtun_syslog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
                 vtun_syslog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, send_q_limit_cubic_apply ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
             
             }
-            ag_flag = R_MODE;
-            ag_flag_local_prev = ag_flag_local;
+            
+            if(ag_flag_local_prev != ag_flag_local) {
+                agon_time = info.current_time;
+                shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                ag_flag_local_prev = ag_flag_local;
+            }
+            // first calculate agag
+            timersub(&info.current_time, &agon_time, &tv_tmp);
+            agag = 255 - tv2ms(&tv_tmp) / 10; // WARNING: overflow may happen here
+            // TODO: dup code - may be optimized!
+            if(agag > 0) {
+                if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
+                for(int i=0; i<info.channel_amount; i++) {
+                    dirty_seq += info.channel[i].local_seq_num;
+                }
+                if(agag < 127) {
+                    ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
+                } else {
+                    ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+                }
+            } else {
+                agag = 0;
+                ag_flag = R_MODE;
+            }
         }
         // <<< END AG DECISION
 
