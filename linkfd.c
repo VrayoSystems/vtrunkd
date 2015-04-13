@@ -5077,16 +5077,12 @@ int lfd_linker(void)
             //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 200000}), >=); // protect from immediate dolbejka TODO: need more precise timing
-            if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok) { // TODO HERE: another method in AG_MODE
-                int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-                if(head_send_q_shift < 0) {
-                    info.head_send_q_shift = head_send_q_shift;
-                    vtun_syslog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
-                    info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
-                    need_send_FCI = 1;
-                } else {
-                    vtun_syslog(LOG_INFO, "Entering head transition with NO hsqs change");
-                }
+            int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+            if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
+                info.head_send_q_shift = head_send_q_shift;
+                vtun_syslog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
+                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+                need_send_FCI = 1;
             //} else if(ag_flag_local == R_MODE && agag > 0) { 
             //    int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
             //    info.head_send_q_shift = head_send_q_shift;
