@@ -5908,7 +5908,11 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "lossq", "%d", shm_conn_info->stats[info.process_num].loss_send_q);
             add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
-            add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift);
+            if(info.head_send_q_shift > -10000) {
+                add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift);
+            } else {
+                add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift+10000);
+            }
             add_json(js_buf, &js_cur, "enum", "%d", log_tmp.expnum); 
             add_json(js_buf, &js_cur, "emsd", "%d", log_tmp.expiration_ms_fromnow); 
             add_json(js_buf, &js_cur, "ssf", "%d", shm_conn_info->slow_start_force); 
@@ -5923,7 +5927,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "cwnd2", "%d",  get_cwnd2());
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
             add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
-            add_json(js_buf, &js_cur, "tpps", "%d", tpps);
+            add_json(js_buf, &js_cur, "tpps", "%d", shm_conn_info->tpps);
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full/1024); // byte transmit in retransmit mode
             //add_json(js_buf, &js_cur, "skip", "%d", skip);
