@@ -4025,14 +4025,14 @@ int mawmar_allowed() {
     int MAR = () * shm_conn_info->tpps; 
     */
     // implementing binary MSWMAR here for two channels only:
-    int cwnd = get_cwnd();
+    int cwnd = get_cwnd2();
     // we are not head here...
     int max_chan = shm_conn_info->max_chan;
     int head_limit = (shm_conn_info->stats[max_chan].rsr < shm_conn_info->stats[max_chan].W_cubic ? shm_conn_info->stats[max_chan].rsr : shm_conn_info->stats[max_chan].W_cubic);
     int my_limit = (info.rsr < info.send_q_limit_cubic ? info.rsr : info.send_q_limit_cubic);
-    int MAW = my_limit + head_limit;
+    int MAW = (my_limit + head_limit) / info.eff_len;
     int MAR = (shm_conn_info->stats[max_chan].exact_rtt - info.exact_rtt) * shm_conn_info->tpps;
-    if(MAR < 0) MAR = 0; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
+    if(MAR < 0) MAR = -MAR; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
     return (MAW + MAR < cwnd) && (MAR < BL);
 }
 /*
