@@ -839,6 +839,7 @@ int count_sequential_loss_unsync(int chan_num) {
 
 /* check if we are allowed to drop packet again  */
 int check_drop_period_unsync() {
+    return 1; // this method is unused
     struct timeval tv_tm, tv_rtt;
     timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
     ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
@@ -5549,7 +5550,7 @@ int lfd_linker(void)
                     //vtun_syslog(LOG_INFO, "AG_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d (  %d)", send_q_eff, info.rsr, send_q_limit_cubic_apply,info.send_q_limit_cubic );
                 }
                 // warning the whole block is not sync
-                if((shm_conn_info->ag_mask & (~(1 << info.process_num))) !=  // hope that ag_mask is consistent with chan_mask
+                if(((shm_conn_info->ag_mask & (~(1 << info.process_num))) & (shm_conn_info->channels_mask)) !=  // hope that ag_mask is consistent with chan_mask
                         ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) )){ 
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
