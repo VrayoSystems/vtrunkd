@@ -5430,7 +5430,9 @@ int lfd_linker(void)
         if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
-        //ag_flag_local = R_MODE;
+#ifdef CLIENTONLY
+        ag_flag_local = R_MODE; // TODO WARNING ag disabled on client! need to fix #787 to enable this
+#endif
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
         } else {
