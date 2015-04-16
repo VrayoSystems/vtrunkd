@@ -225,7 +225,7 @@ int ptt_allow_once = 0; // allow to push-to-top single packet
 int skip=0;
 int forced_rtt_reached=1;
 
-const sigset_t block_mask, unblock_mask;
+sigset_t block_mask, unblock_mask;
 
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
@@ -721,22 +721,22 @@ void sig_alarm(int sig)
 
 static void sig_usr1(int sig)
 {
-    vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
-    info.check_shm = 1;
+    //vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
+    //info.check_shm = 1;
 }
 
-void sig_send() {
+void sig_send1() {
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    pid_t pid;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-        uint32_t chan_mask = shm_conn_info->channels_mask;
-        for (int i = 0; i < 32; i++) {
-            if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
-                continue;
-            }
-            sem_wait(&(shm_conn_info->stats_sem));
-            pid_t pid = shm_conn_info->stats[i].pid;
-            sem_post(&(shm_conn_info->stats_sem));
-            if (pid != 0)
-                kill(pid, SIGUSR1);
+        if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
+            continue;
+        }
+        sem_wait(&(shm_conn_info->stats_sem));
+        pid = shm_conn_info->stats[i].pid;
+        sem_post(&(shm_conn_info->stats_sem));
+        if (pid != 0) {
+            kill(pid, SIGUSR1);
         }
     }
 }
@@ -5522,7 +5522,7 @@ int lfd_linker(void)
             }
             // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
         } else {
-            if(ag_flag == AG_MODE) {
+            if(ag_flag_local_prev == AG_MODE) {
                 vtun_syslog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
                 vtun_syslog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, send_q_limit_cubic_apply ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
             
@@ -5564,7 +5564,8 @@ int lfd_linker(void)
                 drop_packet_flag = 0;
                 if (send_q_eff > info.rsr) {
                     if(check_drop_period_unsync()) { // Remember to have large txqueue!
-                        if(!shm_conn_info->hold_mask) drop_packet_flag = 1; // ^^ drop exactly one packet
+                        //if(!shm_conn_info->hold_mask) drop_packet_flag = 1; // ^^ drop exactly one packet
+                        drop_packet_flag = 1;
                     } else {
                         hold_mode = 1; // TODO WARNING here is where infinite looping occurs
                     }
@@ -5576,6 +5577,7 @@ int lfd_linker(void)
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
                     hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
+                    drop_packet_flag = 0;
                     // TODO HERE: may have problems in case of 
                     // 1. incorrect detection of chan RSR/W
                     // 2. channel for some reason can not reach hold (any reasons?)
@@ -5671,6 +5673,11 @@ int lfd_linker(void)
         
         shm_conn_info->stats[info.process_num].hold = hold_mode;
         sem_post(&(shm_conn_info->stats_sem));
+        if(!info.head_channel) {
+            if(hold_mode_previous == 0 && hold_mode == 1) {
+                sig_send1(); // notify head (all) about our new condition
+            }
+        }
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         if(hold_mode == 1) {
             was_hold_mode = 1; // for JSON ONLY!
@@ -8554,33 +8561,37 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
 
     old_prio=getpriority(PRIO_PROCESS,0);
     setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
-
+    
     memset(&sa, 0, sizeof(sa));
+    sa.sa_handler=SIG_IGN;
+    sa.sa_flags=SA_NOCLDWAIT;;
+    sigaction(SIGCHLD,&sa,NULL);
+    sa.sa_handler=sig_alarm;
+    sigaction(SIGALRM,&sa,NULL);
     sa.sa_handler=sig_term;
     sigaction(SIGTERM,&sa,&sa_oldterm);
     sigaction(SIGINT,&sa,&sa_oldint);
     sa.sa_handler=sig_hup;
     sigaction(SIGHUP,&sa,&sa_oldhup);
     sa.sa_handler=sig_usr1;
+    sa.sa_flags=SA_NOCLDWAIT;
     sigaction(SIGUSR1,&sa,&sa_oldusr1);
+    sigaction(SIGCONT,&sa,NULL);
 
-    //sa.sa_handler=sig_usr2;
-    //sigaction(SIGUSR2,&sa,NULL);
-
-    sa.sa_handler=sig_alarm;
-    sigaction(SIGALRM,&sa,NULL);
 
     sigemptyset (&block_mask);
-    sigemptyset (&unblock_mask);
-
+    //sigemptyset (&unblock_mask);
     sigaddset (&block_mask, SIGTERM);
     sigaddset (&block_mask, SIGUSR1);
+    sigaddset (&block_mask, SIGCONT);
     sigaddset (&block_mask, SIGHUP);
-
     if (sigprocmask(SIG_BLOCK, &block_mask, &unblock_mask) < 0) {
         perror ("sigprocmask");
         return 1;
     }
+    
+    //sa.sa_handler=sig_usr2;
+    //sigaction(SIGUSR2,&sa,NULL);
 
     /* Initialize statstic dumps */
     if( host->flags & VTUN_STAT ) {
