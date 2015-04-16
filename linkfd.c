@@ -225,6 +225,8 @@ int ptt_allow_once = 0; // allow to push-to-top single packet
 int skip=0;
 int forced_rtt_reached=1;
 
+const sigset_t block_mask, unblock_mask;
+
 char rxmt_mode_request = 0; // flag
 long int weight = 0; // bigger weight more time to wait(weight == penalty)
 long int weight_cnt = 0;
@@ -721,6 +723,22 @@ static void sig_usr1(int sig)
 {
     vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
     info.check_shm = 1;
+}
+
+void sig_send() {
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        uint32_t chan_mask = shm_conn_info->channels_mask;
+        for (int i = 0; i < 32; i++) {
+            if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
+                continue;
+            }
+            sem_wait(&(shm_conn_info->stats_sem));
+            pid_t pid = shm_conn_info->stats[i].pid;
+            sem_post(&(shm_conn_info->stats_sem));
+            if (pid != 0)
+                kill(pid, SIGUSR1);
+        }
+    }
 }
 
 /**
@@ -8549,6 +8567,18 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
 
     sa.sa_handler=sig_alarm;
     sigaction(SIGALRM,&sa,NULL);
+
+    sigemptyset (&block_mask);
+    sigemptyset (&unblock_mask);
+
+    sigaddset (&block_mask, SIGTERM);
+    sigaddset (&block_mask, SIGUSR1);
+    sigaddset (&block_mask, SIGHUP);
+
+    if (sigprocmask(SIG_BLOCK, &block_mask, &unblock_mask) < 0) {
+        perror ("sigprocmask");
+        return 1;
+    }
 
     /* Initialize statstic dumps */
     if( host->flags & VTUN_STAT ) {
