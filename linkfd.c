@@ -224,6 +224,7 @@ uint8_t time_lag_ready;
 int ptt_allow_once = 0; // allow to push-to-top single packet
 int skip=0;
 int forced_rtt_reached=1;
+int select_check=0;
 
 sigset_t block_mask, unblock_mask;
 
@@ -721,6 +722,9 @@ void sig_alarm(int sig)
 
 static void sig_usr1(int sig)
 {
+    if(!select_check) {
+        vtun_syslog(LOG_ERR, "ASSERT FAILED! SIGUSR1 not in select region!");
+    }
     //vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
     //info.check_shm = 1;
 }
@@ -5374,7 +5378,7 @@ int lfd_linker(void)
                 vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
+                vtun_syslog(LOG_ERR, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             }
            
@@ -5475,7 +5479,7 @@ int lfd_linker(void)
         // if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE; // unneeded check due to check_rtt_latency_drop() above
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
-        if(ag_flag_local == AG_MODE) {
+        if(0 && ag_flag_local == AG_MODE) {
             // check our protup against all other chans
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                 if ((chan_mask & (1 << i)) 
@@ -5573,7 +5577,7 @@ int lfd_linker(void)
                 }
                 // warning the whole block is not sync
                 if(((shm_conn_info->ag_mask & (~(1 << info.process_num))) & (shm_conn_info->channels_mask)) !=  // hope that ag_mask is consistent with chan_mask
-                        ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) )){ 
+                        ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) & (shm_conn_info->ag_mask))){ 
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
                     hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
@@ -6764,7 +6768,9 @@ int lfd_linker(void)
 main_select:
         select_tv_copy = tv;
         const struct timespec *sel_tvp = &sel_tv;
+        select_check=1;
         len = pselect(maxfd + 1, &fdset, pfdset_w, NULL, sel_tvp, &unblock_mask);
+        select_check=0;
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
