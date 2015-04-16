@@ -6725,20 +6725,21 @@ int lfd_linker(void)
 #ifdef DEBUGG
         vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
 #endif
+        struct timespec sel_tv;
         if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
             FD_SET(info.tun_device, &fdset);
-            tv.tv_sec = 0;
-            if( (next_token_ms == 0) || (next_token_ms > (SELECT_SLEEP_USEC / 1000))) {
-                tv.tv_usec = SELECT_SLEEP_USEC;
+            sel_tv.tv_sec = 0;
+            if ((next_token_ms == 0) || (next_token_ms > (SELECT_SLEEP_USEC / 1000))) {
+                sel_tv.tv_nsec = SELECT_SLEEP_USEC * 1000;
             } else {
-                tv.tv_usec = next_token_ms * 1000;
+                sel_tv.tv_nsec = next_token_ms * 1000 * 1000;
             }
         } else {
-            tv.tv_sec = get_info_time.tv_sec;
-            if((next_token_ms == 0) || (next_token_ms > (get_info_time.tv_usec / 1000))) {
-                tv.tv_usec = get_info_time.tv_usec;
+            sel_tv.tv_sec = get_info_time.tv_sec;
+            if ((next_token_ms == 0) || (next_token_ms > (get_info_time.tv_usec / 1000))) {
+                sel_tv.tv_nsec = get_info_time.tv_usec * 1000;
             } else {
-                tv.tv_usec = next_token_ms * 1000;
+                sel_tv.tv_nsec = next_token_ms * 1000 * 1000;
             }
 #ifdef DEBUGG
             vtun_syslog(LOG_INFO, "tun read select skip");
@@ -6755,7 +6756,8 @@ int lfd_linker(void)
 #endif
 main_select:
         select_tv_copy = tv;
-        len = select(maxfd + 1, &fdset, pfdset_w, NULL, &tv);
+        const struct timespec *sel_tvp = &sel_tv;
+        len = pselect(maxfd + 1, &fdset, pfdset_w, NULL, sel_tvp, &unblock_mask);
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
