@@ -303,6 +303,8 @@ struct {
     int bytes_sent_chan[MAX_TCP_LOGICAL_CHANNELS];
     int bytes_rcvd_chan[MAX_TCP_LOGICAL_CHANNELS];
     int tokens_max;
+    int maw;
+    int mar;
 } statb;
 
 
@@ -4051,12 +4053,20 @@ int mawmar_allowed() {
     int cwnd = get_cwnd2();
     // we are not head here...
     int max_chan = shm_conn_info->max_chan;
-    int head_limit = (shm_conn_info->stats[max_chan].rsr < shm_conn_info->stats[max_chan].W_cubic ? shm_conn_info->stats[max_chan].rsr : shm_conn_info->stats[max_chan].W_cubic);
+    //int head_limit = (shm_conn_info->stats[max_chan].rsr < shm_conn_info->stats[max_chan].W_cubic ? shm_conn_info->stats[max_chan].rsr : shm_conn_info->stats[max_chan].W_cubic);
+    //int head_limit = shm_conn_info->stats[max_chan].sqe_mean; 
     int my_limit = (info.rsr < info.send_q_limit_cubic ? info.rsr : info.send_q_limit_cubic);
-    int MAW = (my_limit + head_limit) / info.eff_len;
-    int MAR = (shm_conn_info->stats[max_chan].exact_rtt - info.exact_rtt) * shm_conn_info->tpps;
+    //int MAW = (my_limit + head_limit) / info.eff_len;
+    int MAR = (info.exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) * shm_conn_info->tpps / 1000; // our rtt is greater than head's (usually we suppose)
     if(MAR < 0) MAR = -MAR; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
-    return (MAW + MAR < cwnd) && (MAR < BL);
+    statb.maw = (my_limit / info.eff_len < BL);
+    statb.mar = MAR;
+    if(shm_conn_info->stats[info.process_num].ag_flag_local == R_MODE) {
+        //return (MAW + MAR < cwnd) && (MAR < BL);
+        return (my_limit / info.eff_len < BL) && (MAR < BL); // in fact, we only need to check that our limit is reachable by pushing MSBL to net
+    } else { // AG_MODE
+        return (MAR < BL); // this will automatically fail if we push all the MSBL to network
+    }
 }
 /*
 .__   _____   .___    .__  .__        __                     ___  ___    
@@ -5506,13 +5516,23 @@ int lfd_linker(void)
         uint32_t dirty_seq = 0;
         if(ag_flag_local == AG_MODE) {
             if(ag_flag_local_prev != ag_flag_local) {
-                agon_time = info.current_time;
-                shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                if(agag < 10) { // start from zero
+                    agon_time = info.current_time;
+                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                } else {
+                    // recalculate
+                    struct timeval agtime;
+                    timersub(&info.current_time, &agon_time, &agtime);
+                    ms2tv(&agtime, agag * 10);
+                    timersub(&info.current_time, &agtime, &agon_time);
+                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                }
                 ag_flag_local_prev = ag_flag_local;
             }
             // first calculate agag
             timersub(&info.current_time, &agon_time, &tv_tmp);
-            agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
+            //agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
+            agag = tv2ms(&tv_tmp) / 10;
             if(agag > 0) {
                 if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
                 for(int i=0; i<info.channel_amount; i++) {
@@ -5533,8 +5553,17 @@ int lfd_linker(void)
             }
             
             if(ag_flag_local_prev != ag_flag_local) {
-                agon_time = info.current_time;
-                shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                if(agag > 200) { // start from top
+                    agon_time = info.current_time;
+                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                } else {
+                    // recalculate
+                    struct timeval agtime;
+                    timersub(&info.current_time, &agon_time, &agtime);
+                    ms2tv(&agtime, (255 - agag) * 30); 
+                    timersub(&info.current_time, &agtime, &agon_time);
+                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                }
                 ag_flag_local_prev = ag_flag_local;
             }
             // first calculate agag
@@ -5954,6 +5983,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "wS", "%d", info.whm_send_q);
             add_json(js_buf, &js_cur, "wC", "%d", info.whm_cubic);
             add_json(js_buf, &js_cur, "wR", "%d", info.whm_rsr);
+            add_json(js_buf, &js_cur, "maw", "%d", statb.maw);
+            add_json(js_buf, &js_cur, "mar", "%d", statb.mar);
 
             add_json(js_buf, &js_cur, "gsq_grw", "%d", info.gsend_q_grow);
             add_json(js_buf, &js_cur, "ss", "%d", shm_conn_info->slow_start);
