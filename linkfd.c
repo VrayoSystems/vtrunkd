@@ -4600,6 +4600,7 @@ int lfd_linker(void)
     
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
+    shm_conn_info->last_head = info.current_time;
     sem_post(&(shm_conn_info->stats_sem));
     
     info.rsr = RSR_TOP;
