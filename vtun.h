@@ -430,6 +430,7 @@ struct conn_stats {
     int remote_head_channel;
     uint32_t la_sqn; // last received global seq_num ACK
     int loss_send_q;
+    int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
 };
 /**
  * Structure for garbage statistic and information
@@ -459,7 +460,6 @@ struct logical_status {
     uint32_t send_q_old;    /**< previous send_q value */
     int32_t send_q_limit;  /**< current send_q_limit value */
     int32_t ACK_speed[SPEED_AVG_ARR];      /**< Speed based on how fast ACK packets come back. Last 10 measurements @see avg_count */
-    int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
     int avg_count;         /**< Counter for @see ACK_speed_avg calculate*/
     uint32_t local_seq_num;
     uint32_t local_seq_num_recv;

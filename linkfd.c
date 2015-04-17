@@ -3058,7 +3058,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         min_rtt = shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt;
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) && check_plp_ok(i, chan_mask) ) {
-                if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)) { // 15% corridor to consider speeds the same
+                if(percent_delta_equal(shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg, 10)) { // 15% corridor to consider speeds the same
                     // new ALGO: Si ~= Sh => we almost certainly selected head wrong.
                     // now choose best rtt2 from all chans that have same speed!
                     if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
@@ -3071,17 +3071,17 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         }
 
         if(max_chan_H > -1) {
-            vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed, shm_conn_info->stats[max_chan_H].exact_rtt);
+            vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed_avg, shm_conn_info->stats[max_chan_H].exact_rtt);
         }
 
         // TODO: what to do if these two methods disagree? Is it possible?
         
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
             if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) && check_plp_ok(i, chan_mask)) {
-                if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed, 10)
-                         && ( shm_conn_info->stats[i].ACK_speed > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed )) { // 15% corridor to consider speeds the same
+                if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg, 10)
+                         && ( shm_conn_info->stats[i].ACK_speed_avg > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg )) { // 15% corridor to consider speeds the same
                     max_chan_H = i;
-                    vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed);
+                    vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg);
                 }
             }
         }
@@ -4891,8 +4891,6 @@ int lfd_linker(void)
         int64_t bytes_pass = 0;
 
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
-        //bytes_pass = time_sub_tmp.tv_sec * 1000 * info.channel[my_max_send_q_chan_num].ACK_speed_avg
-        //        + (time_sub_tmp.tv_usec * info.channel[my_max_send_q_chan_num].ACK_speed_avg) / 1000;
         int64_t upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         if(upload_eff < 10) upload_eff = 100000; // 1000kpkts default start speed
         
@@ -5878,6 +5876,7 @@ int lfd_linker(void)
             //max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len)); // disabled for future fix
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
+            shm_conn_info->stats[info.process_num].ACK_speed_avg = 6 * shm_conn_info->stats[info.process_num].ACK_speed_avg / 7 + max_ACS2 / 7;
             miss_packets_max = shm_conn_info->miss_packets_max;
             sem_post(&(shm_conn_info->stats_sem));
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -5969,6 +5968,7 @@ int lfd_linker(void)
             statb.tokens_max = 0;
             
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "ACSa", "%d", shm_conn_info->stats[info.process_num].ACK_speed_avg);
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "lossq", "%d", shm_conn_info->stats[info.process_num].loss_send_q);
             add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
