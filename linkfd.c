@@ -6458,7 +6458,7 @@ int lfd_linker(void)
             #ifdef CLIENTONLY
             timersub(&info.current_time, &shm_conn_info->last_head, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {800,0}), >=)) {
-                vtun_syslog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
+                vtun_syslog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", seq_num, info.exact_rtt);
                 sq_control = 0;
             } else {
                 sq_control = 1;
