@@ -148,7 +148,7 @@ struct my_ip {
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
 #define MSBL_PUSHUP_K 120
-#define MAX_STUB_JITTER 40 // maximum packet jitter that we allow on buffer to happen
+#define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -1049,6 +1049,9 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
 }
 
 int check_tokens(int chan_num) {
+#ifndef CLIENTONLY
+    return 1; 
+#endif
     if(shm_conn_info->tokens > 0) return 1;
     int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
     if(tokens_above_thresh < 0) tokens_above_thresh = 0;
@@ -5707,7 +5710,7 @@ int lfd_linker(void)
         sem_post(&(shm_conn_info->stats_sem));
         if(!info.head_channel) {
             if(hold_mode_previous == 0 && hold_mode == 1) {
-                sig_send1(); // notify head (all) about our new condition
+                //sig_send1(); // notify head (all) about our new condition
             }
         }
         //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
@@ -6221,7 +6224,7 @@ int lfd_linker(void)
                 memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                tmp16_n = htons(shm_conn_info->slow_start); 
+                //tmp16_n = htons(shm_conn_info->slow_start); 
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -6339,7 +6342,7 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                    tmp16_n = htons(shm_conn_info->slow_start); 
+                    //tmp16_n = htons(shm_conn_info->slow_start); 
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
