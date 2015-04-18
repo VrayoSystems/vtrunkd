@@ -1691,7 +1691,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 get_unconditional = 1;
                 ptt_allow_once = 0;
             } else {
-                if(check_delivery_time(SKIP_SENDING_CLD_DIV)) { // TODO: head always passes! 
+                if(check_delivery_time(SKIP_SENDING_CLD_DIV) && (!shm_conn_info->slow_start || info.head_channel)) { // TODO: head always passes! 
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
@@ -5444,6 +5444,7 @@ int lfd_linker(void)
             (shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER))
                            //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
                            //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
+                           || shm_conn_info->slow_start
                            || ( channel_dead )
                            || ( shm_conn_info->idle )
                            //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
@@ -5465,7 +5466,7 @@ int lfd_linker(void)
         if(!mawmar_allowed()) ag_stat.CL = 1;
         if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
         print_ag_drop_reason();
-        if(info.head_channel && !shm_conn_info->idle) {// TODO HERE: add RTT/BW decision here
+        if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
 #ifdef CLIENTONLY
