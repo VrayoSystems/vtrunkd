@@ -5221,7 +5221,11 @@ int lfd_linker(void)
             // FAST-redetect head experiment
             redetect_head_unsynced(chan_mask, -1);
 
-            send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            if(send_q_eff_mean < send_q_eff) {
+                send_q_eff_mean = send_q_eff;
+            } else {
+                send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+            }
             if (info.max_send_q < send_q_eff_mean) {
                 info.max_send_q = send_q_eff_mean;
             }
