@@ -4039,6 +4039,14 @@ int compute_max_allowed_rtt() {
     return max_frtt;
 }
 
+int is_happiness_reached() {
+    double d_rtt = (double)shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt / 1000.0;
+    if(d_rtt == 0) d_rtt = 1.0;
+    double my_mbits = ((double)(shm_conn_info->tpps) * (double)info.eff_len) / 1000000.0 * 8.0;
+    double happy_mbits = 3.87 + 0.031 / d_rtt - 3.93 * d_rtt;
+    return (my_mbits > happy_mbits);
+}
+
 int mawmar_allowed() {
     if(info.head_channel) return 1;
     int BL = (int)shm_conn_info->buf_len_recv; // or lbuf_len_recv ???
@@ -5221,11 +5229,16 @@ int lfd_linker(void)
             
             // FAST-redetect head experiment
             redetect_head_unsynced(chan_mask, -1);
-
-            if(send_q_eff_mean < send_q_eff) {
-                send_q_eff_mean = send_q_eff;
+            
+            //send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?) // TODO: use correct smoothing algorithm!
+            send_q_eff_mean = 6 * send_q_eff_mean / 7 + send_q_eff / 7;
+            
+            if(shm_conn_info->stats[info.process_num].sqe_mean_lossq < send_q_eff) {
+                shm_conn_info->stats[info.process_num].sqe_mean_lossq = send_q_eff;
             } else {
-                send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+                //send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
+                //shm_conn_info->stats[info.process_num].sqe_mean_lossq = (send_q_eff - shm_conn_info->stats[info.process_num].sqe_mean_lossq) / 30;
+                shm_conn_info->stats[info.process_num].sqe_mean_lossq = 6 * shm_conn_info->stats[info.process_num].sqe_mean_lossq / 7 + send_q_eff / 7;
             }
             if (info.max_send_q < send_q_eff_mean) {
                 info.max_send_q = send_q_eff_mean;
@@ -5454,7 +5467,7 @@ int lfd_linker(void)
                            || ( shm_conn_info->idle )
                            //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
                            || !mawmar_allowed()
-                           || ( !shm_conn_info->dropping && !shm_conn_info->head_lossing )
+                           || (( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached())
                            //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
                            //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
@@ -5469,7 +5482,7 @@ int lfd_linker(void)
         if(channel_dead) ag_stat.D = 1;
         //if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
         if(!mawmar_allowed()) ag_stat.CL = 1;
-        if(!shm_conn_info->dropping && !shm_conn_info->head_lossing) ag_stat.DL = 1;
+        if(( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached()) ag_stat.DL = 1;
         print_ag_drop_reason();
         if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
@@ -7612,7 +7625,7 @@ if(drop_packet_flag) {
                                 }
                                 if(info.send_q_limit_cubic_max / info.eff_len < LOSS_SEND_Q_MAX) {
                                     //shm_conn_info->stats[info.process_num].loss_send_q = info.send_q_limit_cubic_max / info.eff_len; // packets in network at loss
-                                    shm_conn_info->stats[info.process_num].loss_send_q = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // SQE expreiment
+                                    shm_conn_info->stats[info.process_num].loss_send_q = shm_conn_info->stats[info.process_num].sqe_mean_lossq / info.eff_len; // SQE expreiment
                                 } else {
                                     shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
                                 } 
