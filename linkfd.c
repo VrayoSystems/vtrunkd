@@ -5360,7 +5360,7 @@ int lfd_linker(void)
             double d_rtt_diff = d_rtt_h - d_rtt;
             
             //double d_mld_ms = MAX_LATENCY_DROP_USEC / 1000;
-            double d_msbl_overdrive = 50 * info.eff_len; // packets?
+            double d_msbl_overdrive = 50; // packets?
             /*d_mld_ms /= 1000000.0; 
             if(shm_conn_info->max_allowed_rtt < d_mld_ms) {
                 d_mld_ms = shm_conn_info->max_allowed_rtt;
@@ -5381,7 +5381,7 @@ int lfd_linker(void)
             }
             
             //d_sql += d_pump_adj;
-            d_sql += (double)(shm_conn_info->buf_len_recv / 3) + d_msbl_overdrive;
+            d_sql += ((double)(shm_conn_info->buf_len_recv / 3) + d_msbl_overdrive) * (double)info.eff_len;
             temp_sql_copy2 = (int) d_sql; 
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
