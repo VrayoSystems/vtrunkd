@@ -4063,7 +4063,7 @@ int mawmar_allowed() {
     //int MAW = (my_limit + head_limit) / info.eff_len;
     int MAR = (info.exact_rtt - shm_conn_info->stats[max_chan].exact_rtt) * shm_conn_info->tpps / 1000; // our rtt is greater than head's (usually we suppose)
     if(MAR < 0) MAR = -MAR; // MAR can not influence MAW as the window required to load both networks has nothing to do with jitter smoothing buffer
-    statb.maw = (my_limit / info.eff_len < BL);
+    statb.maw = my_limit / info.eff_len;
     statb.mar = MAR;
     if(shm_conn_info->stats[info.process_num].ag_flag_local == R_MODE) {
         //return (MAW + MAR < cwnd) && (MAR < BL);
@@ -7616,6 +7616,14 @@ if(drop_packet_flag) {
                                 } else {
                                     shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_MAX;
                                 } 
+                                // now set all the chans that have undefined loss_send_q
+                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) &&
+                                        (shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_UNKNOWN)) {
+                                            shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[info.process_num].loss_send_q;
+                                    }
+                                }
+                                            
                                 t = 0;
                                 info.max_send_q = 0;
                                 //waste Cubic recalc
