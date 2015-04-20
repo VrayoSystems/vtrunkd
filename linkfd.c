@@ -2327,6 +2327,9 @@ int write_buf_check_n_flush(int logical_channel) {
             return 0;
         }
         int cond_flag = ((shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; // stub packet support may beadded here
+        if(shm_conn_info->frames_buf[fprev].seq_num == shm_conn_info->write_buf[logical_channel].last_written_seq) {
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
+        }
     #ifdef FRTTDBG
         vtun_syslog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
     #endif
