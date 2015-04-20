@@ -149,6 +149,7 @@ struct my_ip {
 #define MSBL_PUSHDOWN_K 30
 #define MSBL_PUSHUP_K 120
 #define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
+#define AGAG_MAX 150
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -1745,7 +1746,7 @@ int retransmit_send(char *out2, int n_to_send) {
             len = get_resend_frame(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
             if (len == -1) {
                 last_sent_packet_num[i].seq_num--;
-                if (check_delivery_time(2)) {
+                if (check_delivery_time(2)  && !shm_conn_info->slow_start) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     // TODO: disable AG in case of this event!
                     vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
@@ -5541,7 +5542,7 @@ int lfd_linker(void)
             //agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
             agag = tv2ms(&tv_tmp) / 10;
             if(agag > 0) {
-                if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
+                if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
                 for(int i=0; i<info.channel_amount; i++) {
                     dirty_seq += info.channel[i].local_seq_num;
                 }
@@ -5578,7 +5579,7 @@ int lfd_linker(void)
             agag = 255 - tv2ms(&tv_tmp) / 30; // WARNING: overflow may happen here // 3x times slower for NVR to be able to collect CWND before loss
             // TODO: dup code - may be optimized!
             if(agag > 0) {
-                if(agag > 255) agag = 255; // 2555 milliseconds for full AG (~1% not AG)
+                if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
                 for(int i=0; i<info.channel_amount; i++) {
                     dirty_seq += info.channel[i].local_seq_num;
                 }
