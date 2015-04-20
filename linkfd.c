@@ -1094,6 +1094,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     // TODO WARNING i do not know why we are still checking packets if we see no rel_head
     
+    int buf_latency_ms;
     struct timeval max_latency_drop;
     int rtou = get_rto_usec();
     max_latency_drop.tv_sec = rtou / 1000000;
@@ -1107,6 +1108,10 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
     #endif
         info.least_rx_seq[i] = UINT32_MAX;
+        timersub(   &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].time_stamp, 
+                    &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, 
+                    &packet_wait_tv);
+        buf_latency_ms = tv2ms(&packet_wait_tv);
         /*
         seq_loss = 0;
         if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
@@ -1139,7 +1144,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
                     if(    shm_conn_info->stats[p].channel_dead 
-                       || ((shm_conn_info->stats[p].exact_rtt - shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt) > (MAX_LATENCY_DROP_USEC / 1000))) { // do not wait for late packet only if drtt is > MLD or DEAD
+                       || ((shm_conn_info->stats[p].exact_rtt - shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt) > (buf_latency_ms + (MAX_LATENCY_DROP_USEC / 1000)))) { // do not wait for late packet only if drtt is > MLD or DEAD
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
