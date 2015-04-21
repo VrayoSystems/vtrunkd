@@ -4737,7 +4737,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         if((shm_conn_info->hold_mask & shm_conn_info->channels_mask) == 0) {
-            vtun_syslog("ASSERT FAILED! all channels in HOLD! %d", shm_conn_info->hold_mask);
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! all channels in HOLD! %d", shm_conn_info->hold_mask);
         }
         if(statb.tokens_max < shm_conn_info->tokens) {
             statb.tokens_max = shm_conn_info->tokens; // TODO: for debug only - remove!
