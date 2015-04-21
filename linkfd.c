@@ -1937,6 +1937,7 @@ int select_devread_send(char *buf, char *out2) {
         // we aren't checking FD_ISSET because we did select one descriptor
         len = dev_read(info.tun_device, buf, VTUN_FRAME_SIZE - 11);
         sem_post(&(shm_conn_info->tun_device_sem));
+        // TODO WARNING! packet reordering will happen here: we lost sync before seq_counter incremented -->>>
 
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
@@ -2330,6 +2331,9 @@ int write_buf_check_n_flush(int logical_channel) {
         if(shm_conn_info->frames_buf[fprev].seq_num == shm_conn_info->write_buf[logical_channel].last_written_seq) {
             vtun_syslog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
         }
+        if(shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->write_buf[logical_channel].last_written_seq) {
+            vtun_syslog(LOG_ERR, "ASSERT FAILED! Negative packet seq_num diff in WB! seq %lu < lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
+        }
     #ifdef FRTTDBG
         vtun_syslog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
     #endif
@@ -2591,7 +2595,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
 //            vtun_syslog(LOG_ERR, "calculated packet stored in %i", packet_index);
             if (packet_index != -1) {
-                vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host,
+                vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 3}", lfd_host->host,
                         shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
 
                 //    vtun_syslog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
@@ -7042,7 +7046,7 @@ if(drop_packet_flag) {
                                         print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                                 "ASSERT BAD packet repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     } else {
-                                        vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host, lostSeq);
+                                        vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 2}", lfd_host->host, lostSeq);
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
@@ -8127,7 +8131,8 @@ if(drop_packet_flag) {
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "ASSERT BAD packet after sum repaired ", lostSeq,
                                                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                 } else {
-                                    vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32"}", lfd_host->host, lostSeq);
+                                    vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 1}", lfd_host->host, lostSeq);
+                                    
 #ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
@@ -8284,7 +8289,7 @@ if(drop_packet_flag) {
                     vtun_syslog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
-                    len = 0; // shittyhold - should never kick in again!
+                    len = 0; // shittyhold - should never kick in again!    
                     vtun_syslog(LOG_INFO, "shit! hold!");
                 } else {
                 len = select_devread_send(buf, out2);
