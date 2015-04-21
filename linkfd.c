@@ -5687,7 +5687,7 @@ int lfd_linker(void)
             }
         }
 
-        if(hold_mode || info.head_channel) {
+        if(hold_mode) {
             shm_conn_info->hold_mask &= ~(1 << info.process_num); // set bin mask to zero (send not allowed)
         } else {
             shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
