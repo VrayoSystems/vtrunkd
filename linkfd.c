@@ -744,7 +744,7 @@ void sig_send1() {
         sem_wait(&(shm_conn_info->stats_sem));
         pid = shm_conn_info->stats[i].pid;
         sem_post(&(shm_conn_info->stats_sem));
-        if (pid != 0) {
+        if (pid != 0 && shm_conn_info->max_chan == i && shm_conn_info->stats[i].hold) {
             kill(pid, SIGUSR1);
         }
     }
