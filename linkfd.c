@@ -6666,12 +6666,12 @@ int lfd_linker(void)
             }
             
             
-            //sem_wait(&(shm_conn_info->write_buf_sem));
-            //check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
-            //sem_post(&(shm_conn_info->write_buf_sem));
-            //if(check_result < 0) {
-            //    vtun_syslog(LOG_ERR, "CHECK FAILED: write_buf broken: error %d", check_result);
-            //}
+            sem_wait(&(shm_conn_info->write_buf_sem));
+            check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
+            sem_post(&(shm_conn_info->write_buf_sem));
+            if(check_result < 0) {
+                vtun_syslog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
+            }
             
                last_timing.tv_sec = info.current_time.tv_sec;
                last_timing.tv_usec = info.current_time.tv_usec;
