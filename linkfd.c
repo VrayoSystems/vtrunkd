@@ -3172,7 +3172,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         }
     }
     if(new_max_chan == -1) {
-        vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        //vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
         shm_conn_info->head_detected_ts = info.current_time;
         shm_conn_info->max_chan_new = shm_conn_info->max_chan;
         return fixed;
