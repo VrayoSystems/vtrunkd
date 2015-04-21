@@ -163,6 +163,8 @@ struct my_ip {
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
 #define HEAD_REDETECT_HYSTERESIS_TV {0,800000} // timeval (interval) for chan speed redetect
+#define HEAD_HYSTERESIS_MIN_MS 800 // this replaced the above one
+#define HEAD_TRANSITION_DELAY {0, 400}
 #define SPEED_REDETECT_IMMUNE_SEC 5 // (interval seconds) before next auto-redetection can occur after PROTUP - added to above timer!
 
 #define LIN_RTT_SLOWDOWN 70 // Grow rtt 40x slower than real-time
@@ -1109,7 +1111,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     #endif
         info.least_rx_seq[i] = UINT32_MAX;
         timersub(   &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].time_stamp, 
-                    &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, 
+                    &shm_conn_info->write_buf[i].last_write_time,
                     &packet_wait_tv);
         buf_latency_ms = tv2ms(&packet_wait_tv);
         /*
@@ -3182,7 +3184,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         int hsqs = shm_conn_info->stats[shm_conn_info->max_chan].sqe_mean - shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean;
         if(hsqs <= 0) htime = 0;
         else htime = transition_period_time(hsqs);
-        if(htime < 800) shm_conn_info->head_change_htime = 800; // ms? // TODO: variable constant!
+        if(htime < HEAD_HYSTERESIS_MIN_MS) shm_conn_info->head_change_htime = HEAD_HYSTERESIS_MIN_MS; // ms? // TODO: variable constant!
         ms2tv(&shm_conn_info->head_change_htime_tv, shm_conn_info->head_change_htime);
         vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d TIME=%d ms", shm_conn_info->max_chan, exclude, shm_conn_info->head_change_htime);
     } else {
@@ -5135,7 +5137,7 @@ int lfd_linker(void)
             // calculate hsqs
             //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
-            int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, 200000}), >=); // protect from immediate dolbejka TODO: need more precise timing
+            int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) HEAD_TRANSITION_DELAY), >=); // protect from immediate dolbejka TODO: need more precise timing
             int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
                 info.head_send_q_shift = head_send_q_shift;
