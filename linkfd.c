@@ -127,7 +127,7 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_NETWORK_STALL { 0, 50000 } // 50ms maximum network stall
+#define MAX_NETWORK_STALL { 0, 100000 } // 50ms maximum network stall
 #define MAX_LATENCY_DROP_USEC 200000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_DROP_SHIFT 100 // ms. to add to forced_rtt - or use above
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
