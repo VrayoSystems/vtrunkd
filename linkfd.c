@@ -2571,11 +2571,17 @@ int write_buf_check_n_flush(int logical_channel) {
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
 //            return 1;
-            frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &fold);
+            if(frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &fold) < 0) {
+                vtun_syslog(LOG_ERR, "WARNING! tried to pull from empty write_buf!");
+                return 0;
+            }
             frame_llist_append(&shm_conn_info->wb_just_write_frames[logical_channel], fold, shm_conn_info->frames_buf);
             if (shm_conn_info->wb_just_write_frames[logical_channel].length > PACKET_CODE_BUFFER_SIZE) {
                 int frame_index;
-                frame_llist_pull(&shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &frame_index);
+                if(frame_llist_pull(&shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &frame_index) < 0) {
+                    vtun_syslog(LOG_ERR, "ASSERT FAILED! can not pull anything from wjf!");
+                    return 0;
+                }
                 frame_llist_append(&shm_conn_info->wb_free_frames, frame_index, shm_conn_info->frames_buf);
             }
        //     vtun_syslog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
