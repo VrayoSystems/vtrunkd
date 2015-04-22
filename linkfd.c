@@ -2335,6 +2335,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 vtun_syslog(LOG_ERR, "ASSERT FAILED!: stub_total <0!");
                 shm_conn_info->write_buf[logical_channel].frames.stub_total = 0;
             }
+            shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
             return 0;
         }
         int cond_flag = ((shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; // stub packet support may beadded here
