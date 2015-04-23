@@ -150,6 +150,9 @@ struct my_ip {
 #define MSBL_PUSHUP_K 120
 #define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
 #define AGAG_MAX 150
+#define SLOW_START_MAX_RUN {3, 500000} // max slow_start runtime after idle
+#define SLOW_START_IMMUNE  {10, 100000} // no SS allowed within this period after previous SS
+#define SLOW_START_INCINT 10 // amount of packets to increase MSBL by 1 after
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -2851,7 +2854,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_ERR, "adding token+1");
         #endif
         shm_conn_info->tokens++;
-        if(shm_conn_info->slow_start_recv && ((seq_num % 2) == 0)) {
+        if(shm_conn_info->slow_start_recv && ((seq_num % SLOW_START_INCINT) == 0)) {
            shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
@@ -4959,8 +4962,8 @@ int lfd_linker(void)
         // SLOW START DETECTOR >>>
         sem_wait(&(shm_conn_info->write_buf_sem));
         struct timeval ss_runtime;
-        struct timeval ss_immune = {10, 100000};
-        struct timeval ss_max_run = {3, 500000};
+        struct timeval ss_immune = SLOW_START_IMMUNE;
+        struct timeval ss_max_run = SLOW_START_MAX_RUN;
         timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
         shm_conn_info->slow_start_allowed = 1;
         if(timercmp(&ss_runtime, &ss_max_run, >=)) {
@@ -6280,7 +6283,7 @@ int lfd_linker(void)
                 memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                //tmp16_n = htons(shm_conn_info->slow_start); 
+                tmp16_n = htons(shm_conn_info->slow_start); 
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -6398,7 +6401,7 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                    //tmp16_n = htons(shm_conn_info->slow_start); 
+                    tmp16_n = htons(shm_conn_info->slow_start); 
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
