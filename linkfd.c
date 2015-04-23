@@ -595,7 +595,7 @@ int update_prev_flushed(int logical_channel, int fprev) {
 // NOTE: Need to ensure that we have a missing packet at LWS+1 prior to calling this!
 int flush_reason_chan(int status, int logical_channel, char *pname, int chan_mask, int *who_lost_pnum) {
     // we let that next seq_num to LWS is lost
-    int lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
+    uint32_t lost_seq_num = shm_conn_info->write_buf[logical_channel].last_written_seq + 1;
     int lrq = 0;
     int lagging = 0;
     *who_lost_pnum = -1;
