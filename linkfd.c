@@ -1161,7 +1161,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
-                        // vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
+                        vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
                         continue;
                     }
                     if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
@@ -5667,7 +5667,7 @@ int lfd_linker(void)
                         ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) & (shm_conn_info->ag_mask))){ 
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
-                    hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
+                    ////hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
                     drop_packet_flag = 0;
                     // TODO HERE: may have problems in case of 
                     // 1. incorrect detection of chan RSR/W
@@ -6284,6 +6284,7 @@ int lfd_linker(void)
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 tmp16_n = htons(shm_conn_info->slow_start); 
+                tmp16_n = 0;
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -6402,6 +6403,7 @@ int lfd_linker(void)
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                     tmp16_n = htons(shm_conn_info->slow_start); 
+                    tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
