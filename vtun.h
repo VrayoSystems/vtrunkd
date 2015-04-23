@@ -785,6 +785,11 @@ struct conn_info {
     char void13[4096];
     char void3[4096];
 #endif
+    struct {
+        sem_t logSem;
+        char log[100000];
+        int counter;
+    } syslog;
 };
 
 struct resent_chk {

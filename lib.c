@@ -136,6 +136,51 @@ int syslog_sequential_counter = 0;
 int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
 int init = 0;
 
+int shm_log_state = 0; // 0 - regular log 1 - over shm
+struct {
+    sem_t *logSem;
+    char *log;
+    int *pointer;
+    int size;
+} shm_syslog = { NULL, NULL, NULL, 0 };
+
+void set_vtun_syslog_shm(int state, sem_t *logSem, char *log, int *counter, int size) {
+    shm_log_state = state;
+    if (state) {
+        shm_syslog.logSem = logSem;
+        shm_syslog.log = log;
+        shm_syslog.pointer = counter;
+        shm_syslog.size = size;
+    } else {
+        shm_syslog.logSem = NULL;
+        shm_syslog.log = NULL;
+        shm_syslog.pointer = NULL;
+        shm_syslog.size = 0;
+    }
+}
+
+void print_vtun_shm_syslog(int priority, char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    if (shm_log_state) {
+        char buf[JS_MAX];
+        int str_len = vsnprintf(buf, sizeof(buf) - 1, format, ap);
+        sem_wait(shm_syslog.logSem);
+        if (shm_syslog.size - *(shm_syslog.pointer) < str_len + 1) { // str_len + zero terminate
+            memcpy(shm_syslog.log + *(shm_syslog.pointer), buf, shm_syslog.size - *(shm_syslog.pointer));
+            memcpy(shm_syslog.log, buf + (shm_syslog.size - *(shm_syslog.pointer)), (str_len + 1) - (shm_syslog.size - *(shm_syslog.pointer)));
+            *(shm_syslog.pointer) = (str_len + 1) - (shm_syslog.size - *(shm_syslog.pointer));
+        } else {
+            memcpy(shm_syslog.log + *(shm_syslog.pointer), buf, str_len + 1);
+            *shm_syslog.pointer += str_len + 1;
+        }
+        sem_post(shm_syslog.logSem);
+    } else {
+        vsyslog(priority, format, ap);
+    }
+    va_end(ap);
+}
+
 /* 
  * Print padded messages.
  * Used by 'auth' function to force all messages 
@@ -438,6 +483,7 @@ void vtun_syslog(int priority, char *format, ...) {
 
         va_start(ap, format);
         vsnprintf(buf, sizeof(buf) - 1, format, ap);
+        va_end(ap);
         if (init) {
             if (syslog_dup_type == 0) {
 //                syslog(priority, "type 1 test counter %d %s new - %s",syslog_buf_counter,syslog_buf[syslog_buf_counter], buf);
@@ -573,7 +619,6 @@ void vtun_syslog(int priority, char *format, ...) {
             }
             syslog(priority, "%s", buf);
         }
-        va_end(ap);
       in_syslog = 0;
    }
 #else

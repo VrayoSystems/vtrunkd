@@ -1,1 +1,1 @@
-#define VERSION "v0.1504-23-g9436-dirty"
+#define VERSION "v0.1504-25-g64d4-dirty-1504_shmlog"

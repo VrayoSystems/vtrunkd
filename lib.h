@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
+#include <semaphore.h>
 
 #ifdef HAVE_LIBUTIL_H
 #include <libutil.h>
@@ -69,6 +70,7 @@ static inline void io_cancel(void)
 
 /* signal safe syslog function */
 void vtun_syslog_init();
+void set_vtun_syslog_shm(int state, sem_t *logSem, char *log, int *counter, int size);
 void vtun_syslog_free();
 void vtun_syslog (int priority, char *format, ...);
 int add_json(char *buf, int *pos, const char *name, const char *format, ...);
