@@ -1048,13 +1048,19 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) {
         shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     }
+    if(shm_conn_info->slow_start_recv) {
+        ms_for_token = 1;
+        *next_token_ms = 1;
+    }
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
+        if(!shm_conn_info->slow_start_recv) {
         if(APCS == 0) { // i=n caseof ss
             ms_for_token = 50; // ms before packet drop? (zero speed)
         } else {
             ms_for_token = 1000 / APCS;
+        }
         }
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
         *next_token_ms = ms_for_token;
@@ -1066,6 +1072,14 @@ int check_tokens(int chan_num) {
 #ifndef CLIENTONLY
     return 1; 
 #endif
+    if(shm_conn_info->slow_start_recv) {
+        struct timeval since_write_tv;
+        timersub(&info.current_time, &shm_conn_info->write_buf[chan_num].last_write_time, &since_write_tv);
+        if(since_write_tv.tv_usec < 1000) {
+            return 0;
+        }
+    }
+        
     if(shm_conn_info->tokens > 0) return 1;
     int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
     if(tokens_above_thresh < 0) tokens_above_thresh = 0;
@@ -2855,7 +2869,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         #endif
         shm_conn_info->tokens++;
         if(shm_conn_info->slow_start_recv && ((seq_num % SLOW_START_INCINT) == 0)) {
-           shm_conn_info->max_stuck_buf_len += 1;
+           //shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
         //    // drop exactly one packet (at least try to)
@@ -5192,7 +5206,7 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    if(shm_conn_info->slow_start_recv) {
+                    if(0&& shm_conn_info->slow_start_recv) {
                         iK = 10000; // zero push in slow start
                     } else {
                         iK = MSBL_PUSHDOWN_K; // push down
@@ -5667,7 +5681,7 @@ int lfd_linker(void)
                         ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) & (shm_conn_info->ag_mask))){ 
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
-                    ////hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
+                    hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
                     drop_packet_flag = 0;
                     // TODO HERE: may have problems in case of 
                     // 1. incorrect detection of chan RSR/W
@@ -6284,7 +6298,7 @@ int lfd_linker(void)
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 tmp16_n = htons(shm_conn_info->slow_start); 
-                tmp16_n = 0;
+                //tmp16_n = 0;
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
                 vtun_syslog(LOG_ERR,
@@ -6403,7 +6417,7 @@ int lfd_linker(void)
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                     tmp16_n = htons(shm_conn_info->slow_start); 
-                    tmp16_n = 0;
+                    //tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
                     vtun_syslog(LOG_ERR,
