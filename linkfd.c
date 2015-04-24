@@ -1175,7 +1175,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
-                        vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel");
+                        vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel dead %d, p %d - ertt %d rhd %d - ertt %d, blm %d mld %d",
+                                        shm_conn_info->stats[p].channel_dead, p, shm_conn_info->stats[p].exact_rtt, shm_conn_info->remote_head_pnum, shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt, buf_latency_ms, (MAX_LATENCY_DROP_USEC / 1000));
                         continue;
                     }
                     if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
