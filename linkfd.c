@@ -5223,7 +5223,7 @@ int lfd_linker(void)
             } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                        info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                        info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
                     } else {
                         // in unknown value - set HSQS to 1 to push remote buf to net slowly
                         info.head_send_q_shift = 10000;
@@ -7484,7 +7484,7 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
                                                 add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
-                                                if(psl > PSL_RECOVERABLE && shm_conn_info->stats[i].l_pbl_recv > L_PBL_JOIN_EVENTS) {
+                                                if(psl > PSL_RECOVERABLE && shm_conn_info->stats[i].l_pbl_recv > L_PBL_JOIN_EVENTS && shm_conn_info->stats[i].l_pbl_tmp_unrec > L_PBL_JOIN_EVENTS) {
                                                     // unrecoverable loss
                                                     shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
                                                     shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
