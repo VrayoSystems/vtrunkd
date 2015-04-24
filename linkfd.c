@@ -7565,7 +7565,7 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t)); 
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp16_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t)); 
-                            shm_conn_info->slow_start_recv = ntohl(tmp16_n);
+                            shm_conn_info->slow_start_recv = ntohs(tmp16_n);
                             // now recalculate MAR is possible...
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?
