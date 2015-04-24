@@ -153,7 +153,7 @@ struct my_ip {
 #define AGAG_MAX 150
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
 #define SLOW_START_IMMUNE  {10, 100000} // no SS allowed within this period after previous SS
-#define SLOW_START_INCINT 2 // amount of packets to increase MSBL by 1 after
+#define SLOW_START_INCINT 4 // amount of packets to increase MSBL by 1 after
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
