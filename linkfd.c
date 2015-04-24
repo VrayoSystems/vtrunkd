@@ -1135,10 +1135,11 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                 vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
     #endif
         info.least_rx_seq[i] = UINT32_MAX;
-        timersub(   &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_tail].time_stamp, 
+        timersub(   &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, 
                     &shm_conn_info->write_buf[i].last_write_time,
                     &packet_wait_tv);
         buf_latency_ms = tv2ms(&packet_wait_tv);
+        if(buf_latency_ms < 0) buf_latency_ms = 0;
         /*
         seq_loss = 0;
         if(shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num > (shm_conn_info->write_buf[i].last_written_seq + 1)){
