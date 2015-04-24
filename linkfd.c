@@ -1316,7 +1316,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     // TODO what time is the expiration time? MLD diff or MAR?
     //mrl_ms = MAX_LATENCY_DROP_USEC / 1000 / 2;
     //mrl_ms = shm_conn_info->stats[shm_conn_info->max_chan].rttvar;
-    mrl_ms = 10; // 20 ms lag // should be zero
+    mrl_ms = 100; // 20 ms lag // should be zero
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
         //vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
