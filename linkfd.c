@@ -323,6 +323,10 @@ struct {
     int skip_new_d; // skipping and sending new as we can deliver in time and we have no more packets
     int skip_r; // skipping as a result of all computations
     int skip_no; // skipping without sending
+    int skip_l; // skipping by getting last packet
+    int p_tooold;
+    int p_expnum;
+    int p_tooearly;
 } statb;
 
 
@@ -1355,6 +1359,18 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
 //                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) && (shm_conn_info->resend_frames_buf[j].len != 0)) {
+                      if( shm_conn_info->resend_frames_buf[j].seq_num = *seq_num ) { // AND is the one we're seeking for
+                          if(timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <)) { // packet is not too old
+                            statb.p_tooold++;
+                          }
+                          if( (top_seq_num - shm_conn_info->resend_frames_buf[j].seq_num) < expnum )  { 
+                              // AND we can send it and all of the rest to top in MLD time in case of DDS
+                                statb.p_expnum++;
+                          }
+                          if(timercmp(&continuum_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >=))  { // AND packet is not too early
+                              statb.p_tooearly++;
+                          }
+                      }
             if (   
                       timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <) // packet is not too old
                       && ( (top_seq_num - shm_conn_info->resend_frames_buf[j].seq_num) < expnum ) // AND we can send it and all of the rest to top in MLD time in case of DDS
@@ -1808,6 +1824,7 @@ int retransmit_send(char *out2, int n_to_send) {
                     statb.skip_new_d++;
                     continue;
                 }
+                statb.skip_l++;
             }
         }
         if(last_sent_packet_num[i].seq_num != seq_num_tmp) {
@@ -6103,12 +6120,19 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "sd", "%d", statb.skip_new_d);// skipping and sending new as we can deliver in time and we have no more packets
             add_json(js_buf, &js_cur, "sr", "%d", statb.skip_r); // skipping as a result of all computations
             add_json(js_buf, &js_cur, "sn", "%d", statb.skip_no); // skipping without sending
-
+            add_json(js_buf, &js_cur, "sl", "%d", statb.skip_l); // skipping by getting last packet, includes skip_r, excludes skip_new_d
+            add_json(js_buf, &js_cur, "po", "%d", statb.p_tooold); 
+            add_json(js_buf, &js_cur, "pn", "%d", statb.p_expnum); 
+            add_json(js_buf, &js_cur, "pe", "%d", statb.p_tooearly); 
             statb.skip_new_h=0;
             statb.skip_new_d=0;
             statb.skip_r=0;
             statb.skip_no=0;
+            statb.skip_l=0;
 
+            statb.p_tooold=0;
+            statb.p_expnum=0;
+            statb.p_tooearly=0;
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
             //add_json(js_buf, &js_cur, "WT", "%d", ag_stat.WT);
             add_json(js_buf, &js_cur, "D", "%d", ag_stat.D);
