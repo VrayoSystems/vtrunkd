@@ -319,6 +319,10 @@ struct {
     int tokens_max;
     int maw;
     int mar;
+    int skip_new_h; // skipping and sending new as we are heading
+    int skip_new_d; // skipping and sending new as we can deliver in time and we have no more packets
+    int skip_r; // skipping as a result of all computations
+    int skip_no; // skipping without sending
 } statb;
 
 
@@ -1729,11 +1733,13 @@ int retransmit_send(char *out2, int n_to_send) {
                 ptt_allow_once = 0;
             } else {
                 if(check_delivery_time(SKIP_SENDING_CLD_DIV) && (!shm_conn_info->slow_start || info.head_channel)) { // TODO: head always passes! 
+                    statb.skip_new_h++;
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
                 //vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
                 send_counter++;
+                statb.skip_no++;
                 continue; // do not send anything at all
             }
         }
@@ -1745,6 +1751,7 @@ int retransmit_send(char *out2, int n_to_send) {
         int sel_ret = select(info.channel[i].descriptor + 1, NULL, &fdset2, NULL, &tv);
         if (sel_ret == 0) {
             send_counter++; // deny meaning that we've sent everything from retransmit and must no go on sending new packets
+            statb.skip_no++;
             continue; // continuing w/o reading/sending pkts AND send_counter++ will cause to fast-loop; we effectively do a poll here
         } else if (sel_ret == -1) {
             vtun_syslog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
@@ -1765,6 +1772,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
+                    statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
@@ -1772,6 +1780,7 @@ int retransmit_send(char *out2, int n_to_send) {
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
+                    statb.skip_new_d++;
                     continue;
                 }
             }
@@ -1786,6 +1795,7 @@ int retransmit_send(char *out2, int n_to_send) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     // TODO: disable AG in case of this event!
                     vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
+                    statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
                 // else there is no way we can deliver anything in time; now get latest packet
@@ -1795,12 +1805,16 @@ int retransmit_send(char *out2, int n_to_send) {
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     vtun_syslog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
+                    statb.skip_new_d++;
                     continue;
                 }
             }
         }
-        if((last_sent_packet_num[i].seq_num != seq_num_tmp) && (info.head_channel == 1)) {
-            vtun_syslog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
+        if(last_sent_packet_num[i].seq_num != seq_num_tmp) {
+            if(info.head_channel == 1) {
+                vtun_syslog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
+            }
+            statb.skip_r++;
         }
         memcpy(out_buf, out2, len);
         sem_post(&(shm_conn_info->resend_buf_sem));
@@ -6085,7 +6099,15 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_remote); // received remote frtt, only for server-side logger analysis
             //add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100); // dup of tmrtt??
             //add_json(js_buf, &js_cur, "xhi", "%d", xhi_function(info.exact_rtt, plp_avg_pbl_unrecoverable(info.process_num))); // xhi experiment failed
+            add_json(js_buf, &js_cur, "sh", "%d", statb.skip_new_h);  // skipping and sending new as we are heading
+            add_json(js_buf, &js_cur, "sd", "%d", statb.skip_new_d);// skipping and sending new as we can deliver in time and we have no more packets
+            add_json(js_buf, &js_cur, "sr", "%d", statb.skip_r); // skipping as a result of all computations
+            add_json(js_buf, &js_cur, "sn", "%d", statb.skip_no); // skipping without sending
 
+            statb.skip_new_h=0;
+            statb.skip_new_d=0;
+            statb.skip_r=0;
+            statb.skip_no=0;
 
             add_json(js_buf, &js_cur, "RT", "%d", ag_stat.RT);
             //add_json(js_buf, &js_cur, "WT", "%d", ag_stat.WT);
