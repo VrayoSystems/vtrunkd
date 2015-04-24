@@ -138,6 +138,7 @@ struct my_ip {
 // TODO HERE: TCP Model requried ---vvv
 #define PLP_UNRECOVERABLE_CUTOFF 10000 // in theory about 50 mbit/s at 20ms  // was 1000 - 1000 is okay for like rtt 20ms but not for 100ms
 #define PSL_RECOVERABLE 2 // we can recover this amount of loss
+#define L_PBL_JOIN_EVENTS 50 // join all events within this PBL
 #define DROPPING_LOSSING_DETECT_SECONDS 7 // seconds to pass after drop or loss to say we're not lossing or dropping anymore
 //#define MAX_BYTE_DELIVERY_DIFF 100000 // what size of write buffer pumping is allowed? -> currently =RSR_TOP
 #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
@@ -6171,7 +6172,6 @@ int lfd_linker(void)
             
             print_json(js_buf, &js_cur);
 #endif
-    /*
     
             #ifdef SEND_Q_LOG
             // now array
@@ -6184,7 +6184,6 @@ int lfd_linker(void)
             print_json_arr(jsAC_buf, &jsAC_cur);
             start_json_arr(jsAC_buf, &jsAC_cur, "pkts_in");
             #endif
-  */          
             json_timer = info.current_time;
             info.max_send_q_max = 0;
             info.max_send_q_min = 120000;
@@ -7439,7 +7438,7 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_recv = ntohl(tmp_h);
                                                 add_json(lossLog, &lossLog_cur, "l_pbl_tmp", "%d", shm_conn_info->stats[i].l_pbl_tmp);
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
-                                                if(psl > PSL_RECOVERABLE) {
+                                                if(psl > PSL_RECOVERABLE && shm_conn_info->stats[i].l_pbl_recv > L_PBL_JOIN_EVENTS) {
                                                     // unrecoverable loss
                                                     shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
                                                     shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
