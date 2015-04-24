@@ -2904,7 +2904,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         #endif
         shm_conn_info->tokens++;
         if( ((shm_conn_info->head_send_q_shift_recv == 10000) || (shm_conn_info->slow_start_recv)) && ((seq_num % SLOW_START_INCINT) == 0)) {
-           //shm_conn_info->max_stuck_buf_len += 1;
+           shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
         //    // drop exactly one packet (at least try to)
@@ -6060,9 +6060,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "ACS_ll", "%d", (int)info.channel[1].ACS2);
             //add_json(js_buf, &js_cur, "ACS_rr", "%d", info.PCS2_recv * info.eff_len); // no need to show the math with PCS2_recv
             add_json(js_buf, &js_cur, "ACS2", "%d", temp_acs_copy ); // self-check only - required by parser
-            add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
             // add_json(js_buf, &js_cur, "PCS_fast", "%u", (unsigned int)info.channel[1].packet_download); //  PCS fast incorrect, TODO fix it
-            add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             //add_json(js_buf, &js_cur, "PCS_recvb", "%d", info.PCS2_recv * info.eff_len);
             add_json(js_buf, &js_cur, "upload", "%u", (unsigned int)shm_conn_info->stats[info.process_num].speed_chan_data[my_max_send_q_chan_num].up_current_speed);
             //add_json(js_buf, &js_cur, "pupload", "%d", shm_conn_info->stats[info.process_num].packet_upload_spd); // should be = upload/eff_len ??
@@ -6071,6 +6069,7 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "flush", "%d", shm_conn_info->tflush_counter);
             //add_json(js_buf, &js_cur, "psa", "%d", shm_conn_info->stats[info.process_num].packet_speed_ag); // packet speed in ag - can be inferred from txa
             //add_json(js_buf, &js_cur, "psr", "%d", shm_conn_info->stats[info.process_num].packet_speed_rmit); // packet waste speed // same - can be inferred
+            add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
             
             add_json(js_buf, &js_cur, "rss", "%d", shm_conn_info->slow_start_recv);
             add_json(js_buf, &js_cur, "tbf", "%d", shm_conn_info->tokenbuf);
@@ -6079,10 +6078,11 @@ int lfd_linker(void)
             statb.tokens_max = 0;
             
 #ifndef CLIENTONLY
+            add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
+            add_json(js_buf, &js_cur, "PCS_recv", "%d", info.PCS2_recv);
             add_json(js_buf, &js_cur, "ACSa", "%d", shm_conn_info->stats[info.process_num].ACK_speed_avg);
             add_json(js_buf, &js_cur, "buf_len", "%d",  (int)shm_conn_info->buf_len_recv);
             add_json(js_buf, &js_cur, "lossq", "%d", shm_conn_info->stats[info.process_num].loss_send_q);
-            add_json(js_buf, &js_cur, "hsqsr", "%d", shm_conn_info->head_send_q_shift_recv);
             if(info.head_send_q_shift > -10000) {
                 add_json(js_buf, &js_cur, "hsqs", "%d", info.head_send_q_shift);
             } else {
