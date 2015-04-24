@@ -153,7 +153,7 @@ struct my_ip {
 #define AGAG_MAX 150
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
 #define SLOW_START_IMMUNE  {10, 100000} // no SS allowed within this period after previous SS
-#define SLOW_START_INCINT 3 // amount of packets to increase MSBL by 1 after
+#define SLOW_START_INCINT 2 // amount of packets to increase MSBL by 1 after
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -2903,7 +2903,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         vtun_syslog(LOG_ERR, "adding token+1");
         #endif
         shm_conn_info->tokens++;
-        if(shm_conn_info->slow_start_recv && ((seq_num % SLOW_START_INCINT) == 0)) {
+        if( ((shm_conn_info->head_send_q_shift_recv == 10000) || (shm_conn_info->slow_start_recv)) && ((seq_num % SLOW_START_INCINT) == 0)) {
            //shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
@@ -5226,7 +5226,7 @@ int lfd_linker(void)
                         info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 80 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
                     } else {
                         // in unknown value - set HSQS to 1 to push remote buf to net slowly
-                        info.head_send_q_shift = 1;
+                        info.head_send_q_shift = 10000;
                     }
                 } else {
                     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
@@ -5241,7 +5241,7 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    if(0&& shm_conn_info->slow_start_recv) {
+                    if((0&& shm_conn_info->slow_start_recv) || (shm_conn_info->head_send_q_shift_recv == 10000)) {
                         iK = 10000; // zero push in slow start
                     } else {
                         iK = MSBL_PUSHDOWN_K; // push down
