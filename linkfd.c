@@ -124,7 +124,7 @@ struct my_ip {
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 #define LOSS_SEND_Q_MAX 1000 // maximum send_q allowed is now 1000 (for head?)
 #define LOSS_SEND_Q_UNKNOWN -1 // unknown value
-#define LOSS_SEND_Q_BESTGUESS_3G 300 // 300 packets best-guess for 3G
+#define LOSS_SEND_Q_BESTGUESS_3G 150 // 300 packets best-guess for 3G
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
