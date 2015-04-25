@@ -124,6 +124,7 @@ struct my_ip {
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 #define LOSS_SEND_Q_MAX 1000 // maximum send_q allowed is now 1000 (for head?)
 #define LOSS_SEND_Q_UNKNOWN -1 // unknown value
+#define LOSS_SEND_Q_BESTGUESS_3G 300 // 300 packets best-guess for 3G
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -5227,7 +5228,8 @@ int lfd_linker(void)
                         info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
                     } else {
                         // in unknown value - set HSQS to 1 to push remote buf to net slowly
-                        info.head_send_q_shift = 10000;
+                        //info.head_send_q_shift = 10000;
+                        info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
                     }
                 } else {
                     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
