@@ -1057,20 +1057,20 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) {
         shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     }
-    if(shm_conn_info->slow_start_recv) {
-        ms_for_token = 1;
-        *next_token_ms = 1;
-    }
+    //if(shm_conn_info->slow_start_recv) {
+    //    ms_for_token = 1;
+    //    *next_token_ms = 1;
+    //}
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
-        if(!shm_conn_info->slow_start_recv) {
+        //if(!shm_conn_info->slow_start_recv) {
         if(APCS == 0) { // i=n caseof ss
             ms_for_token = 50; // ms before packet drop? (zero speed)
         } else {
             ms_for_token = 1000 / APCS;
         }
-        }
+        //}
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
         *next_token_ms = ms_for_token;
         return 0;
@@ -1082,11 +1082,12 @@ int check_tokens(int chan_num) {
     return 1; 
 #endif
     if(shm_conn_info->slow_start_recv) {
-        struct timeval since_write_tv;
-        timersub(&info.current_time, &shm_conn_info->write_buf[chan_num].last_write_time, &since_write_tv);
-        if(since_write_tv.tv_usec < 1000) {
-            return 0;
-        }
+        return 1; // the hope that this will actually help gain back ss
+        //struct timeval since_write_tv;
+        //timersub(&info.current_time, &shm_conn_info->write_buf[chan_num].last_write_time, &since_write_tv);
+        //if(since_write_tv.tv_usec < 1000) {
+        //    return 0;
+        //}
     }
         
     if(shm_conn_info->tokens > 0) return 1;
