@@ -5263,7 +5263,7 @@ int lfd_linker(void)
                         msbl_K = -1;
                     }
                 }
-                if(shm_conn_info->head_send_q_shift_recv != 10000) {
+                if(!((shm_conn_info->head_send_q_shift_recv == 10000) && (shm_conn_info->slow_start_recv))) {
                     shm_conn_info->max_stuck_buf_len -= msbl_K;
                 }
                 if(shm_conn_info->max_stuck_buf_len < 0) { 
