@@ -149,7 +149,7 @@ struct my_ip {
 #define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
-#define MSBL_PUSHUP_K 60
+#define MSBL_PUSHUP_K 80
 #define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
 #define AGAG_MAX 255
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
