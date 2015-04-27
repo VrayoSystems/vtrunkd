@@ -1057,7 +1057,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
         shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
         shm_conn_info->tokenbuf += tokens_to_add;
     }
-    if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) {
+    if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
         shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     }
     //if(shm_conn_info->slow_start_recv) {
@@ -1102,7 +1102,6 @@ int check_tokens(int chan_num) {
     }
     int head_idx = shm_conn_info->write_buf[chan_num].frames.rel_head;
     if(shm_conn_info->frames_buf[head_idx].len < 100) { // flush ACK immediately
-        shm_conn_info->tokens_lastadd_tv = info.current_time;
         return 1;
     }
     return 0; 

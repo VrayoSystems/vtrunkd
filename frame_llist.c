@@ -33,6 +33,7 @@
 void frame_llist_init(struct frame_llist *l) {
     l->rel_head = l->rel_tail = -1;
     l->length = 0;
+    l->stub_total = 0;
 } 
 
 void frame_llist_fill(struct frame_llist *l, struct frame_seq flist[], int len)
