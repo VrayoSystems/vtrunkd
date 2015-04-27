@@ -886,6 +886,24 @@ int count_sequential_loss_unsync(int chan_num) {
     return beg_lost; // now all checks done, return what we've got
 }
 
+int get_wb_oldest_ts_unsync(struct timeval *min_tv) {
+    int i = shm_conn_info->write_buf[1].frames.rel_head, n;
+    int packets_checked = 0;
+    *min_tv = info.current_time;
+
+    // now count losses over N packets
+    while((i > -1) && (packets_checked < 100)) {
+        n = shm_conn_info->frames_buf[i].rel_next;
+        if( n > -1  && timercmp(&shm_conn_info->frames_buf[n].time_stamp, min_tv, <)) {
+            *min_tv = shm_conn_info->frames_buf[n].time_stamp;
+        }
+        i = n;
+        packets_checked++;
+    }
+
+    return 0;
+}
+
 /* check if we are allowed to drop packet again  */
 int check_drop_period_unsync() {
     return 1; // this method is unused
@@ -5876,6 +5894,13 @@ int lfd_linker(void)
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
             }
             
+            struct timeval min_tv, max_pkt_lag, max_lag = {0, 800000};
+            get_wb_oldest_ts_unsync(&min_tv);
+            timersub(&info.current_time, &min_tv, &max_pkt_lag);
+            if(timercmp(&max_pkt_lag, &max_lag, >)) {
+                vtun_syslog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, shm_conn_info->write_buf[1].frames.length);
+                shm_conn_info->tokenbuf+=50;
+            }
             
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
