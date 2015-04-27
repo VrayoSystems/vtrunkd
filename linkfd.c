@@ -5493,7 +5493,7 @@ int lfd_linker(void)
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
             if(ms_passed > RSR_SMOOTH_GRAN) { // 10 ms intvl, 500ms full
-                d_rsr = 7.0/8.0 * d_rsr + 1.0/8.0 * d_sql;
+                d_rsr = 17.0/18.0 * d_rsr + 1.0/18.0 * d_sql;
                 info.cycle_last = info.current_time;
             }
             
