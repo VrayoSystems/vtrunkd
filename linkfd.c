@@ -151,7 +151,7 @@ struct my_ip {
 #define MSBL_PUSHDOWN_K 30
 #define MSBL_PUSHUP_K 60
 #define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
-#define AGAG_MAX 150
+#define AGAG_MAX 255
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
 #define SLOW_START_IMMUNE  {10, 100000} // no SS allowed within this period after previous SS
 #define SLOW_START_INCINT 10 // amount of packets to increase MSBL by 1 after
