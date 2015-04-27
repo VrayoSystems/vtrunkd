@@ -149,7 +149,7 @@ struct my_ip {
 #define TMRTTA 25 // alpha coeff. for RFC6298 for tcp model rtt avg.
 #define SKIP_SENDING_CLD_DIV 2
 #define MSBL_PUSHDOWN_K 30
-#define MSBL_PUSHUP_K 120
+#define MSBL_PUSHUP_K 60
 #define MAX_STUB_JITTER 1 // maximum packet jitter that we allow on buffer to happen
 #define AGAG_MAX 150
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
@@ -5244,7 +5244,18 @@ int lfd_linker(void)
             } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                        info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                        int lossq_above = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100; // above thresh -> push to MBSL
+                        int lossq_below = shm_conn_info->stats[max_chan].loss_send_q * 40 / 100; // below thresh -> push to net
+                        int sqe_pkt = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+                        //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
+                        if(sqe_pkt > lossq_above) {
+                            info.head_send_q_shift = lossq_above - sqe_pkt;
+                        } else if(sqe_pkt < lossq_below) {
+                            info.head_send_q_shift = lossq_below - sqe_pkt;
+                        } else {
+                            info.head_send_q_shift = 0;
+                        }
+                            
                     } else {
                         // in unknown value - set HSQS to 1 to push remote buf to net slowly
                         //info.head_send_q_shift = 10000;
