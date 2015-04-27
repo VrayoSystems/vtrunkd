@@ -155,6 +155,7 @@ struct my_ip {
 #define SLOW_START_MAX_RUN {5, 500000} // max slow_start runtime after idle
 #define SLOW_START_IMMUNE  {10, 100000} // no SS allowed within this period after previous SS
 #define SLOW_START_INCINT 10 // amount of packets to increase MSBL by 1 after
+#define TOKENBUF_ADD_BURST 7 // amount of tokens to wait before adding to reduce integer error in add_token
 
 // PLOSS is a "probable loss" event: it occurs if PSL=1or2 for some amount of packets AND we detected probable loss (possible_seq_lost)
 // this LOSS detect method uses the fact that we never push the network with 1 or 2 packets; we always push 5+ (TODO: make sure it is true!)
@@ -975,6 +976,9 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     //shm_conn_info->tokens_in_out = 0;
     //int tokens_in_out = 0;
     // TODO: may be sync on write_buf is required??
+    if(shm_conn_info->tokens < 0) {
+        shm_conn_info->tokens = 0;
+    }
     if(chan_num != 1) {
         return 1; // for all other chans (e.g. 0-service channel) return drop allowed
     }
@@ -1049,12 +1053,10 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     timersub(&info.current_time, &shm_conn_info->tokens_lastadd_tv, &passed_tv);
     int ms_passed = tv2ms(&passed_tv);
     int tokens_to_add = APCS * ms_passed / 1000;
-    
-    if(tokens_to_add != 0) shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
-    if(shm_conn_info->tokens < 0) {
-        shm_conn_info->tokens = 0;
+    if(tokens_to_add > TOKENBUF_ADD_BURST) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
+        shm_conn_info->tokenbuf += tokens_to_add;
     }
-    shm_conn_info->tokenbuf += tokens_to_add;
     if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) {
         shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     }
