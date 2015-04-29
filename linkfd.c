@@ -4159,7 +4159,7 @@ int is_happiness_reached() {
 
 int mawmar_allowed() {
     if(info.head_channel) return 1;
-    int BL = (int)shm_conn_info->buf_len_recv; // or lbuf_len_recv ???
+    int BL = (int)shm_conn_info->lbuf_len_recv;
     /*
     int sql;
     // count all RSR/cubics?
@@ -5139,7 +5139,6 @@ int lfd_linker(void)
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
         #ifdef BUF_LEN_LOG
                    //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
-                   //int lbl = get_lbuf_len();
                    int buf_len_real = shm_conn_info->write_buf[1].frames.length;
                    add_json_arr(jsBL_buf, &jsBL_cur, "%d", buf_len_real);
                    add_json_arr(jsAC_buf, &jsAC_cur, "%d", shm_conn_info->APCS_cnt);
@@ -6383,7 +6382,8 @@ int lfd_linker(void)
                 buf_len_real = shm_conn_info->write_buf[1].frames.length;
                 tmp32_n = htons(buf_len_real);
                 memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
-                tmp16_n = htons(get_lbuf_len());
+                //tmp16_n = htons(get_lbuf_len());
+                tmp16_n = htons(shm_conn_info->max_stuck_buf_len);
                 memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
@@ -6502,7 +6502,8 @@ int lfd_linker(void)
                     tmp32_n = htons(buf_len_real);
                     buf_len_real = shm_conn_info->write_buf[1].frames.length;
                     memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
-                    tmp16_n = htons(get_lbuf_len());
+                    //tmp16_n = htons(get_lbuf_len());
+                    tmp16_n = htons(shm_conn_info->max_stuck_buf_len);
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
