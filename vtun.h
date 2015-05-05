@@ -636,6 +636,9 @@ struct streams_seq {
     struct timeval ts;
 };
 
+
+#define SHM_SYSLOG 100000
+
 /** @struct conn_info
  *  @brief Common shm struct.
  *
@@ -787,7 +790,7 @@ struct conn_info {
 #endif
     struct {
         sem_t logSem;
-        char log[100000];
+        char log[SHM_SYSLOG];
         int counter;
     } syslog;
 };

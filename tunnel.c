@@ -243,12 +243,15 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
      gettimeofday(&cur_time, NULL);
      
      vtun_syslog(LOG_INFO, "fd_server waiting for a connection...\n");
+     int logPointer = 0;
+     char buf[JS_MAX];
+     buf[JS_MAX - 1] = 0x00;
      while(!fdserver_term) {
          int done, n=0, i;
          
          FD_ZERO(&fdset);
          FD_SET(s, &fdset);
-         tv.tv_sec  = 10;
+         tv.tv_sec  = 1;
          tv.tv_usec = 0;
          
          
@@ -293,10 +296,43 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
                          break;
                }
          }
-         
-         
-     
-     }
+#ifdef SYSLOG
+         /* Log checking */
+        int totalLen = 0; // to prevent race condition total log len no more SHM_SYSLOG
+        while (1) {
+            if (totalLen >= SHM_SYSLOG)
+                break;
+            sem_wait(&shm_conn_info->syslog.logSem);
+            if (logPointer == shm_conn_info->syslog.counter) {
+                sem_post(&shm_conn_info->syslog.logSem);
+
+                break;
+            }
+            logPointer++;
+            if (logPointer >= SHM_SYSLOG)
+                logPointer = 0;
+            if (sizeof(buf) - 1 < SHM_SYSLOG - logPointer) {
+                int maxLen = sizeof(buf) - 1;
+                int retLen = snprintf(buf, maxLen, '%s', shm_conn_info->syslog.log + logPointer);
+                sem_post(&shm_conn_info->syslog.logSem);
+                totalLen += retLen;
+                logPointer += retLen;
+                vtun_syslog(LOG_INFO, '%s', buf);
+            } else {
+                int maxLen = SHM_SYSLOG - logPointer;
+                int retLen = snprintf(buf, maxLen, '%s', shm_conn_info->syslog.log + logPointer);
+                if ((retLen == maxLen) && (buf[0] != 0)) {
+                    maxLen = sizeof(buf) - 1 - retLen;
+                    retLen += snprintf(buf + retLen, SHM_SYSLOG - logPointer, '%s', shm_conn_info->syslog.log + logPointer);
+                } else {
+                    logPointer = 0;
+                }
+                sem_post(&shm_conn_info->syslog.logSem);
+                vtun_syslog(LOG_INFO, '%s', buf);
+            }
+        }
+#endif
+    }
     vtun_syslog(LOG_INFO, "Killing old connections");
     /* Make sure it's dead */
     for (int i = 0; i < 32; i++) {
