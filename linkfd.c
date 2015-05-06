@@ -8724,8 +8724,8 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     }
     close(pid_file_fd);
 
-    old_prio=getpriority(PRIO_PROCESS,0);
-    setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
+    //old_prio=getpriority(PRIO_PROCESS,0);
+    //setpriority(PRIO_PROCESS,0,LINKFD_PRIO);
     
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler=SIG_IGN;
@@ -8803,7 +8803,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     sigaction(SIGHUP,&sa_oldhup,NULL);
     sigaction(SIGUSR1,&sa_oldusr1,NULL);
 
-    setpriority(PRIO_PROCESS,0,old_prio);
+    //setpriority(PRIO_PROCESS,0,old_prio);
 
     return linker_term;
 }
