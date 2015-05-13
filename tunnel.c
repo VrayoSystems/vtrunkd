@@ -313,22 +313,22 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
                 logPointer = 0;
             if (sizeof(buf) - 1 < SHM_SYSLOG - logPointer) {
                 int maxLen = sizeof(buf) - 1;
-                int retLen = snprintf(buf, maxLen, '%s', shm_conn_info->syslog.log + logPointer);
+                int retLen = snprintf(buf, maxLen, "%s", shm_conn_info->syslog.log + logPointer);
                 sem_post(&shm_conn_info->syslog.logSem);
                 totalLen += retLen;
                 logPointer += retLen;
-                vtun_syslog(LOG_INFO, '%s', buf);
+                vtun_syslog(LOG_INFO, "%s", buf);
             } else {
                 int maxLen = SHM_SYSLOG - logPointer;
-                int retLen = snprintf(buf, maxLen, '%s', shm_conn_info->syslog.log + logPointer);
+                int retLen = snprintf(buf, maxLen, "%s", shm_conn_info->syslog.log + logPointer);
                 if ((retLen == maxLen) && (buf[0] != 0)) {
                     maxLen = sizeof(buf) - 1 - retLen;
-                    retLen += snprintf(buf + retLen, SHM_SYSLOG - logPointer, '%s', shm_conn_info->syslog.log + logPointer);
+                    retLen += snprintf(buf + retLen, SHM_SYSLOG - logPointer, "%s", shm_conn_info->syslog.log + logPointer);
                 } else {
                     logPointer = 0;
                 }
                 sem_post(&shm_conn_info->syslog.logSem);
-                vtun_syslog(LOG_INFO, '%s', buf);
+                vtun_syslog(LOG_INFO, "%s", buf);
             }
         }
 #endif

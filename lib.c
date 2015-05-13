@@ -471,6 +471,10 @@ void vtun_syslog_free() {
     init = 0;
 }
 
+void vtun_direct_syslog(char *format, ...) {
+
+}
+
 void vtun_syslog(int priority, char *format, ...) {
 #ifdef SYSLOG
     static volatile sig_atomic_t in_syslog = 0;
@@ -606,7 +610,7 @@ void vtun_syslog(int priority, char *format, ...) {
 
         if (print) {
             if (syslog_dup_counter) {
-                syslog(priority, "Last %d message(s) repeat %d times dups %d", syslog_dup_type, syslog_dup_counter/syslog_dup_type + 1, syslog_dup_counter);
+                print_vtun_shm_syslog(priority, "Last %d message(s) repeat %d times dups %d", syslog_dup_type, syslog_dup_counter/syslog_dup_type + 1, syslog_dup_counter);
                 syslog_dup_counter = 0;
                 syslog_dup_type = 0;
                 syslog_sequential_counter = 0;
@@ -617,7 +621,7 @@ void vtun_syslog(int priority, char *format, ...) {
                 }
 
             }
-            syslog(priority, "%s", buf);
+            print_vtun_shm_syslog(priority, "%s", buf);
         }
       in_syslog = 0;
    }

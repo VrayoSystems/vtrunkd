@@ -4747,6 +4747,8 @@ int lfd_linker(void)
     info.last_sent_FLI_idx = shm_conn_info->loss_idx;
     struct timeval select_tv_copy;
 
+    set_vtun_syslog_shm(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
+
 /**
  *
  *
