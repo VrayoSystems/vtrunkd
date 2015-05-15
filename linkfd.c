@@ -1973,14 +1973,6 @@ int select_devread_send(char *buf, char *out2) {
     idx = get_fast_resend_frame(&chan_num, buf, &len, &tmp_seq_counter);
     sem_post(&(shm_conn_info->resend_buf_sem));
     if (idx == -1) {
-        if (!FD_ISSET(info.tun_device, &fdset)) {
-#ifdef DEBUGG
-            if(drop_packet_flag) {
-                vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
-            }
-#endif
-            return TRYWAIT_NOTIFY;
-        }
         FD_ZERO(&fdset_tun);
         FD_SET(info.tun_device, &fdset_tun);
         int try_flag = sem_trywait(&(shm_conn_info->tun_device_sem));
@@ -8345,6 +8337,7 @@ if(drop_packet_flag) {
              *
              * */
       //  if (hold_mode) continue;
+        if (FD_ISSET(info.tun_device, &fdset)) {
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
             int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
@@ -8426,6 +8419,7 @@ if(drop_packet_flag) {
 #endif
                 len = 0;
             }
+        }
         }
 
         CHKCPU(5);
