@@ -6814,6 +6814,9 @@ int lfd_linker(void)
 #ifdef TESTING
             //write test case here
 #endif
+            if(shm_conn_info->packet_debug_enabled) {
+                debug_trace = 1;
+            }
         }
         // <<< END TICK
         
