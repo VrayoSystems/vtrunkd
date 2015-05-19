@@ -221,6 +221,9 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
      sa.sa_handler=SIG_IGN;
      sigaction(SIGPIPE,&sa,NULL);
 
+     openlog("fd server", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+
+
      if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
          vtun_syslog(LOG_ERR,"srv socket");
          return -1;
@@ -246,13 +249,14 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
      int logPointer = 0;
      char buf[JS_MAX];
      buf[JS_MAX - 1] = 0x00;
+     int select_counter = 0;
      while(!fdserver_term) {
          int done, n=0, i;
          
          FD_ZERO(&fdset);
          FD_SET(s, &fdset);
-         tv.tv_sec  = 1;
-         tv.tv_usec = 0;
+         tv.tv_sec  = 0;
+         tv.tv_usec = 100;
          
          
          shm_conn_info->rdy = 1;
@@ -266,7 +270,8 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
                 continue;
              }
          }
-         
+        if (select_counter <= 10000)
+            select_counter += tv.tv_usec;
          if(FD_ISSET(s, &fdset)) {
                
                t = sizeof(remote);
@@ -290,7 +295,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
                } while (!done);
        
                close(s2);
-         } else {
+        } else if (select_counter > 10000) {
                gettimeofday(&cur_time, NULL);
                if( srv && ( (cur_time.tv_sec - shm_conn_info->alive) > PROCESS_FD_SHM_TIMEOUT )) {
                          break;
