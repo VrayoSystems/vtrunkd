@@ -5750,8 +5750,8 @@ int lfd_linker(void)
                         ( (~shm_conn_info->hold_mask) & (~(1 << info.process_num)) & (shm_conn_info->channels_mask) & (shm_conn_info->ag_mask))){ 
                     // exclude current head from comparison (it may not be consistent about flags with mode/hold)
                     // hold_mask is negative: 1 means send allowed
-                    hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
-                    drop_packet_flag = 0;
+                    ///hold_mode = 1; // do not allow to send if the channels are in AG and not in HOLD
+                    ///drop_packet_flag = 0;
                     // TODO HERE: may have problems in case of 
                     // 1. incorrect detection of chan RSR/W
                     // 2. channel for some reason can not reach hold (any reasons?)
