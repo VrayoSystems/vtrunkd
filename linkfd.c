@@ -1480,6 +1480,7 @@ unsigned int get_tcp_hash(char *buf, unsigned int *tcp_seq) {
     unsigned int hash = (unsigned int) (ip->ip_src.s_addr);
     hash += (unsigned int) (ip->ip_dst.s_addr);
     hash += ip->ip_p;
+    // WARNING: do we have to ntohl() here #856?
     if (ip->ip_p == 6) { // TCP...
         tcp = (struct tcphdr*) (buf + sizeof(struct my_ip));
         hash += tcp->source;
