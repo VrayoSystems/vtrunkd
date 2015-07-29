@@ -447,7 +447,8 @@ int tunnel(struct vtun_host *host, int srv)
                             return -1;
                         }
                         if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) -1) {
-                            vtun_syslog(LOG_ERR, "shmat 4"); // FAULT HERE
+                            vtun_syslog(LOG_ERR, "shmat 4 - %s(%d)",
+                                    strerror(errno), errno); // FAULT HERE
                             return -1;
                         }
 
