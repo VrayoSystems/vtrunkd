@@ -61,10 +61,13 @@ CONFIGURE_FILES = Makefile config.status config.cache config.h config.log
 %.o: %.c vtun.h lib.h
 	$(CC) $(CFLAGS) $(DEFS) -c $<
 
-all: vtrunkd
+all: vtrunkd vshm_start_debug
 
 vtrunkd: $(OBJS)
 	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(FSSOBJS) $(LFD_OBJS) $(LDFLAGS)
+
+vshm_start_debug: $(OBJS)
+	$(CC) $(CFLAGS) -o vshm_debug_enable vshm_start_debug.c $(LDFLAGS)
 
 cfg_file.tab.c: cfg_file.y cfg_kwords.h config.h
 	$(YACC) $(YACCFLAGS) -b cfg_file cfg_file.y
@@ -76,7 +79,7 @@ depend:
 	makedepend -- $(CFLAGS) -- *.c
 
 clean:
-	rm -f core cfg_file.tab.* cfg_file.lex.* *.o *~ *.bak vtrunkd
+	rm -f core cfg_file.tab.* cfg_file.lex.* *.o *~ *.bak vtrunkd vshm_debug_enable
 
 distclean: clean
 	rm -f $(CONFIGURE_FILES)
