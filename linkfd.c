@@ -117,7 +117,7 @@ struct my_ip {
 #define SPEED_MINIMAL 100000.0 // 100kb/s minimal speed
 #define SENQ_Q_LIMIT_THRESHOLD_MIN 13000 // the value with which that AG starts
 //#define SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER 10 // send_q AG allowed threshold = RSR / SENQ_Q_LIMIT_THRESHOLD_MULTIPLIER
-#define RATE_THRESHOLD_MULTIPLIER 7 // cut-off by speed only
+#define RATE_THRESHOLD_MULTIPLIER 5 // cut-off by speed only
 #define RTT_THRESHOLD_MULTIPLIER 3 // cut-off by RTT only
 #define RTT_THRESHOLD_GOOD 50 // cut-off by RTT ms
 #define SEND_Q_EFF_WORK 10000 // value for send_q_eff to detect that channel is in use
