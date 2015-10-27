@@ -5,6 +5,8 @@
 
 #include <semaphore.h>
 
+#include "vtun.h"
+
 #define	LOG_EMERG	0	/* system is unusable */
 #define	LOG_ALERT	1	/* action must be taken immediately */
 #define	LOG_CRIT	2	/* critical conditions */
@@ -16,6 +18,7 @@
 
 void vlog_shm_set(int state, sem_t *logSem, char *log, int *counter, int size);
 void vlog_shm_print(int priority, char *format, ...);
+void vlog_shm_process(struct conn_info *shm_conn_info);
 
 void vlog_init();
 void vlog_free();

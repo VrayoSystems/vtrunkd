@@ -193,55 +193,6 @@ static void fd_server_term(int sig) {
     fdserver_term = 1;
 }
 
-//
-//  TODO: Handle loglevel.
-//
-void process_logs(struct conn_info *shm_conn_info)
-{
-    static int logPointer = 0;
-    static char buf[JS_MAX] = { 0x00 };
-
-    /* Log checking */
-    int totalLen = 0; // to prevent race condition total log len no more SHM_SYSLOG
-    while (1) {
-        if (totalLen >= SHM_SYSLOG)
-            break;
-
-        sem_wait(&shm_conn_info->syslog.logSem);
-
-        // Nothing to log.
-        if (logPointer == shm_conn_info->syslog.counter) {
-            sem_post(&shm_conn_info->syslog.logSem);
-            break;
-        }
-
-        ssize_t availLen = (shm_conn_info->syslog.counter - logPointer + SHM_SYSLOG) % SHM_SYSLOG;
-        ssize_t bufLen = sizeof(buf);
-        ssize_t retLen = 0;
-
-        if (availLen < SHM_SYSLOG - logPointer) {
-            retLen = snprintf(buf, bufLen, "%s", shm_conn_info->syslog.log + logPointer);
-        } else {
-            ssize_t maxLen = min(bufLen, SHM_SYSLOG - logPointer);
-            retLen = snprintf(buf, maxLen, "%s", shm_conn_info->syslog.log + logPointer);
-            // { '\0', ..., '\0', 'H', 'e', 'l', 'l', 'o' } -+
-            //    ^                                          |
-            //    +------------------------------------------+
-            if ((retLen == SHM_SYSLOG - logPointer) && (shm_conn_info->syslog.log[0] != 0) && bufLen > retLen + 1) {
-                maxLen = sizeof(buf) - retLen;
-                retLen += snprintf(buf + retLen, maxLen, "%s", shm_conn_info->syslog.log);
-            }
-        }
-
-        totalLen += retLen + 1;
-        logPointer = (logPointer+ retLen + 1) % SHM_SYSLOG;
-
-        sem_post(&shm_conn_info->syslog.logSem);
-        // TODO: Why not syslog(buf)?
-        syslog(LOG_INFO, "%s", buf);
-    }
-}
-
 int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) {
     int s, s2, t, len;
     struct sockaddr_un local, remote;
@@ -350,7 +301,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         }
 
 #ifdef SYSLOG
-        process_logs(shm_conn_info);
+        vlog_shm_process(shm_conn_info);
 #endif
     }
     vlog(LOG_INFO, "Killing old connections");
