@@ -49,6 +49,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 
 #ifdef HAVE_SSL
 
@@ -109,7 +110,7 @@ int prep_key(char **key, int size, struct vtun_host *host)
 
    if ( !(hashkey = malloc(size)) )
    {
-      vtun_syslog(LOG_ERR,"Can't allocate buffer for key hash");
+      vlog(LOG_ERR,"Can't allocate buffer for key hash");
       return -1;
    }
    memset(hashkey,0,size);
@@ -156,11 +157,11 @@ int alloc_encrypt(struct vtun_host *host)
    dec_init_first_time = 1;   
 
    if( !(enc_buf = lfd_alloc(ENC_BUF_SIZE)) ){
-      vtun_syslog(LOG_ERR,"Can't allocate buffer for encryptor");
+      vlog(LOG_ERR,"Can't allocate buffer for encryptor");
       return -1;
    }
    if( !(dec_buf = lfd_alloc(ENC_BUF_SIZE)) ){
-      vtun_syslog(LOG_ERR,"Can't allocate buffer for decryptor");
+      vlog(LOG_ERR,"Can't allocate buffer for decryptor");
       return -1;
    }
 
@@ -278,7 +279,7 @@ int alloc_encrypt(struct vtun_host *host)
       cipher_enc_state=CIPHER_CODE;
       cipher_dec_state=CIPHER_CODE;
       sprintf(tmpstr,"%s encryption initialized", cipher_name);
-      vtun_syslog(LOG_INFO, tmpstr);
+      vlog(LOG_INFO, tmpstr);
    }
    return 0;
 }
@@ -345,7 +346,7 @@ int decrypt_buf(int len, char *in, char **out)
    tmp_ptr = out_ptr + outlen; tmp_ptr--;
    pad = *tmp_ptr;
    if (pad < 1 || pad > blocksize) {
-      vtun_syslog(LOG_INFO, "decrypt_buf: bad pad length");
+      vlog(LOG_INFO, "decrypt_buf: bad pad length");
       return 0;
    }
    *out = out_ptr;
@@ -437,7 +438,7 @@ int cipher_enc_init(char * iv)
    if (enc_init_first_time)
    {
       sprintf(tmpstr,"%s encryption initialized", cipher_name);
-      vtun_syslog(LOG_INFO, tmpstr);
+      vlog(LOG_INFO, tmpstr);
       enc_init_first_time = 0;
    }
    return 0;
@@ -527,7 +528,7 @@ int cipher_dec_init(char * iv)
    if (dec_init_first_time)
    {
       sprintf(tmpstr,"%s decryption initialized", cipher_name);
-      vtun_syslog(LOG_INFO, tmpstr);
+      vlog(LOG_INFO, tmpstr);
       dec_init_first_time = 0;
    }
    return 0;
@@ -607,7 +608,7 @@ int recv_msg(int len, char *in, char **out)
                cipher_enc_state = CIPHER_REQ_INIT;
                send_a_packet = 1;
 #ifdef LFD_ENCRYPT_DEBUG
-               vtun_syslog(LOG_INFO, 
+               vlog(LOG_INFO, 
                   "Min. gibberish threshold reached");
 #endif
             }
@@ -619,7 +620,7 @@ int recv_msg(int len, char *in, char **out)
                send_a_packet = 1;
 
 #ifdef LFD_ENCRYPT_DEBUG
-               vtun_syslog(LOG_INFO, 
+               vlog(LOG_INFO, 
                   "Max. gibberish threshold reached");
 #endif
                if (cipher_enc_state != CIPHER_INIT)
@@ -627,7 +628,7 @@ int recv_msg(int len, char *in, char **out)
                   cipher_enc_state = CIPHER_INIT;
                   EVP_CIPHER_CTX_cleanup(&ctx_enc);
 #ifdef LFD_ENCRYPT_DEBUG
-                  vtun_syslog(LOG_INFO, 
+                  vlog(LOG_INFO, 
                      "Forcing local encryptor re-init");
 #endif
                }
@@ -676,7 +677,7 @@ int send_ib_mesg(int *len, char **in)
       *in = in_ptr;
       *len += blocksize;
 #ifdef LFD_ENCRYPT_DEBUG
-      vtun_syslog(LOG_INFO, "Requesting remote encryptor re-init");      
+      vlog(LOG_INFO, "Requesting remote encryptor re-init");      
 #endif
       cipher_enc_state = CIPHER_SEQUENCE;
       send_a_packet = 1; 
@@ -709,7 +710,7 @@ int recv_ib_mesg(int *len, char **in)
             EVP_CIPHER_CTX_cleanup(&ctx_enc);
          }
 #ifdef LFD_ENCRYPT_DEBUG
-         vtun_syslog(LOG_INFO, "Remote requests encryptor re-init");
+         vlog(LOG_INFO, "Remote requests encryptor re-init");
 #endif
       }
       else
@@ -725,7 +726,7 @@ int recv_ib_mesg(int *len, char **in)
             cipher_enc_state = CIPHER_REQ_INIT;
          }
 #ifdef LFD_ENCRYPT_DEBUG
-         vtun_syslog(LOG_INFO, "Local decryptor out of sync");
+         vlog(LOG_INFO, "Local decryptor out of sync");
 #endif
       }
    }
@@ -750,7 +751,7 @@ struct lfd_mod lfd_encrypt = {
 
 int no_encrypt(struct vtun_host *host)
 {
-     vtun_syslog(LOG_INFO, "Encryption is not supported");
+     vlog(LOG_INFO, "Encryption is not supported");
      return -1;
 }
 

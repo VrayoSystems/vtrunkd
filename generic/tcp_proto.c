@@ -56,6 +56,7 @@
 
 #include "vtun.h"
 #include "lib.h"
+#include "log.h"
 
 int tcp_write(int fd, char *buf, int len)
 {
@@ -63,15 +64,15 @@ int tcp_write(int fd, char *buf, int len)
      int bad_frame = len & ~VTUN_FSIZE_MASK;
 #ifdef BAD_LOCAL_SEQ_LOG_TCP
      if (bad_frame == 0) {
-         vtun_syslog(LOG_INFO, "tcp local_seqnum %lu regular packet", ntohl(*((uint32_t *) (&buf[len - 3 * sizeof(uint32_t) - sizeof(uint16_t)]))));
+         vlog(LOG_INFO, "tcp local_seqnum %lu regular packet", ntohl(*((uint32_t *) (&buf[len - 3 * sizeof(uint32_t) - sizeof(uint16_t)]))));
      } else if(bad_frame == VTUN_BAD_FRAME) {
          int flag_var = 0;
          memcpy(&flag_var, buf + sizeof(uint32_t), sizeof(uint16_t));
          if (ntohs(flag_var) == FRAME_REDUNDANCY_CODE) {
-             vtun_syslog(LOG_INFO, "tcp local_seqnum %lu sum packet", ntohl(*((uint32_t *) (&buf[len - 4 * sizeof(uint32_t)]))));
+             vlog(LOG_INFO, "tcp local_seqnum %lu sum packet", ntohl(*((uint32_t *) (&buf[len - 4 * sizeof(uint32_t)]))));
          }
      } else  {
-         vtun_syslog(LOG_INFO, "tcp local_seqnum other");
+         vlog(LOG_INFO, "tcp local_seqnum other");
      }
 #endif
      ptr = buf - sizeof(uint16_t);
@@ -90,7 +91,7 @@ int tcp_read(int fd, char *buf)
      /* Rad frame size */
      if( (rlen = read_n(fd, (char *)&len, sizeof(uint16_t)) ) <= 0) {
 #ifdef DEBUGG
-        vtun_syslog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove! OK on client connect error
+        vlog(LOG_ERR, "Null-size or -1 frame length received len %d", rlen); // TODO: remove! OK on client connect error
 #endif
           return rlen;
      }
@@ -106,7 +107,7 @@ int tcp_read(int fd, char *buf)
 	      break;
            flen -= rlen;
         }
-        vtun_syslog(LOG_ERR, "Oversized frame received %hd", flen); // TODO: remove!
+        vlog(LOG_ERR, "Oversized frame received %hd", flen); // TODO: remove!
 	return VTUN_BAD_FRAME;
      }	
 

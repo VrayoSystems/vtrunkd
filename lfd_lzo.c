@@ -33,6 +33,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 
 #ifdef HAVE_LZO
 
@@ -69,19 +70,19 @@ int alloc_lzo(struct vtun_host *host)
      }
 
      if( lzo_init() != LZO_E_OK ){
-	vtun_syslog(LOG_ERR,"Can't initialize compressor");
+	vlog(LOG_ERR,"Can't initialize compressor");
 	return 1;
      }	
      if( !(zbuf = lfd_alloc(zbuf_size)) ){
-	vtun_syslog(LOG_ERR,"Can't allocate buffer for the compressor");
+	vlog(LOG_ERR,"Can't allocate buffer for the compressor");
 	return 1;
      }	
      if( !(wmem = lzo_malloc(mem)) ){
-	vtun_syslog(LOG_ERR,"Can't allocate buffer for the compressor");
+	vlog(LOG_ERR,"Can't allocate buffer for the compressor");
 	return 1;
      }	
 
-     vtun_syslog(LOG_INFO, "LZO compression[level %d] initialized", zlevel);
+     vlog(LOG_INFO, "LZO compression[level %d] initialized", zlevel);
 
      return 0;
 }
@@ -108,7 +109,7 @@ int comp_lzo(int len, char *in, char **out)
      int err;
      
      if( (err=lzo1x_compress((void *)in,len,zbuf,&zlen,wmem)) != LZO_E_OK ){
-        vtun_syslog(LOG_ERR,"Compress error %d",err);
+        vlog(LOG_ERR,"Compress error %d",err);
         return -1;
      }
 
@@ -122,7 +123,7 @@ int decomp_lzo(int len, char *in, char **out)
      int err;
 
      if( (err=lzo1x_decompress((void *)in,len,zbuf,&zlen,wmem)) != LZO_E_OK ){
-        vtun_syslog(LOG_ERR,"Decompress error %d",err);
+        vlog(LOG_ERR,"Decompress error %d",err);
         return -1;
      }
 
@@ -146,7 +147,7 @@ struct lfd_mod lfd_lzo = {
 
 int no_lzo(struct vtun_host *host)
 {
-     vtun_syslog(LOG_INFO, "LZO compression is not supported");
+     vlog(LOG_INFO, "LZO compression is not supported");
      return -1;
 }
 

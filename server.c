@@ -53,8 +53,10 @@
 
 #include "vtun.h"
 #include "lib.h"
+#include "log.h"
 #include "lock.h"
 #include "auth.h"
+#include "netlib.h"
 
 #include "compat.h"
 
@@ -66,29 +68,29 @@ static volatile sig_atomic_t server_term;
 static void sig_term(int sig) {
     if (shmid != 0) {
         if (shmctl(shmid, IPC_RMID, NULL ) == -1) {
-            vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
+            vlog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
         } else {
-            vtun_syslog(LOG_INFO, "shm destroy mark");
+            vlog(LOG_INFO, "shm destroy mark");
         }
     } else {
         if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
-            vtun_syslog(LOG_ERR, "SHM buffer for key %d not found", vtun.shm_key);
+            vlog(LOG_ERR, "SHM buffer for key %d not found", vtun.shm_key);
         } else {
             if (shmctl(shmid, IPC_RMID, NULL ) == -1) {
-                vtun_syslog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
+                vlog(LOG_INFO, "shm destroy fail; reason %s (%d)", strerror(errno), errno);
             }
         }
     }
     if (shm_conn_info != NULL ) {
 
         if (shmdt(shm_conn_info) == -1) {
-            vtun_syslog(LOG_INFO, "Detach shm fail; reason %s (%d)", strerror(errno), errno);
+            vlog(LOG_INFO, "Detach shm fail; reason %s (%d)", strerror(errno), errno);
         } else {
-            vtun_syslog(LOG_INFO, "shm detached");
+            vlog(LOG_INFO, "shm detached");
         }
 
     }
-    vtun_syslog(LOG_INFO, "Terminated");
+    vlog(LOG_INFO, "Terminated");
     server_term = VTUN_SIG_TERM;
 }
 
@@ -104,12 +106,12 @@ void connection(int sock)
 
     opt = sizeof(struct sockaddr_in);
     if ( getpeername(sock, (struct sockaddr *) &cl_addr, &opt) ) {
-        vtun_syslog(LOG_ERR, "Can't get peer name");
+        vlog(LOG_ERR, "Can't get peer name");
         exit(1);
     }
     opt = sizeof(struct sockaddr_in);
     if ( getsockname(sock, (struct sockaddr *) &my_addr, &opt) < 0 ) {
-        vtun_syslog(LOG_ERR, "Can't get local socket address");
+        vlog(LOG_ERR, "Can't get local socket address");
         exit(1);
     }
 
@@ -123,11 +125,11 @@ void connection(int sock)
         sigaction(SIGHUP, &sa, NULL);
 
         sprintf(process_string, "vtrunkd %s", host->host);
-        vtun_syslog(LOG_ERR, "Change title with: %s", process_string);
-        vtun_closelog();
+        vlog(LOG_ERR, "Change title with: %s", process_string);
+        vlog_close();
 
-        vtun_openlog(host->host, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
-        vtun_syslog(LOG_INFO, "Session %s[%s:%d] opened (build %s)", host->host, ip, ntohs(cl_addr.sin_port), BUILD_DATE);
+        vlog_open(host->host, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+        vlog(LOG_INFO, "Session %s[%s:%d] opened (build %s)", host->host, ip, ntohs(cl_addr.sin_port), BUILD_DATE);
 
         host->rmt_fd = sock;
 
@@ -140,12 +142,12 @@ void connection(int sock)
         /* Start tunnel */
         tunnel(host, 1);
 
-        vtun_syslog(LOG_INFO, "Session %s closed", host->host);
+        vlog(LOG_INFO, "Session %s closed", host->host);
 
         /* Unlock host. (locked in auth_server) */
         unlock_host(host);
     } else {
-        vtun_syslog(LOG_INFO, "Denied connection from %s:%d, reason: %d", ip,
+        vlog(LOG_INFO, "Denied connection from %s:%d, reason: %d", ip,
                     ntohs(cl_addr.sin_port), reason );
     }
     close(sock);
@@ -165,12 +167,12 @@ void listener(void)
     /* Set listen address */
     if ( generic_addr(&my_addr, &vtun.bind_addr) < 0)
     {
-        vtun_syslog(LOG_ERR, "Can't fill in listen socket");
+        vlog(LOG_ERR, "Can't fill in listen socket");
         exit(1);
     }
 
     if ( (s = socket(AF_INET, SOCK_STREAM, 0)) == -1 ) {
-        vtun_syslog(LOG_ERR, "Can't create socket");
+        vlog(LOG_ERR, "Can't create socket");
         exit(1);
     }
 
@@ -178,12 +180,12 @@ void listener(void)
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     if ( bind(s, (struct sockaddr *)&my_addr, sizeof(my_addr)) ) {
-        vtun_syslog(LOG_ERR, "Can't bind to the socket");
+        vlog(LOG_ERR, "Can't bind to the socket");
         exit(1);
     }
 
     if ( listen(s, 10) ) {
-        vtun_syslog(LOG_ERR, "Can't listen on the socket");
+        vlog(LOG_ERR, "Can't listen on the socket");
         exit(1);
     }
 
@@ -210,7 +212,7 @@ void listener(void)
     */
     // TODO: do not allocate all memory at once!!!!
     if ((shmid = shmget(key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, IPC_CREAT | 0666)) < 0) {
-        vtun_syslog(LOG_ERR, "Can not allocate SHM buffer of size %d. Please check your system shmmax or use 'ipcrm' to remove stale SHMs", sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM);
+        vlog(LOG_ERR, "Can not allocate SHM buffer of size %d. Please check your system shmmax or use 'ipcrm' to remove stale SHMs", sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM);
         exit(1);
     }
 
@@ -218,7 +220,7 @@ void listener(void)
     * Now we attach the segment to our data space.
     */
     if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) - 1) {
-        vtun_syslog(LOG_ERR, "shmat 1");
+        vlog(LOG_ERR, "shmat 1");
         exit(1);
     }
 
@@ -242,12 +244,12 @@ void listener(void)
             core_limit.rlim_max = RLIM_INFINITY;
 
             if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
-                vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+                vlog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
             }
             connection(s1);
             break;
         case -1:
-            vtun_syslog(LOG_ERR, "Couldn't fork()");
+            vlog(LOG_ERR, "Couldn't fork()");
         default:
             close(s1);
             // normal cont
@@ -257,7 +259,7 @@ void listener(void)
 
     shmctl(key, IPC_RMID, NULL);
 
-    vtun_syslog(LOG_INFO, "SERVER QUIT %d", server_term);
+    vlog(LOG_INFO, "SERVER QUIT %d", server_term);
 }
 
 void server(int sock)
@@ -273,7 +275,7 @@ void server(int sock)
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGUSR2, &sa, NULL);
 
-    vtun_syslog(LOG_INFO, "vtrunkd server ver %s %s (%s)", VTUN_VER, BUILD_DATE,
+    vlog(LOG_INFO, "vtrunkd server ver %s %s (%s)", VTUN_VER, BUILD_DATE,
                 vtun.svr_type == VTUN_INETD ? "inetd" : "stand" );
 
     switch ( vtun.svr_type ) {

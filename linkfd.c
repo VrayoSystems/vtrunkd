@@ -79,6 +79,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 #include "driver.h"
 #include "net_structs.h"
 #include "netlib.h"
@@ -226,7 +227,7 @@ int jsAC_cur;
 #endif
 
 #ifdef CPULAGCHK
-    #define CHKCPU(x) gettimeofday(&cpulag_tmp, NULL);timersub(&cpulag_tmp, &old_time, &tv_tmp_tmp_tmp);if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld place %d", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec, x);
+    #define CHKCPU(x) gettimeofday(&cpulag_tmp, NULL);timersub(&cpulag_tmp, &old_time, &tv_tmp_tmp_tmp);if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) vlog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld place %d", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec, x);
     struct timeval cpulag_tmp;
 #else
     #define CHKCPU {}
@@ -375,9 +376,23 @@ uint32_t my_max_speed_chan;
 uint32_t my_holded_max_speed;
 //uint32_t my_max_send_q;
 
+
+//
+//  Declarations.
+//
+int assert_packet_ipv4(const char *desc, char *data, int len);
+int check_delivery_time_path_unsynced(int pnum, int mld_divider);
+int check_delivery_time_unsynced(int mld_divider);
+int check_rtt_latency_drop_chan(int chan_num);
+inline int get_rto_usec();
+int lost_buf_exists(uint32_t seq_num);
+int plp_avg_pbl_unrecoverable(int pnum);
+int print_flush_data();
+
+
 int assert_cnt(int where) {
     if((acnt++) > (FRAME_BUF_SIZE*2)) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! Infinite loop detected at %d. Emergency break.", where);
+        vlog(LOG_ERR, "ASSERT FAILED! Infinite loop detected at %d. Emergency break.", where);
         return 1;
     }
     return 0;
@@ -386,21 +401,10 @@ int assert_cnt(int where) {
 int check_check() {
     for(int i=0; i<CHECK_SZ; i++) {
         if(shm_conn_info->check[i] != 170) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d value %du != 170", i, shm_conn_info->check[i]);
+            vlog(LOG_ERR, "ASSERT FAILED! check mem region corrupt at byte %d value %du != 170", i, shm_conn_info->check[i]);
         }
     }
 }
-/* convert ms(milliseconds) to timeval struct */
-void ms2tv(struct timeval *result, unsigned long interval_ms) {
-    result->tv_sec = (interval_ms / 1000);
-    result->tv_usec = ((interval_ms % 1000) * 1000);
-}
-
-// TODO: 32 bit tv2ms required #
-int64_t tv2ms(struct timeval *a) {
-    return (((uint64_t)a->tv_sec * 1000) + ((uint64_t)a->tv_usec / 1000));
-}
-
 
 int fit_wlinear (const double *x, const size_t xstride,
                  const double *w, const size_t wstride,
@@ -484,7 +488,6 @@ int fit_wlinear (const double *x, const size_t xstride,
   return 1;
 }
 
-
 int percent_delta_equal(int A, int B, int percent) {
     int delta = A>B?A-B:B-A;
     if(delta > 10000000) return 0;
@@ -504,14 +507,14 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
 
     packet_sum->lostAmount = packet_sum->stop_seq - packet_sum->start_seq + 1;
 #ifdef CODE_LOG
-    vtun_syslog(LOG_INFO, "jwb %d wb %d",l_jw->length, l->length);
+    vlog(LOG_INFO, "jwb %d wb %d",l_jw->length, l->length);
 #endif
     uint32_t lostSeq = packet_sum->start_seq;
 
     //search lost packet in wb_just_write_frames
     while (index > -1) {
 #ifdef CODE_LOG
-        vtun_syslog(LOG_INFO, "jwb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
+        vlog(LOG_INFO, "jwb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
 #endif
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
@@ -528,7 +531,7 @@ int frame_llist_getLostPacket_byRange(struct frame_llist *l, struct frame_llist 
     index = l->rel_head;
     while (index > -1) {
 #ifdef CODE_LOG
-        vtun_syslog(LOG_INFO, "wb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
+        vlog(LOG_INFO, "wb iterate idx %d lost amount %d seq_num %"PRIu32" lost seq %"PRIu32"", index, packet_sum->lostAmount, flist[index].seq_num, lostSeq);
 #endif
         if ((flist[index].seq_num >= packet_sum->start_seq) && (flist[index].seq_num <= packet_sum->stop_seq)) {
             packet_sum->lostAmount--;
@@ -581,7 +584,7 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
     
     for (int i = l->rel_head; i != -1; i = flist[i].rel_next) {
         if(flist[i].rel_next < -1) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! frame[%d]->rel_next=%d,seq_num=%"PRIu32",len=%d,chan_num=%d", i, flist[i].rel_next, flist[i].seq_num, flist[i].len, flist[i].chan_num);
+            vlog(LOG_ERR, "ASSERT FAILED! frame[%d]->rel_next=%d,seq_num=%"PRIu32",len=%d,chan_num=%d", i, flist[i].rel_next, flist[i].seq_num, flist[i].len, flist[i].chan_num);
             return -5;
         }
         if(flist[i].rel_next > max) {
@@ -695,7 +698,7 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
     result = frame_llist_getSize_asserted(framebuf_size, lfree, flist, &size);
     if (result < 0) return result-100;
     if(size_total + size != framebuf_size) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! total used in write_buf: %d, free: %d, sum: %d, total: %d", size_total, size, (size_total+size), framebuf_size);
+        vlog(LOG_ERR, "ASSERT FAILED! total used in write_buf: %d, free: %d, sum: %d, total: %d", size_total, size, (size_total+size), framebuf_size);
         return -7;
     }
     
@@ -715,16 +718,16 @@ void segfault_sigaction(int signal, siginfo_t *si, void *arg)
 
 static void sig_term(int sig)
 {
-    vtun_syslog(LOG_INFO, "Get sig_term");
-    vtun_syslog(LOG_INFO, "Closing connection");
+    vlog(LOG_INFO, "Get sig_term");
+    vlog(LOG_INFO, "Closing connection");
     io_cancel();
     linker_term = VTUN_SIG_TERM;
 }
 
 static void sig_hup(int sig)
 {
-    vtun_syslog(LOG_INFO, "Get sig_hup");
-    vtun_syslog(LOG_INFO, "Reestablishing connection");
+    vlog(LOG_INFO, "Get sig_hup");
+    vlog(LOG_INFO, "Reestablishing connection");
     io_cancel();
     linker_term = VTUN_SIG_HUP;
 }
@@ -732,7 +735,7 @@ static void sig_hup(int sig)
 /* Statistic dump */
 void sig_alarm(int sig)
 {
-    vtun_syslog(LOG_INFO, "Get sig_alarm");
+    vlog(LOG_INFO, "Get sig_alarm");
     static time_t tm;
     static char stm[20];
     /*
@@ -749,9 +752,9 @@ void sig_alarm(int sig)
 static void sig_usr1(int sig)
 {
     if(!select_check) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! SIGUSR1 not in select region!");
+        vlog(LOG_ERR, "ASSERT FAILED! SIGUSR1 not in select region!");
     }
-    //vtun_syslog(LOG_INFO, "Get sig_usr1, check_shm UP");
+    //vlog(LOG_INFO, "Get sig_usr1, check_shm UP");
     //info.check_shm = 1;
 }
 
@@ -766,7 +769,7 @@ void sig_send1() {
         pid = shm_conn_info->stats[i].pid;
         sem_post(&(shm_conn_info->stats_sem));
         if (pid != 0 && shm_conn_info->max_chan == i && shm_conn_info->stats[i].hold) {
-            vtun_syslog(LOG_INFO, "Sending signal to unhold HEAD");
+            vlog(LOG_INFO, "Sending signal to unhold HEAD");
             kill(pid, SIGUSR1);
         }
     }
@@ -792,7 +795,7 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
 
 
     if(  ( (chs - lws) >= FRAME_BUF_SIZE) || ( (lws - chs) >= FRAME_BUF_SIZE)) { // this one will not happen :-\
-        vtun_syslog(LOG_ERR, "WARNING: frame difference too high: last w seq: %"PRIu32" fbhead: %"PRIu32" . FIXED. chs %d<->%d lws cn %d", shm_conn_info->write_buf[chan_num].last_written_seq, shm_conn_info->write_buf[chan_num].frames_buf[i].seq_num, chs, lws, chan_num);
+        vlog(LOG_ERR, "WARNING: frame difference too high: last w seq: %"PRIu32" fbhead: %"PRIu32" . FIXED. chs %d<->%d lws cn %d", shm_conn_info->write_buf[chan_num].last_written_seq, shm_conn_info->write_buf[chan_num].frames_buf[i].seq_num, chs, lws, chan_num);
         shm_conn_info->write_buf[chan_num].last_written_seq = shm_conn_info->frames_buf[i].seq_num-1;
     }
 
@@ -800,9 +803,9 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
     for(k=1; k<(shm_conn_info->frames_buf[i].seq_num - shm_conn_info->write_buf[chan_num].last_written_seq); k++) {
         buf[idx] = shm_conn_info->write_buf[chan_num].last_written_seq + k;
         idx++;
-        //vtun_syslog(LOG_INFO, "MRB: found in start : tot %d", idx);
+        //vlog(LOG_INFO, "MRB: found in start : tot %d", idx);
         if(idx >= FRAME_BUF_SIZE) {
-            vtun_syslog(LOG_ERR, "WARNING: MRB2 frame difference too high: last w seq: %"PRIu32" fbhead: %"PRIu32" . FIXED. chs %d<->%d lws ch %d", shm_conn_info->write_buf[chan_num].last_written_seq, shm_conn_info->frames_buf[i].seq_num, chs, lws, chan_num);
+            vlog(LOG_ERR, "WARNING: MRB2 frame difference too high: last w seq: %"PRIu32" fbhead: %"PRIu32" . FIXED. chs %d<->%d lws ch %d", shm_conn_info->write_buf[chan_num].last_written_seq, shm_conn_info->frames_buf[i].seq_num, chs, lws, chan_num);
             shm_conn_info->write_buf[chan_num].last_written_seq = shm_conn_info->frames_buf[i].seq_num-1;
             idx=0;
             break;
@@ -810,7 +813,7 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
     }
     while(i > -1) {
         n = shm_conn_info->frames_buf[i].rel_next;
-        //vtun_syslog(LOG_INFO, "MRB: scan1");
+        //vlog(LOG_INFO, "MRB: scan1");
         if( n > -1 ) {
 
             isq = shm_conn_info->frames_buf[i].seq_num;
@@ -818,26 +821,26 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
             if(nsq > seq_limit) {
                 break;
             }
-            //vtun_syslog(LOG_INFO, "MRB: scan2 %"PRIu32" > %"PRIu32" +1 ?", nsq, isq);
+            //vlog(LOG_INFO, "MRB: scan2 %"PRIu32" > %"PRIu32" +1 ?", nsq, isq);
             if(nsq > (isq+1)) {
-                //vtun_syslog(LOG_INFO, "MRB: scan2 yes!");
+                //vlog(LOG_INFO, "MRB: scan2 yes!");
                 for(k=1; k<=(nsq-(isq+1)); k++) {
                     if(idx >= FRAME_BUF_SIZE) {
-                        vtun_syslog(LOG_ERR, "WARNING: frame seq_num diff in write_buf > FRAME_BUF_SIZE");
+                        vlog(LOG_ERR, "WARNING: frame seq_num diff in write_buf > FRAME_BUF_SIZE");
                         *buf_len = blen;
                         return idx;
                     }
 
                     buf[idx] = isq+k;
                     idx++;
-                    //vtun_syslog(LOG_INFO, "MRB: found in middle : tot %d", idx);
+                    //vlog(LOG_INFO, "MRB: found in middle : tot %d", idx);
                 }
             }
         }
         i = n;
         blen++;
     }
-    //vtun_syslog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
+    //vlog(LOG_INFO, "missing_resend_buf called and returning %d %d ", idx, blen);
     *buf_len = blen;
     return idx;
 }
@@ -862,7 +865,7 @@ int count_sequential_loss_unsync(int chan_num) {
     if(beg_lost > PLOSS_PSL) return beg_lost; // optimization: no need to calculate further as we already lost too much
     
     if(beg_lost == 0) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! beg_lost == 0: should never happen; invoke with packet loss only!");
+        vlog(LOG_ERR, "ASSERT FAILED! beg_lost == 0: should never happen; invoke with packet loss only!");
     }
     // now count losses over N packets
     while((i > -1) && (packets_checked < PLOSS_CHECK_PKTS)) {
@@ -911,7 +914,7 @@ int check_drop_period_unsync() {
     timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
     ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
     if(timercmp(&tv_tm, &tv_rtt, >=)) {
-        //vtun_syslog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
+        //vlog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
         return 1;
     }
     // else
@@ -938,20 +941,20 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     struct timeval max_latency_drop = info.max_latency_drop;
     // check for dead channel
     if(shm_conn_info->stats[pnum].channel_dead && (shm_conn_info->max_chan != pnum)) {
-        // vtun_syslog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
+        // vlog(LOG_ERR, "WARNING check_delivery_time DEAD and not HEAD"); // TODO: out-once this!
         return 0;
     }
     // TODO: re-think this!
     if( ( (info.rsr < info.send_q_limit_threshold) || (info.send_q_limit_cubic < info.send_q_limit_threshold)) && (shm_conn_info->max_chan != pnum)) {
-        vtun_syslog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
+        vlog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
     if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider + shm_conn_info->forced_rtt)) ) {
         // no way to deliver in time
-        //vtun_syslog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
+        //vlog(LOG_ERR, "WARNING check_delivery_time %d + %d - %d > %d + %d", shm_conn_info->stats[pnum].exact_rtt,  shm_conn_info->stats[pnum].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&max_latency_drop)/mld_divider), shm_conn_info->forced_rtt);
         return 0;
     }
-    //vtun_syslog(LOG_ERR, "CDT OK");
+    //vlog(LOG_ERR, "CDT OK");
     return 1;
 }
 
@@ -1138,7 +1141,7 @@ int DL_flag_drop_allowed_unsync_stats(uint32_t chan_mask) {
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
             if( (ag_speed_total < shm_conn_info->stats[i].ACK_speed/info.eff_len) && !percent_delta_equal(ag_speed_total, shm_conn_info->stats[i].ACK_speed/info.eff_len, 10) ) {
-                //vtun_syslog(LOG_INFO, "Allowing to drop flag: as we can send everything thru one chan: total: %d, chan %d ACS: %d", ag_speed_total, i, shm_conn_info->stats[i].ACK_speed);
+                //vlog(LOG_INFO, "Allowing to drop flag: as we can send everything thru one chan: total: %d, chan %d ACS: %d", ag_speed_total, i, shm_conn_info->stats[i].ACK_speed);
                 return 1; // allow to drop AG flag as we can send everything thru one chan
             }
         }
@@ -1162,7 +1165,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     info.ploss_event_flag = 0; // TODO: remove ploss event check
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
     #ifdef FRTTDBG
-                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
+                vlog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
     #endif
         info.least_rx_seq[i] = UINT32_MAX;
         timersub(   
@@ -1207,7 +1210,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
-                        vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel dead %d, p %d - ertt %d rhd %d - ertt %d, blm %d mld %d",
+                        vlog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel dead %d, p %d - ertt %d rhd %d - ertt %d, blm %d mld %d",
                                         shm_conn_info->stats[p].channel_dead, p, shm_conn_info->stats[p].exact_rtt, shm_conn_info->remote_head_pnum, shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt, buf_latency_ms, (MAX_LATENCY_DROP_USEC / 1000));
                         continue;
                     }
@@ -1218,7 +1221,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         }
         if(info.least_rx_seq[i] == UINT32_MAX) { // we did not find any alive channel. Just consider any LRX
-            //vtun_syslog(LOG_ERR, "Warning! Could not detect any alive chan; using head_lrx !");
+            //vlog(LOG_ERR, "Warning! Could not detect any alive chan; using head_lrx !");
             info.least_rx_seq[i] = head_lrx; // do not detect any loss if head is unknown?
             //info.least_rx_seq[i] = 0; // do not detect any loss
             // init least_rx_seq with max value of current chans
@@ -1236,7 +1239,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             // no sync is needed: already has sync at the toplevel
             forced_rtt_reached=check_tokens(i);
     #ifdef FRTTDBG
-                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
+                vlog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
     #endif
 
             timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
@@ -1251,14 +1254,14 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     // || (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == 0) // stub packet support
                     ) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), next seq");
+                vlog(LOG_ERR, "get_write_buf_wait_data(), next seq");
 #endif
                 return forced_rtt_reached;
             } else if (timercmp(&tv_tmp, &((struct timeval) MAX_NETWORK_STALL), >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
                //&& (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
             ) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
+                vlog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
 #endif
                 return forced_rtt_reached;
             } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
@@ -1266,7 +1269,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         } else {
             if(shm_conn_info->write_buf[i].frames.length != 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
+                vlog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
                 shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
             }
         }
@@ -1281,7 +1284,7 @@ int fix_free_writebuf(int chan_num) {
     int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[chan_num].frames, shm_conn_info->frames_buf, &sizeWB);
     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf, &sizeJW);
-    vtun_syslog(LOG_ERR, "WARNING! write buffer exhausted bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
+    vlog(LOG_ERR, "WARNING! write buffer exhausted bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
             shm_conn_info->write_buf[chan_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[chan_num].length, sizeF,
             shm_conn_info->wb_free_frames.length);
 
@@ -1340,7 +1343,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     mrl_ms = 100; // 20 ms lag // should be zero
     expiration_ms_fromnow = mrl_ms - drtt_ms; // we're OK to be late up to MLD? ms, but we're already drtt ms late!
     if(expiration_ms_fromnow < 0) { 
-        //vtun_syslog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
+        //vlog(LOG_INFO, "get_resend_frame can't get packets: expiration_ms_fromnow < 0: %d", expiration_ms_fromnow);
         return -1; // we can get no frames; handle this above
     }
     ms2tv(&max_latency, expiration_ms_fromnow);
@@ -1356,7 +1359,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     //find start point
     j = shm_conn_info->resend_buf_idx - 1 < 0 ? RESEND_BUF_SIZE - 1 : shm_conn_info->resend_buf_idx - 1; // correct: the idx is incremented AFTER write
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
-//        vtun_syslog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+//        vlog(LOG_INFO, "look for %"PRIu32" start point step - j %i chan_num %i seq_num %"PRIu32" ",*seq_num, j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if (shm_conn_info->resend_frames_buf[j].chan_num == chan_num) {
             break;
         }
@@ -1378,7 +1381,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     
     // clamp to high end, clamp to low end AND respect seq_num that we want - otherwise return oldest that we can afford
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
-//                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+//                vlog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) && (shm_conn_info->resend_frames_buf[j].len != 0)) {
             if( shm_conn_info->resend_frames_buf[j].seq_num = *seq_num ) { // AND is the one we're seeking for
                 if(!timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <)) { // packet is not too old
@@ -1403,7 +1406,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
                 *((uint16_t *) (shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
                 *out = shm_conn_info->resend_frames_buf[j].out + LINKFD_FRAME_RESERV;
                 *sender_pid = shm_conn_info->resend_frames_buf[j].sender_pid;
-//                vtun_syslog(LOG_INFO, "previous j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
+//                vlog(LOG_INFO, "previous j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
                 return len;
             } 
             if( (timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >=) // packet is too old, return it
@@ -1424,7 +1427,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     }
     // last packet could only be possible in case of uninitailized buffer (at start)
     
-    vtun_syslog(LOG_INFO, "WARNING: get_resend_frame can't get packets: expiration_ms_fromnow= %d, expnum=%d", expiration_ms_fromnow, expnum);
+    vlog(LOG_INFO, "WARNING: get_resend_frame can't get packets: expiration_ms_fromnow= %d, expnum=%d", expiration_ms_fromnow, expnum);
     return -1;// means we have not found the most recent frame in resend_buf
 }
 
@@ -1448,7 +1451,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
     }
 
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
-//                vtun_syslog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
+//                vlog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) || (shm_conn_info->resend_frames_buf[j].chan_num == 0)) {
             if (shm_conn_info->resend_frames_buf[j].seq_num == *seq_num) {
                 j_previous = j;
@@ -1457,7 +1460,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
                 *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
                 *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
                 *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
-//                vtun_syslog(LOG_INFO, "bottom ret j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
+//                vlog(LOG_INFO, "bottom ret j %i chan_num %i seq_num %"PRIu32" ", j_previous, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j_previous].seq_num );
                 return len;
             } else {
                 j_previous = j;
@@ -1604,7 +1607,7 @@ void seqn_add_tail(int conn_num, char *buf, int len, uint32_t seq_num, uint16_t 
     shm_conn_info->resend_buf_idx++;
     if (shm_conn_info->resend_buf_idx == RESEND_BUF_SIZE) {
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "seqn_add_tail() resend_frames_buf loop end");
+        vlog(LOG_INFO, "seqn_add_tail() resend_frames_buf loop end");
 #endif
         shm_conn_info->resend_buf_idx = 0;
     }
@@ -1672,9 +1675,9 @@ void print_head_of_packet(char *buf, char* str, uint32_t seq_num, int len) {
     }
     *(str_point - 1) = '\0';
     if (i <= len)
-        vtun_syslog(LOG_INFO, "%s %s", str, packet_string);
+        vlog(LOG_INFO, "%s %s", str, packet_string);
     else
-        vtun_syslog(LOG_INFO, "%s %s...", str, packet_string);
+        vlog(LOG_INFO, "%s %s...", str, packet_string);
 }
 
 /**
@@ -1702,7 +1705,7 @@ int send_packet(int chan_num, char *buf, int len) {
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     if (len && (len_ret < 0)) {
-        vtun_syslog(LOG_INFO, "error retransmit to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+        vlog(LOG_INFO, "error retransmit to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
     info.channel[chan_num].local_seq_num++;
@@ -1727,7 +1730,7 @@ int retransmit_send(char *out2, int n_to_send) {
     if (drop_packet_flag) {
         return LASTPACKETMY_NOTIFY; // go dropping
     } else if (drop_counter > 0) {
-        vtun_syslog(LOG_INFO, "drop_packet_flag (retransmit_send) TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+        vlog(LOG_INFO, "drop_packet_flag (retransmit_send) TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
         drop_counter = 0;
     }
     if (hold_mode) {
@@ -1760,10 +1763,10 @@ int retransmit_send(char *out2, int n_to_send) {
 
         if ((top_seq_num <= last_sent_packet_num[i].seq_num) || (top_seq_num == SEQ_START_VAL)) {
 #ifdef DEBUGG
-           vtun_syslog(LOG_INFO, "debug: retransmit_send skipping logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
+           vlog(LOG_INFO, "debug: retransmit_send skipping logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
             // TODO MOVE THE FOLLOWING LINE TO DEBUG! --vvv
-            if (top_seq_num < last_sent_packet_num[i].seq_num) vtun_syslog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
+            if (top_seq_num < last_sent_packet_num[i].seq_num) vlog(LOG_INFO, "WARNING! impossible: chan#%i last sent seq_num %"PRIu32" is > top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
             // WARNING! disabled push-to-top policy!
             if(PUSH_TO_TOP && ptt_allow_once && ((!info.head_channel) && (shm_conn_info->dropping || shm_conn_info->head_lossing))) {
                 last_sent_packet_num[i].seq_num--; // push to top! (push policy)
@@ -1775,7 +1778,7 @@ int retransmit_send(char *out2, int n_to_send) {
                     continue; // means that we have sent everything from rxmit buf and are ready to send new packet: no send_counter increase
                 }
                 // else means that we need to send something old
-                //vtun_syslog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
+                //vlog(LOG_ERR, "WARNING cannot send new packets as we won't deliver in time; skip sending"); // TODO: add skip counter
                 send_counter++;
                 statb.skip_no++;
                 continue; // do not send anything at all
@@ -1792,7 +1795,7 @@ int retransmit_send(char *out2, int n_to_send) {
             statb.skip_no++;
             continue; // continuing w/o reading/sending pkts AND send_counter++ will cause to fast-loop; we effectively do a poll here
         } else if (sel_ret == -1) {
-            vtun_syslog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
+            vlog(LOG_ERR, "retransmit send Could not select chan %d reason %s (%d)", i, strerror(errno), errno);
         }
         // now we have something to retransmit:
 
@@ -1800,7 +1803,7 @@ int retransmit_send(char *out2, int n_to_send) {
         seq_num_tmp = last_sent_packet_num[i].seq_num; // save old seq_num for test
 
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
+            vlog(LOG_INFO, "debug: logical channel #%i my last seq_num %"PRIu32" top seq_num %"PRIu32"", i, last_sent_packet_num[i].seq_num, top_seq_num);
 #endif
         sem_wait(&(shm_conn_info->resend_buf_sem));
         if(info.head_channel == 1) {
@@ -1809,15 +1812,15 @@ int retransmit_send(char *out2, int n_to_send) {
             if (len == -1) {
                 if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
+                    vlog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
                     statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-                vtun_syslog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
+                vlog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
+                    vlog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
                     statb.skip_new_d++;
                     continue;
                 }
@@ -1832,17 +1835,17 @@ int retransmit_send(char *out2, int n_to_send) {
                 if (check_delivery_time(2)  && !shm_conn_info->slow_start) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     // TODO: disable AG in case of this event!
-                    vtun_syslog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
+                    vlog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
                     statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
                 // else there is no way we can deliver anything in time; now get latest packet
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
                 // TODO: counter here -->
-                //vtun_syslog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
+                //vlog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vtun_syslog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
+                    vlog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
                     statb.skip_new_d++;
                     continue;
                 }
@@ -1851,7 +1854,7 @@ int retransmit_send(char *out2, int n_to_send) {
         }
         if(last_sent_packet_num[i].seq_num != seq_num_tmp) {
             if(info.head_channel == 1) {
-                vtun_syslog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
+                vlog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
             }
             statb.skip_r++;
         }
@@ -1859,10 +1862,10 @@ int retransmit_send(char *out2, int n_to_send) {
         sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, length);
+        vlog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, length);
 #endif
         if(debug_trace) {
-            vtun_syslog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
+            vlog(LOG_INFO, "debug: R_MODE resend frame ... chan %d seq %"PRIu32" len %d", i, last_sent_packet_num[i].seq_num, len);
         }
 
         
@@ -1883,7 +1886,7 @@ int retransmit_send(char *out2, int n_to_send) {
         int len_ret = udp_write(info.channel[i].descriptor, out_buf, len);
         info.channel[i].packet_recv_counter = 0;
         if (len && (len_ret < 0)) {
-            vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
+            vlog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", i, strerror(errno), errno);
             return BREAK_ERROR;
         }
         info.channel[i].local_seq_num++;
@@ -1902,7 +1905,7 @@ int retransmit_send(char *out2, int n_to_send) {
         statb.byte_sent_rmit_full += len_ret;
         info.channel[i].up_packets++;
         info.channel[i].bytes_put++;
-//if(drop_packet_flag) {  vtun_syslog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
+//if(drop_packet_flag) {  vlog(LOG_INFO, "bytes_pass++ retransmit_send"); } 
         info.byte_r_mode += len_ret;
 
         send_counter++;
@@ -1912,7 +1915,7 @@ int retransmit_send(char *out2, int n_to_send) {
         if (check_delivery_time(1)) { // TODO: REMOVE THIS EXTRA CHECK (debug only; should never happen due to previous checks)
             return LASTPACKETMY_NOTIFY;
         } else {
-            vtun_syslog(LOG_ERR, "WARNING STILL can not deliver new packet in time; skipping read from tun");
+            vlog(LOG_ERR, "WARNING STILL can not deliver new packet in time; skipping read from tun");
             return CONTINUE_ERROR;
         }
     }
@@ -1920,7 +1923,7 @@ int retransmit_send(char *out2, int n_to_send) {
     return 1;
 }
 
-int select_net_write(chan_num) {
+int select_net_write(int chan_num) {
     struct timeval tv;
 
     fd_set fdset2;
@@ -1932,7 +1935,7 @@ int select_net_write(chan_num) {
     if (sel_ret == 0) {
         return 0; // save rtt!
     } else if (sel_ret == -1) {
-        vtun_syslog(LOG_ERR, "select_net_write() select error! errno %d",errno);
+        vlog(LOG_ERR, "select_net_write() select error! errno %d",errno);
         return 0;
     }
     return 1;
@@ -1977,7 +1980,7 @@ int select_devread_send(char *buf, char *out2) {
         if (!FD_ISSET(info.tun_device, &fdset)) {
 #ifdef DEBUGG
             if(drop_packet_flag) {
-                vtun_syslog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
+                vlog(LOG_INFO, "debug: Nothing to read from tun device (first FD_ISSET)");
             }
 #endif
             return TRYWAIT_NOTIFY;
@@ -1994,24 +1997,24 @@ int select_devread_send(char *buf, char *out2) {
         if (select_ret < 0) {
             if (errno != EAGAIN && errno != EINTR) {
                 sem_post(&(shm_conn_info->tun_device_sem));
-                vtun_syslog(LOG_INFO, "select error; exit");
+                vlog(LOG_INFO, "select error; exit");
                 return BREAK_ERROR;
             } else {
                 sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select error; continue norm");
+                vlog(LOG_INFO, "select error; continue norm");
 #endif
                 return CONTINUE_ERROR;
             }
         } else if (select_ret == 0) {
             sem_post(&(shm_conn_info->tun_device_sem));
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: we don't have data on tun device; continue norm.");
+            vlog(LOG_INFO, "debug: we don't have data on tun device; continue norm.");
 #endif
             return CONTINUE_ERROR; // Nothing to read, continue.
         }
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: we have data on tun device...");
+        vlog(LOG_INFO, "debug: we have data on tun device...");
 #endif
         if (FD_ISSET(info.tun_device, &fdset_tun)) {
         } else {
@@ -2025,17 +2028,17 @@ int select_devread_send(char *buf, char *out2) {
 
         if (len < 0) { // 10 bytes for seq number (long? = 4 bytes)
             if (errno != EAGAIN && errno != EINTR) {
-                vtun_syslog(LOG_INFO, "sem_post! dev read err");
+                vlog(LOG_INFO, "sem_post! dev read err");
                 return BREAK_ERROR;
             } else { // non fatal error
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
+            vlog(LOG_INFO, "sem_post! else dev read err"); // usually means non-blocking zeroing
 #endif
                 return CONTINUE_ERROR;
             }
         } else if (len == 0) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "sem_post! dev_read() have read nothing");
+            vlog(LOG_INFO, "sem_post! dev_read() have read nothing");
 #endif
             return CONTINUE_ERROR;
         }
@@ -2050,7 +2053,7 @@ int select_devread_send(char *buf, char *out2) {
                 other_chan = 0;
             info.dropping = 1;
             if (debug_trace) {
-                vtun_syslog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d",
+                vlog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d",
                         info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
                         shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg,
                         shm_conn_info->stats[other_chan].hold);
@@ -2066,7 +2069,7 @@ int select_devread_send(char *buf, char *out2) {
             /*
              for (int p = 0; p < MAX_TCP_PHYSICAL_CHANNELS; p++) {
              if (chan_mask & (1 << p)) {
-             vtun_syslog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", p, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));
+             vlog(LOG_INFO, "pnum %d, w %d, rtt %d, wspd %d", p, shm_conn_info->stats[p].W_cubic, shm_conn_info->stats[p].rtt_phys_avg, (shm_conn_info->stats[p].W_cubic / shm_conn_info->stats[p].rtt_phys_avg));
              }
              }
              */
@@ -2092,7 +2095,7 @@ int select_devread_send(char *buf, char *out2) {
             return CONTINUE_ERROR;
         } else {
             if (drop_counter > 0) {
-                vtun_syslog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d",
+                vlog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d",
                         drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
                         shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
                 drop_counter = 0;
@@ -2100,7 +2103,7 @@ int select_devread_send(char *buf, char *out2) {
         }
 
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
+        vlog(LOG_INFO, "debug: we have read data from tun device and going to send it through net");
 #endif
 
         // now determine packet IP..
@@ -2119,7 +2122,7 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef SUM_SEND
 #ifdef CODE_LOG
         print_head_of_packet(buf, "add to sum ", tmp_seq_counter, len);
-        vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
+        vlog(LOG_INFO, "FRAME_REDUNDANCY_CODE check seq_counter %"PRIu32"", tmp_seq_counter);
 #endif
 
         current_selection = (tmp_seq_counter - (SEQ_START_VAL + 1)) % SELECTION_NUM;
@@ -2157,16 +2160,16 @@ int select_devread_send(char *buf, char *out2) {
 
         new_packet = 1;
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, length);
+        vlog(LOG_INFO, "local_seq_num %"PRIu32" seq_num %"PRIu32" len %d", info.channel[chan_num].local_seq_num, tmp_seq_counter, length);
 #endif
     } else {
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "we have fast resend frame sending...");
+        vlog(LOG_INFO, "we have fast resend frame sending...");
 #endif
     }
 #ifdef DEBUGG
     else {
-        vtun_syslog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, length, tmp_seq_counter, idx);
+        vlog(LOG_INFO, "Trying to send from fast resend buf chan_num - %i, len - %i, seq - %"PRIu32", packet amount - %i", chan_num, length, tmp_seq_counter, idx);
     }
 #endif
 
@@ -2176,7 +2179,7 @@ int select_devread_send(char *buf, char *out2) {
     tv.tv_usec = 0;
     select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
+    vlog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
 #endif
     if (select_ret != 1) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -2186,15 +2189,15 @@ int select_devread_send(char *buf, char *out2) {
         //    info.channel[chan_num].local_seq_num--; // send next time... another pkt will have this lsn soon!
         //}
         if (idx == -1) {
-            vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+            vlog(LOG_ERR, "ERROR: fast_resend_buf is full");
         }
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "BUSY - descriptor %i channel %d");
+        vlog(LOG_INFO, "BUSY - descriptor %i channel %d");
 #endif
         return NET_WRITE_BUSY_NOTIFY;
     }
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "READY - descriptor %i channel %d");
+    vlog(LOG_INFO, "READY - descriptor %i channel %d");
 #endif
     if (tmp_seq_counter) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
@@ -2202,11 +2205,11 @@ int select_devread_send(char *buf, char *out2) {
         sem_post(&(shm_conn_info->resend_buf_sem));
 
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
-        vtun_syslog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
+        vlog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", length, shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num+1));
+        vlog(LOG_INFO, "select_devread_send() frame ... chan %d seq %"PRIu32" len %d", chan_num, tmp_seq_counter, length);
 #endif
         if (debug_trace) {
-            vtun_syslog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len,
+            vlog(LOG_INFO, "writing to net.. sem_post! finished blw len %d seq_num %d, mode %d chan %d, dirty_seq_num %u", len,
                     shm_conn_info->seq_counter[chan_num], (int) channel_mode, chan_num, (dirty_seq_num + 1));
         }
 
@@ -2236,7 +2239,7 @@ int select_devread_send(char *buf, char *out2) {
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     info.channel[chan_num].packet_recv_counter = 0;
     if (len && (len_ret < 0)) {
-        vtun_syslog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+        vlog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
     sem_wait(&shm_conn_info->common_sem);
@@ -2266,7 +2269,7 @@ int select_devread_send(char *buf, char *out2) {
         delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
         delay_cnt++; // need for mean_delay calculation (legacy)
 #ifdef DEBUGG
-        if((delay_acc/delay_cnt) > 100) vtun_syslog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
+        if((delay_acc/delay_cnt) > 100) vlog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
 #endif
 
         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_data_len_amt += len_ret;
@@ -2281,7 +2284,7 @@ int select_devread_send(char *buf, char *out2) {
         info.channel[chan_num].up_packets++;
         info.channel[chan_num].bytes_put++;
         if (drop_packet_flag) {
-            vtun_syslog(LOG_INFO, "bytes_pass++ select_send");
+            vlog(LOG_INFO, "bytes_pass++ select_send");
         }
         info.byte_efficient += len_ret;
 
@@ -2298,18 +2301,18 @@ int select_devread_send(char *buf, char *out2) {
         tv.tv_usec = 0;
         select_ret = select(info.channel[chan_num].descriptor + 1, NULL, &fdset_tun, NULL, &tv);
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
+        vlog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
 #endif
         if (select_ret == 1) {
 #ifdef CODE_LOG
-            vtun_syslog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+            vlog(LOG_INFO, "send FRAME_REDUNDANCY_CODE selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
 #endif
             len_ret = udp_write(info.channel[chan_num].descriptor, buf2, len_sum | VTUN_BAD_FRAME);
             if(len_sum <= 0) {
-                vtun_syslog(LOG_ERR, "error sum len %d! reason: %s (%d)", len_sum, strerror(errno), errno);
+                vlog(LOG_ERR, "error sum len %d! reason: %s (%d)", len_sum, strerror(errno), errno);
             }
             if (len_sum && (len_ret <= 0)) {
-                vtun_syslog(LOG_INFO, "error direct send sum to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
+                vlog(LOG_INFO, "error direct send sum to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
             } else {
 //                info.channel[chan_num].local_seq_num++;
                 if (info.channel[chan_num].local_seq_num == (UINT32_MAX - 1)) {
@@ -2318,13 +2321,13 @@ int select_devread_send(char *buf, char *out2) {
             }
         } else {
 #ifdef CODE_LOG
-            vtun_syslog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
+            vlog(LOG_INFO, "add FRAME_REDUNDANCY_CODE to fast resend selection %d packet_code ready %i seq start %"PRIu32" stop %"PRIu32" seq_num %"PRIu32" len %i len new %i", current_selection, packet_code_ready,shm_conn_info->packet_code[current_selection][chan_num].start_seq, shm_conn_info->packet_code[current_selection][chan_num].stop_seq, tmp_seq_counter, shm_conn_info->packet_code[current_selection][chan_num].len_sum,len);
 #endif
             sem_wait(&(shm_conn_info->resend_buf_sem));
             int idx = add_fast_resend_frame(chan_num, buf2, len_sum | VTUN_BAD_FRAME, 0);
             sem_post(&(shm_conn_info->resend_buf_sem));
             if (idx == -1) {
-                vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+                vlog(LOG_ERR, "ERROR: fast_resend_buf is full");
             }
 //               return NET_WRITE_BUSY_NOTIFY;
         }
@@ -2359,7 +2362,7 @@ int write_buf_check_n_flush(int logical_channel) {
     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &size1);
     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
     if ((shm_conn_info->wb_free_frames.length != sizeF) || (shm_conn_info->write_buf[logical_channel].frames.length != size1)|| (shm_conn_info->wb_just_write_frames[logical_channel].length != sizeJW)) {
-        vtun_syslog(LOG_ERR, "FAIL LEN free %d <> %d wb %d <> %d jwb %d <> %d chan %d", shm_conn_info->wb_free_frames.length, sizeF,
+        vlog(LOG_ERR, "FAIL LEN free %d <> %d wb %d <> %d jwb %d <> %d chan %d", shm_conn_info->wb_free_frames.length, sizeF,
                 shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, logical_channel);
     }
     */
@@ -2372,19 +2375,19 @@ int write_buf_check_n_flush(int logical_channel) {
     int sel_ret = select(info.tun_device + 1, NULL, &fdset2, NULL, &tv);
     if (sel_ret == 0) {
     #ifdef FRTTDBG
-        vtun_syslog(LOG_ERR, "write_buf_check_n_flush select - no select%d",errno);
+        vlog(LOG_ERR, "write_buf_check_n_flush select - no select%d",errno);
     #endif
         return 0; // save rtt!
     } else if (sel_ret == -1) {
-        vtun_syslog(LOG_ERR, "write_buf_check_n_flush select error! errno %d",errno);
+        vlog(LOG_ERR, "write_buf_check_n_flush select error! errno %d",errno);
         return 0;
     }
 
 #ifdef DEBUGG
     if (fprev == -1) {
-        vtun_syslog(LOG_INFO, "no data to write at all!");
+        vlog(LOG_INFO, "no data to write at all!");
     } else {
-        vtun_syslog(LOG_INFO, "trying to write to to dev: seq_num %"PRIu32" lws %"PRIu32" chan %d", shm_conn_info->frames_buf[fprev].seq_num,
+        vlog(LOG_INFO, "trying to write to to dev: seq_num %"PRIu32" lws %"PRIu32" chan %d", shm_conn_info->frames_buf[fprev].seq_num,
                 shm_conn_info->write_buf[logical_channel].last_written_seq, logical_channel);
     }
 #endif
@@ -2392,7 +2395,7 @@ int write_buf_check_n_flush(int logical_channel) {
     if (fprev > -1) {
         forced_rtt_reached=check_tokens(logical_channel);
         #ifdef FRTTDBG
-        vtun_syslog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
+        vlog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
         #endif
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
@@ -2406,7 +2409,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 shm_conn_info->tokens--; // remove a token...
             }
             if(shm_conn_info->write_buf[logical_channel].frames.stub_total < 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED!: stub_total <0!");
+                vlog(LOG_ERR, "ASSERT FAILED!: stub_total <0!");
                 shm_conn_info->write_buf[logical_channel].frames.stub_total = 0;
             }
             shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
@@ -2414,13 +2417,13 @@ int write_buf_check_n_flush(int logical_channel) {
         }
         int cond_flag = ((shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; // stub packet support may beadded here
         if(shm_conn_info->frames_buf[fprev].seq_num == shm_conn_info->write_buf[logical_channel].last_written_seq) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
+            vlog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
         }
         if(shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->write_buf[logical_channel].last_written_seq) {
-            vtun_syslog(LOG_ERR, "ASSERT FAILED! Negative packet seq_num diff in WB! seq %lu < lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
+            vlog(LOG_ERR, "ASSERT FAILED! Negative packet seq_num diff in WB! seq %lu < lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
         }
     #ifdef FRTTDBG
-        vtun_syslog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
+        vlog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
     #endif
         if (forced_rtt_reached && ( // smoothed buffer - allowed to write
                         cond_flag // normal write
@@ -2455,7 +2458,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d isl %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) ts %ld.%06ld", info.flush_sequential,
+                    vlog(LOG_INFO, "MAX_ALLOWED_BUF_LEN PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d isl %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) ts %ld.%06ld", info.flush_sequential,
                             shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len, buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, info.current_time);
                     loss_flag = 1;
                 } else if (timercmp(&tv_tmp, &max_latency_drop, >=)
@@ -2468,7 +2471,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO,
+                    vlog(LOG_INFO,
                             "MAX_LATENCY_DROP PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) lat %"PRIu64" ms wlag %"PRIu64" ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
@@ -2479,7 +2482,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     if(r_amt == 0) {
-                        vtun_syslog(LOG_INFO, "SKIP PDROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl-loc %d Fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
+                        vlog(LOG_INFO, "SKIP PDROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl-loc %d Fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
                         if (shm_conn_info->tokens > 0) {
@@ -2491,15 +2494,15 @@ int write_buf_check_n_flush(int logical_channel) {
                             shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                     char printLine[100] = { 0 };
                     if (sumIndex != -1) {
-                        sprintf(printLine, "lostSeqAmount %d lostSeq %"PRIu32" sum start %"PRIu32" stop %"PRIu32"",
+                        sprintf(printLine, "lostSeqAmount %d lostSeq %lu sum start %"PRIu32" stop %"PRIu32"",
                                 shm_conn_info->packet_code_recived[logical_channel][sumIndex].lostAmount,
                                 shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
                                 shm_conn_info->packet_code_recived[logical_channel][sumIndex].start_seq,
                                 shm_conn_info->packet_code_recived[logical_channel][sumIndex].stop_seq);
                     } else {
-                        sprintf(printLine, "sum for seq %"PRIu32" not found", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                        sprintf(printLine, "sum for seq %lu not found", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                     }
-                    vtun_syslog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d %s bl-loc %d fl %d jwb %d lat %"PRIu64" ms wlag %"PRIu64" ms ts %ld.%06ld %s",
+                    vlog(LOG_INFO, "PLOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d %s bl-loc %d fl %d jwb %d lat %"PRIu64" ms wlag %"PRIu64" ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], printLine, shm_conn_info->write_buf[logical_channel].frames.length,
@@ -2511,7 +2514,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     int sizeF = -1, size1 = -1, sizeJW = -1;
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
                     if(r_amt == 0) {
-                        vtun_syslog(LOG_INFO, "SKIP DROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl-loc %d fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
+                        vlog(LOG_INFO, "SKIP DROP - can not detect who lost (bug?) tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" bl-loc %d fl %d jwl %d ms ts %ld.%06ld %s", shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
                         if (shm_conn_info->tokens > 0) {
@@ -2519,7 +2522,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         }
                         return 0;
                     }
-                    vtun_syslog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" wlag %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
+                    vlog(LOG_INFO, "LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" wlag %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tv2ms(&since_write_tv), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
@@ -2528,7 +2531,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     update_prev_flushed(logical_channel, fprev);
                     int sizeF = -1, size1 = -1, sizeJW = -1;
                     r_amt = flush_reason_chan(WHO_LOST, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
-                    vtun_syslog(LOG_INFO, "tflush programming ERROR !!! PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" wlag %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
+                    vlog(LOG_INFO, "tflush programming ERROR !!! PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" %d sqn %d, lws %d lrxsqn %d lat %"PRIu64" wlag %"PRIu64" bl %d fl %d jwl %d ms ts %ld.%06ld %s",
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tv2ms(&since_write_tv), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
@@ -2540,7 +2543,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 } else {
                     sprintf(tmp + strlen(tmp), "WB ok ");
                 }
-                vtun_syslog(LOG_INFO, tmp);
+                vlog(LOG_INFO, tmp);
                 int wb_1ms_str_pos = 0;
                 wb_1ms_str_pos += sprintf(wb_1ms_str, "{\"wb_s\":[");
                 for (;; ) {
@@ -2552,7 +2555,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     }
                 }
                 sprintf(wb_1ms_str + wb_1ms_str_pos - 1, "]}");
-                vtun_syslog(LOG_INFO, wb_1ms_str);
+                vlog(LOG_INFO, wb_1ms_str);
                 memset(wb_1ms_str, '\0', 5000);
 #endif
                 if (loss_flag && !lost_buf_exists(shm_conn_info->write_buf[logical_channel].last_written_seq)) {
@@ -2607,7 +2610,7 @@ int write_buf_check_n_flush(int logical_channel) {
             struct timeval work_loop1, work_loop2;
             gettimeofday(&work_loop1, NULL );
             if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                vtun_syslog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
+                vlog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
                         shm_conn_info->write_buf[logical_channel].last_written_seq, tv_tmp.tv_sec, tv_tmp.tv_usec);
             }
 #endif            
@@ -2621,31 +2624,31 @@ int write_buf_check_n_flush(int logical_channel) {
             }
             if(frame_seq_tmp.len > 0) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
-                    vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
+                    vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                        vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                        vlog(LOG_ERR, "dev write not EAGAIN or EINTR");
                     } else {
-                        vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                        vlog(LOG_ERR, "dev write intr - need cont");
                         return 0;
                     }
     
                 } else {
                     if (len < frame_seq_tmp.len) {
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
+                        vlog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
                                 shm_conn_info->frames_buf[fprev].len);
                     }
                 }
             } else {
-                vtun_syslog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
+                vlog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
                 shm_conn_info->write_buf[logical_channel].frames.stub_total--;
             }
 #ifdef DEBUGG
             gettimeofday(&work_loop2, NULL );
-            vtun_syslog(LOG_INFO, "dev_write time: %"PRIu32" us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
+            vlog(LOG_INFO, "dev_write time: %"PRIu32" us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
 #endif
             
             if (debug_trace) {
-                vtun_syslog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d, tcp_seq %u == %u, hs %u", buf_len, incomplete_seq_len,
+                vlog(LOG_INFO, "writing to dev: bln is %d icpln is %d, sqn: %"PRIu32", lws: %"PRIu32" mode %d, ns: %d, w: %d len: %d, chan %d ts %ld.%06ld cur %ld.%06ld rtt %d pnum %d, tokens %d, tcp_seq %u == %u, hs %u", buf_len, incomplete_seq_len,
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
@@ -2662,19 +2665,19 @@ int write_buf_check_n_flush(int logical_channel) {
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
 //            return 1;
             if(frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &fold) < 0) {
-                vtun_syslog(LOG_ERR, "WARNING! tried to pull from empty write_buf!");
+                vlog(LOG_ERR, "WARNING! tried to pull from empty write_buf!");
                 return 0;
             }
             frame_llist_append(&shm_conn_info->wb_just_write_frames[logical_channel], fold, shm_conn_info->frames_buf);
             if (shm_conn_info->wb_just_write_frames[logical_channel].length > PACKET_CODE_BUFFER_SIZE) {
                 int frame_index;
                 if(frame_llist_pull(&shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &frame_index) < 0) {
-                    vtun_syslog(LOG_ERR, "ASSERT FAILED! can not pull anything from wjf!");
+                    vlog(LOG_ERR, "ASSERT FAILED! can not pull anything from wjf!");
                     return 0;
                 }
                 frame_llist_append(&shm_conn_info->wb_free_frames, frame_index, shm_conn_info->frames_buf);
             }
-       //     vtun_syslog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
+       //     vlog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
             for (int i = shm_conn_info->wb_just_write_frames[logical_channel].rel_head;; i = shm_conn_info->frames_buf[i].rel_next) {
 
                 //print_head_of_packet(shm_conn_info->frames_buf[i].out, "wb_just_write_frames", shm_conn_info->frames_buf[i].seq_num, shm_conn_info->frames_buf[i].len);
@@ -2691,12 +2694,12 @@ int write_buf_check_n_flush(int logical_channel) {
             int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0],
                     &shm_conn_info->wb_just_write_frames[logical_channel], &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf,
                     shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-//            vtun_syslog(LOG_ERR, "calculated packet stored in %i", packet_index);
+//            vlog(LOG_ERR, "calculated packet stored in %i", packet_index);
             if (packet_index != -1) {
-                vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 3}", lfd_host->host,
+                vlog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 3}", lfd_host->host,
                         shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
 
-                //    vtun_syslog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
+                //    vlog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
                 //  else
 //                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calculated packet",
 //                        shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
@@ -2707,12 +2710,12 @@ int write_buf_check_n_flush(int logical_channel) {
 //            if (packet_index >= 0) {
 //                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calced packet",shm_conn_info->write_buf[logical_channel].last_written_seq + 1, 70);
                 if (dev_write(info.tun_device, shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, REDUNDANCY_CODE_SIZE) < 0) {
-                    vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
+                    vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                        vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                        vlog(LOG_ERR, "dev write not EAGAIN or EINTR");
                     } else {
-                        vtun_syslog(LOG_ERR, "dev write intr - need cont");
-                        return;
+                        vlog(LOG_ERR, "dev write intr - need cont");
+                        return 1;
                     }
 
                 }
@@ -2744,10 +2747,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     char *ptr;
     int mlen = 0;
 #ifdef DEBUGG
-    vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", length, seq_num, conn_num);
+    vlog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", length, seq_num, conn_num);
 #endif
     if(debug_trace) {
-        vtun_syslog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
+        vlog(LOG_INFO, "write_buf_add called! len %d seq_num %"PRIu32" chan %d", len, seq_num, conn_num);
     }
     // place into correct position first..
     int i = shm_conn_info->write_buf[conn_num].frames.rel_head, n;
@@ -2766,7 +2769,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 */
 /*
     if(conn_num <= 0) { // this is a workaround for some bug... TODO!!
-            vtun_syslog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
+            vlog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
             *succ_flag = -2;
             return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
@@ -2777,11 +2780,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int tail_idx = shm_conn_info->write_buf[conn_num].frames.rel_tail;
     if ((tail_idx != -1) && ( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
             (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num ) >= STRANGE_SEQ_FUTURE )) {
-        vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT SRANGE_SEQ_FUTURE logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000 tail seq %lu", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num), shm_conn_info->frames_buf[tail_idx].seq_num);
+        vlog(LOG_INFO, "WARNING! DROP BROKEN PKT SRANGE_SEQ_FUTURE logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000 tail seq %lu", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num), shm_conn_info->frames_buf[tail_idx].seq_num);
     }
     if( (tail_idx != -1) && (seq_num < shm_conn_info->write_buf[conn_num].last_written_seq) &&
               ((shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST) ) { // this ABS comparison makes checks in MRB unnesesary...
-        vtun_syslog(LOG_INFO, "WARNING! DROP BROKEN PKT STRANGE_SEQ_PAST logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num));
+        vlog(LOG_INFO, "WARNING! DROP BROKEN PKT STRANGE_SEQ_PAST logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num));
     }
 
     if ( (seq_num <= shm_conn_info->write_buf[conn_num].last_written_seq)) {
@@ -2793,23 +2796,23 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             int len_ret = dev_write(info.tun_device, out, len);
             gettimeofday(&work_loop2, NULL );
             timersub(&work_loop2, &work_loop1, &tmp_tv);
-            vtun_syslog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
+            vlog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
-                vtun_syslog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
+                vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                    vtun_syslog(LOG_ERR, "dev write not EAGAIN or EINTR");
+                    vlog(LOG_ERR, "dev write not EAGAIN or EINTR");
                 } else {
-                    vtun_syslog(LOG_ERR, "dev write intr - need cont");
+                    vlog(LOG_ERR, "dev write intr - need cont");
                     return 0;
                 }
 
             } else if (len_ret < len) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
+                vlog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
             }
 
         }
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "drop dup pkt seq_num %"PRIu32" lws %"PRIu32"", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
+        vlog(LOG_INFO, "drop dup pkt seq_num %"PRIu32" lws %"PRIu32"", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq);
 #endif
         *succ_flag = -2;
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
@@ -2824,17 +2827,17 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = 0;
         } else {
             int len_ret = dev_write(info.tun_device, out, len);
-            vtun_syslog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %u, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
+            vlog(LOG_ERR, "tcp retransmission segment seq_num %u lws %u tcp_seq %u == %u last tseq: %u, hs %u ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tcp_seq, tcp_seq2, shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq, hash, info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
-                vtun_syslog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
+                vlog(LOG_ERR, "ERROR writing (tcprxm) to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                    vtun_syslog(LOG_ERR, "ERROR tcprxm dev write not EAGAIN or EINTR");
+                    vlog(LOG_ERR, "ERROR tcprxm dev write not EAGAIN or EINTR");
                 } else {
-                    vtun_syslog(LOG_ERR, "ERROR tcprxm dev write intr - need cont");
+                    vlog(LOG_ERR, "ERROR tcprxm dev write intr - need cont");
                 }
 
             } else if (len_ret < len) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! tcprxm could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
+                vlog(LOG_ERR, "ASSERT FAILED! tcprxm could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len_ret, len);
             }
             len = 0; // indicate that this is stub packet
             //seq_num = 0; // to make stub packet support work at flushing? // actually not required since these are OK in seq_num
@@ -2848,7 +2851,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         while( i > -1 ) {
             if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
+                vlog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
 #endif
                 //return -3;
                 return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
@@ -2864,24 +2867,24 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 
     if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &newf) < 0) {
         // try a fix
-        vtun_syslog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
+        vlog(LOG_ERR, "WARNING! No free elements in wbuf! trying to free some...");
         fix_free_writebuf(conn_num);
         int sizeF, sizeWB, sizeJW;
         int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
         result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[conn_num].frames, shm_conn_info->frames_buf, &sizeWB);
         result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[conn_num], shm_conn_info->frames_buf, &sizeJW);
-        vtun_syslog(LOG_ERR, "WARNING! write buffer repaired bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
+        vlog(LOG_ERR, "WARNING! write buffer repaired bl %d - %d jwbl %d - %d fl %d - %d", sizeWB,
                 shm_conn_info->write_buf[conn_num].frames.length, sizeJW, shm_conn_info->wb_just_write_frames[conn_num].length, sizeF,
                 shm_conn_info->wb_free_frames.length);
         if(frame_llist_pull(&shm_conn_info->wb_free_frames,
                             shm_conn_info->frames_buf,
                             &newf) < 0) {
-            vtun_syslog(LOG_ERR, "FATAL: could not fix free wb.");
+            vlog(LOG_ERR, "FATAL: could not fix free wb.");
             *succ_flag = -1;
             return -1;
         }
     }
-    //vtun_syslog(LOG_INFO, "TESTT %d lws: %"PRIu32"", 12, shm_conn_info->write_buf.last_written_seq);
+    //vlog(LOG_INFO, "TESTT %d lws: %"PRIu32"", 12, shm_conn_info->write_buf.last_written_seq);
     if(seq_num == 0 || len == 0) { // add stub packet counter in case of retransmission packet
         shm_conn_info->write_buf[conn_num].frames.stub_total++;
     }
@@ -2913,7 +2916,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     }
     shm_conn_info->write_buf[conn_num].frames.length++;
     if (buf_len_real < shm_conn_info->write_buf[1].frames.length) {
-//    vtun_syslog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
+//    vlog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
         buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
     shm_conn_info->APCS_cnt++;
@@ -2922,7 +2925,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
     if(tokens_in_out > 0) {
         #ifdef FRTTDBG
-        vtun_syslog(LOG_ERR, "adding token+1");
+        vlog(LOG_ERR, "adding token+1");
         #endif
         shm_conn_info->tokens++;
         if( ((shm_conn_info->head_send_q_shift_recv == 10000) || (shm_conn_info->slow_start_recv)) && ((seq_num % SLOW_START_INCINT) == 0)) {
@@ -2941,11 +2944,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         //*buf_len = 1;
         //return  ((seq_num == (shm_conn_info->write_buf.last_written_seq+1)) ? 0 : 1);
         mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-        //vtun_syslog(LOG_INFO, "write: add to head!");
+        //vlog(LOG_INFO, "write: add to head!");
         *succ_flag=0;
         return mlen;
     } else {
-        //vtun_syslog(LOG_INFO, "write: add to tail!");
+        //vlog(LOG_INFO, "write: add to tail!");
 
         istart = shm_conn_info->frames_buf[i].seq_num;
         if( (shm_conn_info->frames_buf[i].seq_num > seq_num) &&
@@ -3004,7 +3007,7 @@ void sem_post_if(int *dev_my, sem_t *rd_sem) {
     if(*dev_my) sem_post(rd_sem);
     else {
         // it is actually normal to try to post sem in idle-beg and in net-end blocks
-        // vtun_syslog(LOG_INFO, "ASSERT FAILED! posting posted rd_sem");
+        // vlog(LOG_INFO, "ASSERT FAILED! posting posted rd_sem");
     }
     *dev_my = 0;
 }
@@ -3043,12 +3046,12 @@ int sem_wait_tw(sem_t *sem) {
 
     sem_getvalue(sem, &sval);
     if(sval > 1) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! Semaphore value > 1: %d, doing one more sem_wait", sval);
+        vlog(LOG_ERR, "ASSERT FAILED! Semaphore value > 1: %d, doing one more sem_wait", sval);
         sem_wait(sem);
     }
 
     if( sem_timedwait(sem, &ts) < 0 ) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED! Emergrency quit semaphore waiting");
+        vlog(LOG_ERR, "ASSERT FAILED! Emergrency quit semaphore waiting");
         sem_post(sem);
     }
     return 0;
@@ -3067,7 +3070,7 @@ int set_max_chan(uint32_t chan_mask) {
             }
         }
     }
-    vtun_syslog(LOG_INFO, "Head change BDP");
+    vlog(LOG_INFO, "Head change BDP");
     shm_conn_info->max_chan = max_chan;
 }
 
@@ -3161,7 +3164,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
             }
         }
-        //vtun_syslog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
+        //vlog(LOG_INFO, "IDLE: Head is %d due to lowest rtt %d", min_rtt_chan, min_rtt);
         shm_conn_info->max_chan = min_rtt_chan;
         shm_conn_info->max_chan_new = min_rtt_chan;
         fixed = 1;
@@ -3185,7 +3188,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         }
 
         if(max_chan_H > -1) {
-            vtun_syslog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed_avg, shm_conn_info->stats[max_chan_H].exact_rtt);
+            vlog(LOG_INFO, "ACS~=: Need changing HEAD to %d with ACS %d and rtt %d", max_chan_H, shm_conn_info->stats[max_chan_H].ACK_speed_avg, shm_conn_info->stats[max_chan_H].exact_rtt);
         }
 
         // TODO: what to do if these two methods disagree? Is it possible?
@@ -3195,21 +3198,21 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg, 10)
                          && ( shm_conn_info->stats[i].ACK_speed_avg > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg )) { // 15% corridor to consider speeds the same
                     max_chan_H = i;
-                    vtun_syslog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg);
+                    vlog(LOG_INFO, "ACS>>: Need changing HEAD to %d with ACS %d > ACS(max) %d", i, shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg);
                 }
             }
         }
         
         // TODO HERE: What if Wf < Wh and Sf > Sh => RSRf < RSRh => f can not get full speed due to RSRf
         if(max_chan_H != -1 && max_chan_CS == -1) {
-//                        vtun_syslog(LOG_INFO, "Head change H");
+//                        vlog(LOG_INFO, "Head change H");
             //shm_conn_info->max_chan = max_chan_H;
             new_max_chan = max_chan_H;
             fixed = 1;
             shm_conn_info->last_switch_time = info.current_time;
             shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else if (max_chan_H == -1 && max_chan_CS != -1) {
-            vtun_syslog(LOG_INFO, "Head change CS");
+            vlog(LOG_INFO, "Head change CS");
             //shm_conn_info->max_chan = max_chan_CS;
             new_max_chan = max_chan_CS;
             fixed = 1;
@@ -3217,7 +3220,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
             shm_conn_info->last_switch_time.tv_sec += immune_sec;
         } else if (max_chan_H != -1 && max_chan_CS != -1) {
             if(max_chan_H != max_chan_CS) {
-                vtun_syslog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
+                vlog(LOG_INFO, "Head change: CS/CH don't agree with Si/Sh: using latter");
             }
             //shm_conn_info->max_chan = max_chan_H;
             new_max_chan = max_chan_H;
@@ -3236,7 +3239,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                 }
             }
             if(alive_cnt == 1) {
-                vtun_syslog(LOG_INFO, "Head change - first alive (default): %s(%d), excluded: %d ACS2=%d,PCS2=%d (idle? %d)",
+                vlog(LOG_INFO, "Head change - first alive (default): %s(%d), excluded: %d ACS2=%d,PCS2=%d (idle? %d)",
                         shm_conn_info->stats[alive_chan].name, alive_chan, exclude, shm_conn_info->stats[alive_chan].max_ACS2,
                         shm_conn_info->stats[alive_chan].max_PCS2, shm_conn_info->idle);
                 shm_conn_info->max_chan = alive_chan; // change immedialtey
@@ -3253,22 +3256,22 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
                     }
                 }
                 if(alive_cnt == 1) {
-                    vtun_syslog(LOG_INFO, "Head no change - first and only channel dead: %d, excluded: %d", alive_chan, exclude);
+                    vlog(LOG_INFO, "Head no change - first and only channel dead: %d, excluded: %d", alive_chan, exclude);
                     shm_conn_info->max_chan = alive_chan;
                     shm_conn_info->max_chan_new = alive_chan;
                     new_max_chan = alive_chan;
                 } else {
-                    vtun_syslog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
+                    vlog(LOG_ERR, "WARNING! No chan is alive; no head (undefined): %d", shm_conn_info->max_chan);
                 }
             }
             if(alive_cnt > 1) {
                 // all is OK
-                vtun_syslog(LOG_INFO, "Head detect - current max chan is correct: max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+                vlog(LOG_INFO, "Head detect - current max chan is correct: max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
             }
         }
     }
     if(new_max_chan == -1) {
-        //vtun_syslog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        //vlog(LOG_INFO, "Head detect - no new head max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
         shm_conn_info->head_detected_ts = info.current_time;
         shm_conn_info->max_chan_new = shm_conn_info->max_chan;
         return fixed;
@@ -3282,15 +3285,15 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         else htime = transition_period_time(hsqs);
         if(htime < HEAD_HYSTERESIS_MIN_MS) shm_conn_info->head_change_htime = HEAD_HYSTERESIS_MIN_MS; // ms? // TODO: variable constant!
         ms2tv(&shm_conn_info->head_change_htime_tv, shm_conn_info->head_change_htime);
-        vtun_syslog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d TIME=%d ms", shm_conn_info->max_chan, exclude, shm_conn_info->head_change_htime);
+        vlog(LOG_INFO, "Head detect - New head wait start max_chan=%d, exclude=%d TIME=%d ms", shm_conn_info->max_chan, exclude, shm_conn_info->head_change_htime);
     } else {
-        vtun_syslog(LOG_INFO, "Head detect - New head is not new - NO WAIT max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        vlog(LOG_INFO, "Head detect - New head is not new - NO WAIT max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
     }
     
     timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp);
     //if(timercmp(&tv_tmp, &((struct timeval) HEAD_REDETECT_HYSTERESIS_TV), >=)) {
     if(timercmp(&tv_tmp, &shm_conn_info->head_change_htime_tv, >=)) {
-        vtun_syslog(LOG_INFO, "Head detect - wait timer triggered max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
+        vlog(LOG_INFO, "Head detect - wait timer triggered max_chan=%d, exclude=%d", shm_conn_info->max_chan, exclude);
         shm_conn_info->max_chan = shm_conn_info->max_chan_new;
         shm_conn_info->head_detected_ts = info.current_time;
     }
@@ -3314,7 +3317,7 @@ int hsnum2pnum(int hsnum) {
     if(hsnum == 65535) { // it is okay to have this value - means we ignore
         return -1;
     }
-    vtun_syslog(LOG_ERR, "ASSERT FAILED: hsnum not found: %d", hsnum);
+    vlog(LOG_ERR, "ASSERT FAILED: hsnum not found: %d", hsnum);
     return -1;
 }
 
@@ -3352,7 +3355,7 @@ uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
 /* M = Wmax, W = desired Wcubic */
 double t_from_W (double W, double M, double B, double C) {
     // Math form: t = ((B M)/C)^(1/3)+(C^2 W-C^2 M)^(1/3)/C
-    //vtun_syslog(LOG_INFO, "t_from_W = %d", (int)(cbrt(B * M / C) + cbrt( (W - M) / C )));
+    //vlog(LOG_INFO, "t_from_W = %d", (int)(cbrt(B * M / C) + cbrt( (W - M) / C )));
     return cbrt(B * M / C) + cbrt( (W - M) / C );
 }
 
@@ -3378,7 +3381,7 @@ int set_W_cubic_unrecoverable(int t) {
 int set_W_unsync(int t) {
     info.send_q_limit_cubic = cubic_recalculate(t, info.send_q_limit_cubic_max, info.B, info.C);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
-    //vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
+    //vlog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
     return 1;
 }
 
@@ -3388,13 +3391,13 @@ int set_W_unsync_old(int t) {
     info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
 
-    //vtun_syslog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
+    //vlog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
     return 1;
 }
 
 int set_W_to(int send_q, int slowness, struct timeval *loss_time) {
     *loss_time = info.current_time;
-    //vtun_syslog(LOG_INFO, "set W to, sq=%d", send_q);
+    //vlog(LOG_INFO, "set W to, sq=%d", send_q);
     info.send_q_limit_cubic_max = send_q;
     set_W_unsync(0);
 }
@@ -3450,11 +3453,11 @@ int set_smalldata_weights( struct _smalldata *sd, int *pts) {
         if(sd->w[i] > 0.1) (*pts)++;
         if(sd->w[i] > 1.0) {
             // TODO: check unnesessary
-            vtun_syslog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
+            vlog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
             sd->w[i] = 1.0;
         }
         if(sd->w[i] > 0.7) {
-            //vtun_syslog(LOG_INFO, "ssw: Found last datapoint sq=%f ACS=%f w=%f ms %d", sd->send_q[i], sd->ACS[i], sd->w[i], ms);
+            //vlog(LOG_INFO, "ssw: Found last datapoint sq=%f ACS=%f w=%f ms %d", sd->send_q[i], sd->ACS[i], sd->w[i], ms);
             max_good_sq = i;
         }
     }
@@ -3472,17 +3475,17 @@ int get_slope(struct _smalldata *sd) {
 
     double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
 /*
-    vtun_syslog(LOG_INFO, "slope: s_q %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
+    vlog(LOG_INFO, "slope: s_q %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
                             sd->send_q[from_idx+0],  sd->send_q[from_idx+1], sd->send_q[from_idx+2], sd->send_q[from_idx+3], sd->send_q[from_idx+4], sd->send_q[from_idx+5], sd->send_q[from_idx+6], sd->send_q[from_idx+7], sd->send_q[from_idx+8], sd->send_q[from_idx+9], sd->send_q[from_idx+10], sd->send_q[from_idx+12], sd->send_q[from_idx+13], sd->send_q[from_idx+14], sd->send_q[from_idx+15]);
-    vtun_syslog(LOG_INFO, "slope: ACS %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
+    vlog(LOG_INFO, "slope: ACS %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
                             sd->ACS[from_idx+0],  sd->ACS[from_idx+1], sd->ACS[from_idx+2], sd->ACS[from_idx+3], sd->ACS[from_idx+4], sd->ACS[from_idx+5], sd->ACS[from_idx+6], sd->ACS[from_idx+7], sd->ACS[from_idx+8], sd->ACS[from_idx+9], sd->ACS[from_idx+10], sd->ACS[from_idx+12], sd->ACS[from_idx+13], sd->ACS[from_idx+14], sd->ACS[from_idx+15]);
-    vtun_syslog(LOG_INFO, "slope:   w %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
+    vlog(LOG_INFO, "slope:   w %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
                             sd->w[from_idx+0],  sd->w[from_idx+1], sd->w[from_idx+2], sd->w[from_idx+3], sd->w[from_idx+4], sd->w[from_idx+5], sd->w[from_idx+6], sd->w[from_idx+7], sd->w[from_idx+8], sd->w[from_idx+9], sd->w[from_idx+10], sd->w[from_idx+12], sd->w[from_idx+13], sd->w[from_idx+14], sd->w[from_idx+15]);
 */
     fit_wlinear (&sd->send_q[from_idx], 1, &sd->w[from_idx], 1, &sd->ACS[from_idx], 1, len, 
                    &c0, &c1, &cov00, &cov01, &cov11, &chisq);
 
-    //vtun_syslog(LOG_INFO, "slope: Linear fit c1 is %f", c1);
+    //vlog(LOG_INFO, "slope: Linear fit c1 is %f", c1);
     if(isnan(c1)) return 999999;
     return (int) (c1 * 100.0);
 }
@@ -3581,7 +3584,7 @@ double xhi_function(int rtt_ms, int pbl) {
 
 int print_xhi_data(struct mini_path_desc *path_descs, int count) {
     for (int i=0; i< count; i++ ) {
-        vtun_syslog(LOG_INFO, "XHI: pnum=%d rtt=%d, pbl=%d, ACS=%d, ENB=%d", path_descs[i].process_num, 
+        vlog(LOG_INFO, "XHI: pnum=%d rtt=%d, pbl=%d, ACS=%d, ENB=%d", path_descs[i].process_num, 
                 path_descs[i].rtt, path_descs[i].packets_between_loss, shm_conn_info->stats[path_descs[i].process_num].ACK_speed/info.eff_len, shm_conn_info->stats[path_descs[i].process_num].brl_ag_enabled);
     }
 }
@@ -3609,14 +3612,14 @@ int set_xhi_brl_flags_unsync() {
     shm_conn_info->stats[path_descs[0].process_num].brl_ag_enabled = 1;
     print_xhi_data(path_descs, count);
     xhi = calc_xhi(path_descs, count);
-    vtun_syslog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
+    vlog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
 
     // 2.2 try to add each chan one-by-one and calculate total xhi
     for(int j=1; j<count; j++) {
         shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 1;
         print_xhi_data(path_descs, count);
         xhi = calc_xhi(path_descs, count);
-        vtun_syslog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
+        vlog(LOG_INFO, "XHI: %d, TOTspeed: %d", xhi, sum_speed);
         if(xhi < sum_speed) { // TODO: really sum_speed ? or maybe sum of the above? or just max speed chan?
             shm_conn_info->stats[path_descs[j].process_num].brl_ag_enabled = 0;
             break;
@@ -3659,10 +3662,10 @@ int print_flush_data() {
 }
 
 int lossed_print_debug() {
-    vtun_syslog(LOG_INFO, "lossed buffer: complete: %d lsn %d, last: %d lsn %d", 
+    vlog(LOG_INFO, "lossed buffer: complete: %d lsn %d, last: %d lsn %d", 
         info.lossed_complete_received, info.lossed_loop_data[info.lossed_complete_received].local_seq_num, info.lossed_last_received, info.lossed_loop_data[info.lossed_last_received].local_seq_num);
     for(int i=0; i<LOSSED_BACKLOG_SIZE; i++) {
-        vtun_syslog(LOG_INFO, "> %d lsn %d, sn %d", i, info.lossed_loop_data[i].local_seq_num, info.lossed_loop_data[i].seq_num);
+        vlog(LOG_INFO, "> %d lsn %d, sn %d", i, info.lossed_loop_data[i].local_seq_num, info.lossed_loop_data[i].seq_num);
     }
 }
 
@@ -3689,9 +3692,9 @@ int lossed_count() {
 int lossed_latency_drop(unsigned int *last_received_seq) {
     // finish waiting for packets by latency; should be called by FCI process
     if(!lossed_count()) {
-        vtun_syslog(LOG_ERR, "ASSERT FAILED: lossed_latency_drop called with no loss!");
+        vlog(LOG_ERR, "ASSERT FAILED: lossed_latency_drop called with no loss!");
     }
-    vtun_syslog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+    vlog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
     //lossed_print_debug();
     int loss = lossed_count();
     info.lossed_complete_received = info.lossed_last_received;
@@ -3728,7 +3731,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
 /*    
     if(new_idx >= LOSSED_BACKLOG_SIZE) {
-        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
 */  
@@ -3739,20 +3742,20 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
 /*    
     if(new_idx < 0) {
-        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #2 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #2 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
     
     if(new_idx >= LOSSED_BACKLOG_SIZE) {
         // TODO: remove this - should never fire!
-        vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #3 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW #3 new_idx is %d, lsn: %d; last lsn: %d, sqn: %d", new_idx, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         new_idx = 0;
     }
 */
 
     if(new_idx >= LOSSED_BACKLOG_SIZE || new_idx < 0) {
         //lossed_print_debug();
-        vtun_syslog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = 0;
         info.lossed_last_received = 0;
@@ -3765,7 +3768,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     if(s_shift >= LOSSED_BACKLOG_SIZE) {
         //lossed_print_debug();
-        vtun_syslog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
@@ -3777,7 +3780,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     }
     
     if( (s_shift == 1) && (info.lossed_complete_received == info.lossed_last_received)) {
-        //vtun_syslog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
+        //vlog(LOG_INFO, "Lossed: normally consuming packet lsn: %d; last lsn: %d, sqn: %d, new_idx: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, new_idx);
         info.lossed_last_received = new_idx;
         info.lossed_complete_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
@@ -3792,12 +3795,12 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         // now check if it is dup or LATE
         if(info.lossed_loop_data[new_idx].local_seq_num == local_seq_num) {
-            vtun_syslog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            vlog(LOG_INFO, "DUP lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         } else {
-            vtun_syslog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            vlog(LOG_INFO, "LATE? max_reorder is %d, lsn: %d; last lsn: %d, sqn: %d", (info.lossed_last_received-new_idx), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
             need_send_loss_FCI_flag = -1; // inform that we are experiencing reorder
             if(shm_conn_info->stats[info.process_num].pbl_lossed_saved != 0) {
-                vtun_syslog(LOG_INFO, "Restoring local pbl counters pbl_lossed %d, pbl_lossed_cnt %d", shm_conn_info->stats[info.process_num].pbl_lossed_saved, shm_conn_info->stats[info.process_num].pbl_lossed_cnt_saved);
+                vlog(LOG_INFO, "Restoring local pbl counters pbl_lossed %d, pbl_lossed_cnt %d", shm_conn_info->stats[info.process_num].pbl_lossed_saved, shm_conn_info->stats[info.process_num].pbl_lossed_cnt_saved);
                 shm_conn_info->stats[info.process_num].pbl_lossed = shm_conn_info->stats[info.process_num].pbl_lossed_saved;
                 shm_conn_info->stats[info.process_num].pbl_lossed_cnt = shm_conn_info->stats[info.process_num].pbl_lossed_cnt_saved;
                 
@@ -3817,7 +3820,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_loop_data[new_idx].seq_num = seq_num;
         info.lossed_last_received = new_idx;
         int loss_calc = lossed_count();
-        vtun_syslog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         info.lossed_complete_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         //lossed_print_debug();
@@ -3828,7 +3831,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     if(s_shift > 1) {
         //lossed_print_debug();
-        vtun_syslog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "loss +%d lsn: %d; last lsn: %d, sqn: %d", (s_shift - 1), local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
@@ -3839,7 +3842,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     if(s_shift == 1) {
         // if s_shift == 1 && (info.lossed_complete_received != info.lossed_last_received)
-        vtun_syslog(LOG_INFO, "Append packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "Append packet +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
         info.lossed_loop_data[new_idx].seq_num = seq_num;
@@ -3852,7 +3855,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     // again, detect DUPs
     if(local_seq_num == info.lossed_loop_data[new_idx].local_seq_num) {
         //lossed_print_debug();
-        vtun_syslog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+        vlog(LOG_INFO, "DUP +REORDER lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         *last_received_seq = info.lossed_loop_data[info.lossed_complete_received].seq_num;
         *last_local_received_seq = info.lossed_loop_data[info.lossed_complete_received].local_seq_num;
         return -2;
@@ -3864,7 +3867,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
     
     // add data to its position
     //lossed_print_debug();
-    vtun_syslog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+    vlog(LOG_INFO, "reorder -1 lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
     info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
     info.lossed_loop_data[new_idx].seq_num = seq_num;
     
@@ -3876,7 +3879,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //TODO here: protect from double overflow
         if(next_missed >= LOSSED_BACKLOG_SIZE) { 
             next_missed = 0;
-            vtun_syslog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW next_missed is %d, lsn: %d; last lsn: %d, sqn: %d", next_missed, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            vlog(LOG_INFO, "WARNING lossed_consume protecting from OVERFLOW next_missed is %d, lsn: %d; last lsn: %d, sqn: %d", next_missed, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         }
         
         if(info.lossed_loop_data[next_missed].local_seq_num == info.lossed_loop_data[info.lossed_complete_received].local_seq_num + 1) {
@@ -3885,7 +3888,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
                 *last_received_seq = info.lossed_loop_data[next_missed].seq_num;
                 *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             } else {
-                vtun_syslog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+                vlog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
                 *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             }
         } else {
@@ -3894,7 +3897,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         
         if(info.lossed_complete_received == info.lossed_last_received) {
             //lossed_print_debug();
-            vtun_syslog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+            vlog(LOG_INFO, "reorder reassembled. lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
             return 0;
         }
     }
@@ -3924,7 +3927,7 @@ int get_rttlag(uint32_t ag_mask) {
         if(chamt > 1) {
             // now check that max_rtt_lag is adequate
             if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                vlog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
                 max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
             }
             return max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
@@ -3985,7 +3988,7 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
         if(chamt > 1) {
             // now check that max_rtt_lag is adequate
             if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vtun_syslog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                vlog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
                 max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
             }
             shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
@@ -4026,7 +4029,7 @@ int set_rttlag_total() {
     shm_conn_info->total_min_rtt_var = min_rtt_var;
     shm_conn_info->total_max_rtt = max_rtt;
     shm_conn_info->total_max_rtt_var = max_rtt_var;
-    vtun_syslog(LOG_INFO, "computed max_rtt: %d, max_rtt_var: %d, min_rtt %d, min_rtt_var: %d", max_rtt, max_rtt_var, min_rtt, min_rtt_var);
+    vlog(LOG_INFO, "computed max_rtt: %d, max_rtt_var: %d, min_rtt %d, min_rtt_var: %d", max_rtt, max_rtt_var, min_rtt, min_rtt_var);
 }
 
 int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
@@ -4041,7 +4044,7 @@ int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
     int incomplete_seq_len = missing_resend_buffer(1, incomplete_seq_buf, &buf_len, info.least_rx_seq[1]);    
     if(incomplete_seq_len <= 2) {
         for(int i=0; i<incomplete_seq_len; i++) {
-            vtun_syslog(LOG_INFO, "Fast requesting packet %lu", incomplete_seq_buf[i]);
+            vlog(LOG_INFO, "Fast requesting packet %lu", incomplete_seq_buf[i]);
             shm_conn_info->loss_idx++;
             if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                 shm_conn_info->loss_idx = 0;
@@ -4067,22 +4070,22 @@ int lost_buf_exists(uint32_t seq_num) {
 int print_ag_drop_reason() {
     char *reason = "Dropping AG due to";
     if(ag_stat.WT == 1 && ag_stat_copy.WT != ag_stat.WT) {
-        vtun_syslog(LOG_INFO,  "%s WT", reason);
+        vlog(LOG_INFO,  "%s WT", reason);
     }
     if(ag_stat.RT == 1 && ag_stat_copy.RT != ag_stat.RT) {
-        vtun_syslog(LOG_INFO,  "%s RT ACS=%d < %d, max_ACS=%d", reason, shm_conn_info->stats[info.process_num].ACK_speed, (shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER), shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed );
+        vlog(LOG_INFO,  "%s RT ACS=%d < %d, max_ACS=%d", reason, shm_conn_info->stats[info.process_num].ACK_speed, (shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER), shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed );
     }
     if(ag_stat.D == 1 && ag_stat_copy.D != ag_stat.D) {
-        vtun_syslog(LOG_INFO,  "%s D", reason);
+        vlog(LOG_INFO,  "%s D", reason);
     }
     if(ag_stat.CL == 1 && ag_stat_copy.CL != ag_stat.CL) {
-        vtun_syslog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d > rtt_maxchan %d * 5 (MLD %d ; frtt %d) MAR %d", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt, shm_conn_info->max_allowed_rtt);
+        vlog(LOG_INFO,  "%s CL rtt_current %d + rttvar %d > rtt_maxchan %d * 5 (MLD %d ; frtt %d) MAR %d", reason, shm_conn_info->stats[info.process_num].exact_rtt , shm_conn_info->stats[info.process_num].rttvar, shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt, (int32_t)(tv2ms(&info.max_latency_drop)) , shm_conn_info->forced_rtt, shm_conn_info->max_allowed_rtt);
     }
     if(ag_stat.DL == 1 && ag_stat_copy.DL != ag_stat.DL) {
-        vtun_syslog(LOG_INFO,  "%s DL", reason);
+        vlog(LOG_INFO,  "%s DL", reason);
     }
     if(ag_stat.PL == 1 && ag_stat_copy.PL != ag_stat.PL) {
-        vtun_syslog(LOG_INFO,  "%s PL", reason);
+        vlog(LOG_INFO,  "%s PL", reason);
     }
     ag_stat_copy = ag_stat; 
     return 0;
@@ -4091,7 +4094,7 @@ int print_ag_drop_reason() {
 
 int assert_packet_ipv4(const char *desc, char *data, int len) {
     if(data[0] & 0x40 != 0x40) {
-        vtun_syslog(LOG_INFO, "ASSERT FAILED: %s packet not ipv4!", desc);
+        vlog(LOG_INFO, "ASSERT FAILED: %s packet not ipv4!", desc);
         print_head_of_packet(data, "packet no IP header", 0, len);
         return 0;
     }
@@ -4229,21 +4232,21 @@ int lfd_linker(void)
         static const char ar[] = { 0xfe, 0xed, 0xf0, 0x0d, 0xfa, 0xce };
         int mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
         if (mprotect_ret != 0) {
-            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
         }
-        vtun_syslog(LOG_ERR, "void1 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
+        vlog(LOG_ERR, "void1 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
         aligned_shm = (void *) (((unsigned long) shm_conn_info->void2) & ~(getpagesize() - 1));
         mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
         if (mprotect_ret != 0) {
-            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
         }
-        vtun_syslog(LOG_ERR, "void2 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
+        vlog(LOG_ERR, "void2 address %X aligned to page %X", shm_conn_info->void2, aligned_shm);
         aligned_shm = (void *) (((unsigned long) shm_conn_info->void3) & ~(getpagesize() - 1));
         mprotect_ret = mprotect(aligned_shm, getpagesize(), PROT_NONE);
         if (mprotect_ret != 0) {
-            vtun_syslog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "mprotect %s (%d)", strerror(errno), errno);
         }
-        vtun_syslog(LOG_ERR, "void3 address %X aligned to page %X", shm_conn_info->void3, aligned_shm);
+        vlog(LOG_ERR, "void3 address %X aligned to page %X", shm_conn_info->void3, aligned_shm);
     }
 #endif
     #ifdef SEND_Q_LOG
@@ -4338,12 +4341,12 @@ int lfd_linker(void)
         CPU_ZERO(&cpu_set);
         CPU_SET(info.process_num % cpu_numbers, &cpu_set);
         if (1) {
-            vtun_syslog(LOG_INFO, "Can't set cpu");
+            vlog(LOG_INFO, "Can't set cpu");
         } else {
-            vtun_syslog(LOG_INFO, "Set process %i on cpu %i", info.process_num, info.process_num % cpu_numbers);
+            vlog(LOG_INFO, "Set process %i on cpu %i", info.process_num, info.process_num % cpu_numbers);
         }
     } else {
-        vtun_syslog(LOG_INFO, "sysconf(_SC_NPROCESSORS_ONLN) return error");
+        vlog(LOG_INFO, "sysconf(_SC_NPROCESSORS_ONLN) return error");
     }
 #endif
     int sender_pid; // tmp var for resend detect my own pid
@@ -4372,16 +4375,16 @@ int lfd_linker(void)
     int break_out = 0;
 
     if( !(buf = lfd_alloc(VTUN_FRAME_SIZE+VTUN_FRAME_OVERHEAD)) ) {
-        vtun_syslog(LOG_ERR,"Can't allocate buffer for the linker");
+        vlog(LOG_ERR,"Can't allocate buffer for the linker");
         return 0;
     }
     char *save_buf = buf;
     if( !(out_buf = lfd_alloc(VTUN_FRAME_SIZE+VTUN_FRAME_OVERHEAD)) ) {
-        vtun_syslog(LOG_ERR,"Can't allocate out buffer for the linker");
+        vlog(LOG_ERR,"Can't allocate out buffer for the linker");
         return 0;
     }
     if( !(buf2 = lfd_alloc(VTUN_FRAME_SIZE2)) ) {
-        vtun_syslog(LOG_ERR,"Can't allocate buffer 2 for the linker");
+        vlog(LOG_ERR,"Can't allocate buffer 2 for the linker");
         return 0;
     }
 
@@ -4401,11 +4404,11 @@ int lfd_linker(void)
     srand((unsigned int) time(NULL ));
 
     if (setsockopt(service_channel, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-        vtun_syslog(LOG_ERR, "setsockopt failed");
+        vlog(LOG_ERR, "setsockopt failed");
         linker_term = TERM_NONFATAL;
     }
     if (setsockopt(service_channel, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-        vtun_syslog(LOG_ERR, "setsockopt failed");
+        vlog(LOG_ERR, "setsockopt failed");
         linker_term = TERM_NONFATAL;
     }
     sem_wait(&(shm_conn_info->stats_sem));
@@ -4421,28 +4424,28 @@ int lfd_linker(void)
 //        memset(shm_conn_info->void1,4096,1); //test mprotect
         /** Server accepted all logical channel here and get and send pid */
         // now read one single byte
-        vtun_syslog(LOG_INFO,"Waiting for client to request channels...");
+        vlog(LOG_INFO,"Waiting for client to request channels...");
 		read_n(service_channel, buf, sizeof(uint16_t)+sizeof(uint16_t));
         info.channel_amount = ntohs(*((uint16_t *) buf)); // include info channel
         info.channel_amount = 2; // WARNING! TODO! HARDCODED 2 hardcoded chan_amt
         if (info.channel_amount > MAX_TCP_LOGICAL_CHANNELS) {
-            vtun_syslog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
+            vlog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
             info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
             linker_term = TERM_NONFATAL;
         }
         if(info.channel_amount < 1) {
-            vtun_syslog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
+            vlog(LOG_ERR, "Client ask for %i channels. Exit ", info.channel_amount);
             info.channel_amount = 1;
             linker_term = TERM_NONFATAL;
         }
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
-            vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
+            vlog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
             return 0;
         }
         chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
         if (chan_info == NULL ) {
-            vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
+            vlog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
             return 0;
         }
 		sem_wait(&(shm_conn_info->stats_sem));
@@ -4454,30 +4457,30 @@ int lfd_linker(void)
 		sem_post(&(shm_conn_info->stats_sem));
 		write_n(service_channel, buf, sizeof(uint16_t));
 #ifdef DEBUGG
- 		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
+ 		vlog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 #endif
-        vtun_syslog(LOG_INFO,"Will create %d channels", info.channel_amount);
+        vlog(LOG_INFO,"Will create %d channels", info.channel_amount);
         uint16_t port_tmp = lfd_host->start_port;
         if (port_tmp != 0 )
-            vtun_syslog(LOG_INFO,"port range is %"PRIu16" - %"PRIu16"", lfd_host->start_port, lfd_host->end_port);
+            vlog(LOG_INFO,"port range is %"PRIu16" - %"PRIu16"", lfd_host->start_port, lfd_host->end_port);
         for (int i = 1; i < info.channel_amount; i++) {
             if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-                vtun_syslog(LOG_ERR, "Can't create Channels socket");
+                vlog(LOG_ERR, "Can't create Channels socket");
                 return -1;
             }
 
             // Get buffer size
             socklen_t optlen = sizeof(sendbuff);
             if (getsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDBUF, &sendbuff, &optlen) == -1) {
-                vtun_syslog(LOG_ERR, "Error getsockopt one");
+                vlog(LOG_ERR, "Error getsockopt one");
             } else {
-                vtun_syslog(LOG_INFO, "send buffer size = %d\n", sendbuff);
+                vlog(LOG_INFO, "send buffer size = %d\n", sendbuff);
             }
             /*
             sendbuff = RCVBUF_SIZE;
             // WARNING! This should be on sysadmin's duty to optimize!
             if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
-                vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
+                vlog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
             }
             */
 
@@ -4488,7 +4491,7 @@ int lfd_linker(void)
                 memset(&my_addr, 0, sizeof(my_addr));
                 laddrlen = sizeof(localaddr);
                 if (getsockname(service_channel, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-                    vtun_syslog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                    vlog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
                     close(prio_s);
                     return 0;
                 }
@@ -4498,12 +4501,12 @@ int lfd_linker(void)
                 my_addr.sin_family = AF_INET;
                 if (bind(info.channel[i].descriptor, (struct sockaddr *) &my_addr, sizeof(my_addr)) == -1) {
                     if ((errno == EADDRINUSE) & (port_tmp < lfd_host->end_port)) {
-                        vtun_syslog(LOG_ERR, "Can't bind port %"PRIu16", try next", port_tmp);
+                        vlog(LOG_ERR, "Can't bind port %"PRIu16", try next", port_tmp);
                     } else if ((errno == EADDRINUSE) & (port_tmp == lfd_host->end_port)) {
-                        vtun_syslog(LOG_ERR, "Can't found free port in range %"PRIu16"-%"PRIu16"", lfd_host->start_port, lfd_host->end_port);
+                        vlog(LOG_ERR, "Can't found free port in range %"PRIu16"-%"PRIu16"", lfd_host->start_port, lfd_host->end_port);
                         return -1;
                     } else {
-                        vtun_syslog(LOG_ERR, "Can't bind to the Channels socket reason: %s (%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Can't bind to the Channels socket reason: %s (%d)", strerror(errno), errno);
                         return -1;
                     }
                 } else {
@@ -4513,7 +4516,7 @@ int lfd_linker(void)
             // now get my port number
             laddrlen = sizeof(localaddr);
             if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-                vtun_syslog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                vlog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
                 close(prio_s);
                 return 0;
             }
@@ -4523,7 +4526,7 @@ int lfd_linker(void)
         for (int i = 1; i < info.channel_amount; i++) {
             uint16_t hton_ret = htons(info.channel[i].lport);
             memcpy(buf + sizeof(uint16_t) * (i - 1), &hton_ret, sizeof(uint16_t));
-            vtun_syslog(LOG_INFO, "Send port to client %u", info.channel[i].lport);
+            vlog(LOG_INFO, "Send port to client %u", info.channel[i].lport);
         }
         write_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
 
@@ -4531,18 +4534,18 @@ int lfd_linker(void)
         *((uint32_t *) buf) = htonl(0); // already in htons format...
         *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_PRIO_PORT_NOTIFY);
         if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-            vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
             close(prio_s);
             return 0;
         }
 
         // now listen to socket, wait for connection
 
-        vtun_syslog(LOG_INFO,"Entering loop to create %d channels", info.channel_amount - 1);
+        vlog(LOG_INFO,"Entering loop to create %d channels", info.channel_amount - 1);
         // TODO: how many TCP CONN AMOUNT allowed for server??
         for (i = 1; (i < info.channel_amount) && (i < MAX_TCP_LOGICAL_CHANNELS); i++) {
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO,"Chan %d", i);
+            vlog(LOG_INFO,"Chan %d", i);
 #endif
             prio_opt = sizeof(cl_addr);
             struct timeval accept_time;
@@ -4558,14 +4561,14 @@ int lfd_linker(void)
                 socklen_t slen = sizeof(cli_addr);
                 int ret_len = recvfrom(info.channel[i].descriptor, buf, sizeof(uint16_t), 0, (struct sockaddr*) &cli_addr, &slen);
                 if (ret_len == -1) {
-                    vtun_syslog(LOG_ERR, "Recvfrom err on chan %i %s(%d)", i, strerror(errno), errno);
+                    vlog(LOG_ERR, "Recvfrom err on chan %i %s(%d)", i, strerror(errno), errno);
                     break_out = 1;
                     break;
                 }
                 connect(info.channel[i].descriptor, &cli_addr, sizeof(cli_addr));
                 info.channel[i].rport = ntohs(cli_addr.sin_port);
             } else {
-                vtun_syslog(LOG_ERR, "Accept timeout on chan %i", i);
+                vlog(LOG_ERR, "Accept timeout on chan %i", i);
                 break_out = 1;
                 break;
             }
@@ -4586,11 +4589,11 @@ int lfd_linker(void)
         rmaddrlen = sizeof(rmaddr);
         laddrlen = sizeof(localaddr);
         if (getpeername(info.channel[0].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
-            vtun_syslog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
             linker_term = TERM_NONFATAL;
         }
         if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-            vtun_syslog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
             linker_term = TERM_NONFATAL;
          }
         info.channel[0].rport = ntohs(rmaddr.sin_port);
@@ -4599,7 +4602,7 @@ int lfd_linker(void)
         gettimeofday(&info.current_time, NULL );
         maxfd = info.tun_device;
         for (int i = 0; i < info.channel_amount; i++) {
-            vtun_syslog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i,
+            vlog(LOG_INFO, "Server descriptor - %i logical channel - %i lport - %i rport - %i", info.channel[i].descriptor, i,
                     info.channel[i].lport, info.channel[i].rport);
             if (maxfd < info.channel[i].descriptor) {
                 maxfd = info.channel[i].descriptor;
@@ -4622,16 +4625,16 @@ int lfd_linker(void)
  		shm_conn_info->stats[info.process_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = shm_conn_info->stats[info.process_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
- 		vtun_syslog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
+ 		vlog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 
  		len = read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
-        vtun_syslog(LOG_INFO, "remote ports len %d", len);
+        vlog(LOG_INFO, "remote ports len %d", len);
 
         for (int i = 1; i < info.channel_amount; i++) {
             uint16_t rport_h;
             memcpy(&rport_h, buf + (i - 1) * sizeof(uint16_t), sizeof(uint16_t));
             info.channel[i].rport = ntohs(rport_h);
-            vtun_syslog(LOG_INFO, "remote port recived %u", info.channel[i].rport);
+            vlog(LOG_INFO, "remote port recived %u", info.channel[i].rport);
         }
  		info.channel_amount = 1; // now we'll accumulate here established logical channels
     }
@@ -4639,7 +4642,7 @@ int lfd_linker(void)
     // we start in a normal mode...
     if(channel_mode == MODE_NORMAL) {
         shm_conn_info->normal_senders++;
-        vtun_syslog(LOG_INFO, "normal sender added: now %d", shm_conn_info->normal_senders);
+        vlog(LOG_INFO, "normal sender added: now %d", shm_conn_info->normal_senders);
     }
 
     sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -4647,11 +4650,11 @@ int lfd_linker(void)
     sem_post(&(shm_conn_info->AG_flags_sem));
     *((uint16_t *) (buf + sizeof(uint32_t))) = htons(FRAME_JUST_STARTED);
     if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
-        vtun_syslog(LOG_ERR, "Could not send init pkt; exit");
+        vlog(LOG_ERR, "Could not send init pkt; exit");
         linker_term = TERM_NONFATAL;
     }
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"start\":1, \"build\":\"%s\"}", lfd_host->host, BUILD_DATE);
+    vlog(LOG_INFO,"{\"name\":\"%s\",\"start\":1, \"build\":\"%s\"}", lfd_host->host, BUILD_DATE);
 #endif
 
     shm_conn_info->stats[info.process_num].weight = lfd_host->START_WEIGHT;
@@ -4810,7 +4813,7 @@ int lfd_linker(void)
     // init pbl
     shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
     int cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
-    vtun_syslog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
+    vlog(LOG_INFO, "Cubic Tmax t=%d", cubic_t_max);
     memset(shm_conn_info->check, 170, CHECK_SZ);
     info.head_change_tv = info.current_time;
     info.head_change_safe = 1;
@@ -4821,7 +4824,7 @@ int lfd_linker(void)
     info.last_sent_FLI_idx = shm_conn_info->loss_idx;
     struct timeval select_tv_copy;
 
-    set_vtun_syslog_shm(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
+    vlog_shm_set(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
 
 /**
  *
@@ -4838,7 +4841,7 @@ int lfd_linker(void)
  */
     while( !linker_term ) {
         //if((shm_conn_info->hold_mask & shm_conn_info->channels_mask) == 0) {
-        //    vtun_syslog(LOG_ERR, "ASSERT FAILED! all channels in HOLD! %d", shm_conn_info->hold_mask);
+        //    vlog(LOG_ERR, "ASSERT FAILED! all channels in HOLD! %d", shm_conn_info->hold_mask);
         //    sig_send1();
         //}
         if(statb.tokens_max < shm_conn_info->tokens) {
@@ -4871,7 +4874,7 @@ int lfd_linker(void)
                 if (info.last_sent_FLI_idx == LOSS_ARRAY) {
                     info.last_sent_FLI_idx = 0;
                 }
-                /*vtun_syslog(LOG_INFO, "FRAME_LOSS_INFO sending my idx %d shm idx %d time %d %d psl %d pbl %d", info.last_sent_FLI_idx,
+                /*vlog(LOG_INFO, "FRAME_LOSS_INFO sending my idx %d shm idx %d time %d %d psl %d pbl %d", info.last_sent_FLI_idx,
                         shm_conn_info->loss_idx, shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_sec,
                         shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_usec, shm_conn_info->loss[info.last_sent_FLI_idx].psl,
                         shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
@@ -4900,7 +4903,7 @@ int lfd_linker(void)
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
                     if (proto_write(service_channel, buf, ((6 * sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
                         return 0;
                     }
@@ -4941,7 +4944,7 @@ int lfd_linker(void)
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
                     if (proto_write(service_channel, buf, ((5 * sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
                         return 0;
                     }
@@ -4968,7 +4971,7 @@ int lfd_linker(void)
             info.previous_idle = 0;
         }
         if(shm_conn_info->idle && !info.previous_idle) {
-            vtun_syslog(LOG_INFO, "Entering IDLE");
+            vlog(LOG_INFO, "Entering IDLE");
         }
         info.previous_idle = shm_conn_info->idle;
         // <<< END IDLE EXIT
@@ -4986,7 +4989,7 @@ int lfd_linker(void)
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
         if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
-                vtun_syslog(LOG_ERR, "WARNING! info.rtt2 == 0!");
+                vlog(LOG_ERR, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
             }
             exact_rtt = info.rtt2; 
@@ -4994,7 +4997,7 @@ int lfd_linker(void)
         } else {
             // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
-                vtun_syslog(LOG_ERR, "WARNING! info.rtt == 0!");
+                vlog(LOG_ERR, "WARNING! info.rtt == 0!");
                 info.rtt = 1;
             }
             exact_rtt = info.rtt;
@@ -5027,7 +5030,7 @@ int lfd_linker(void)
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass : 0;
 #ifdef DEBUGG
         if(drop_packet_flag) {
-        vtun_syslog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
+        vlog(LOG_INFO,"Calc send_q_eff: %d + %d * %d - %d", my_max_send_q, info.channel[my_max_send_q_chan_num].bytes_put, info.eff_len, bytes_pass);
         } 
 #endif
         // <<< END SEND_Q_EFF CALC
@@ -5087,7 +5090,7 @@ int lfd_linker(void)
         /* Temporarily disabled this due to massive loss :-\
         // EXTERNAL LOSS DETECT >>> 
         if(send_q_eff > info.send_q_limit_threshold && (send_q_eff < ELD_send_q_max) && !percent_delta_equal(send_q_eff, ELD_send_q_max, 20)) {
-            vtun_syslog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
+            vlog(LOG_INFO, "WARNING: External loss detected! send_q from %d to %d", ELD_send_q_max, send_q_eff);
             ELD_send_q_max = send_q_eff;
         } else if (send_q_eff > ELD_send_q_max) {
             ELD_send_q_max = send_q_eff;
@@ -5122,7 +5125,7 @@ int lfd_linker(void)
                 timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
                 struct timeval time_tmp2 = { 20, 0 };
                 if (timercmp(&time_tmp, &time_tmp2, >)) {
-                    vtun_syslog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
+                    vlog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
                     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                         if (chan_mask & (1 << i)) {
                             shm_conn_info->flood_flag[i] = 1;
@@ -5205,12 +5208,12 @@ int lfd_linker(void)
                 }
                 if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt) {
                     shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt;
-                    vtun_syslog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
+                    vlog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
                         shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
                     if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
                         //shm_conn_info->forced_rtt = shm_conn_info->drtt;
                         //need_send_FCI = 1;
-                        //vtun_syslog(LOG_INFO, "WARNING FnLR disabled");
+                        //vlog(LOG_INFO, "WARNING FnLR disabled");
                     }
                 }
             }
@@ -5234,13 +5237,13 @@ int lfd_linker(void)
             int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
                 info.head_send_q_shift = head_send_q_shift;
-                vtun_syslog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
+                vlog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
                 info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
                 need_send_FCI = 1;
             //} else if(ag_flag_local == R_MODE && agag > 0) { 
             //    int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
             //    info.head_send_q_shift = head_send_q_shift;
-            //    vtun_syslog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
+            //    vlog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
             //    info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
             //    need_send_FCI = 1;
             } else {
@@ -5379,7 +5382,7 @@ int lfd_linker(void)
                     last_smalldata_ACS = info.packet_recv_upload_avg;
                 }
             } else {
-                vtun_syslog(LOG_ERR, "WARNING! send_q too big!");
+                vlog(LOG_ERR, "WARNING! send_q too big!");
             }
             
             
@@ -5405,15 +5408,15 @@ int lfd_linker(void)
         }
 
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
-            vtun_syslog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
+            vlog(LOG_INFO, "Warning! Channel %s suddenly died! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
             shm_conn_info->last_switch_time.tv_sec = 0;
             if(info.head_channel) {
-                vtun_syslog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
+                vlog(LOG_INFO, "Warning! %s is head! Re-detecting new HEAD!", lfd_host->host);
                 redetect_head_unsynced(chan_mask, info.process_num);
             }
         }
         if (channel_dead == 0 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead){
-            vtun_syslog(LOG_INFO, "Channel %s went alive! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
+            vlog(LOG_INFO, "Channel %s went alive! (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d) (exact_rtt %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2, shm_conn_info->stats[info.process_num].exact_rtt);
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
@@ -5430,7 +5433,7 @@ int lfd_linker(void)
         if(max_chan == info.process_num) {
             if(info.head_channel != 1) {
                 skip++;
-                vtun_syslog(LOG_INFO, "Switching head to 1 (ON) saving W %d", info.send_q_limit_cubic);
+                vlog(LOG_INFO, "Switching head to 1 (ON) saving W %d", info.send_q_limit_cubic);
                 info.W_cubic_copy = info.send_q_limit_cubic;
                 info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
                 if(shm_conn_info->head_lossing && !shm_conn_info->idle) {
@@ -5441,7 +5444,7 @@ int lfd_linker(void)
         } else {
             if(info.head_channel != 0) {
                 skip++;
-                vtun_syslog(LOG_INFO, "Switching head to 0 (OFF) restoring W %d if > than current W %d", info.W_cubic_copy, info.send_q_limit_cubic);
+                vlog(LOG_INFO, "Switching head to 0 (OFF) restoring W %d if > than current W %d", info.W_cubic_copy, info.send_q_limit_cubic);
                 if(info.send_q_limit_cubic < info.W_cubic_copy) {
                     set_W_to(info.W_cubic_copy, 1, &loss_time);
                     set_Wu_to(info.Wu_cubic_copy);
@@ -5530,10 +5533,10 @@ int lfd_linker(void)
             }
             
             if(d_rsr < 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
+                vlog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
-                vtun_syslog(LOG_ERR, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
+                vlog(LOG_ERR, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             }
            
@@ -5552,7 +5555,7 @@ int lfd_linker(void)
             } else {
                 if(d_rsr < SEND_Q_LIMIT_MINIMAL) {
                     d_rsr = SEND_Q_LIMIT_MINIMAL;
-                    //vtun_syslog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
+                    //vlog(LOG_INFO, "WARNING! d_rsr < SQL_MIMIMAL: %f; setting to MIN", d_rsr);
                 }
             }
                 
@@ -5647,11 +5650,11 @@ int lfd_linker(void)
                     info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
                     if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted * 1000) ) {
                         if(info.head_channel) {
-                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: ertt %d - ertt %d > %u and is head frtt_rem %d rtt2-1 %d rtt2-2 %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[i].exact_rtt, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted, shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2);
+                            vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: ertt %d - ertt %d > %u and is head frtt_rem %d rtt2-1 %d rtt2-2 %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[i].exact_rtt, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted, shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2);
                             redetect_head_unsynced(chan_mask, info.process_num);
                             // TODO: immediate action required!
                         } else {
-                            vtun_syslog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
+                            vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
 
                         }
                     }
@@ -5696,8 +5699,8 @@ int lfd_linker(void)
             // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
         } else {
             if(ag_flag_local_prev == AG_MODE) {
-                vtun_syslog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
-                vtun_syslog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, send_q_limit_cubic_apply ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
+                vlog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+                vlog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, send_q_limit_cubic_apply ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
             
             }
             
@@ -5765,7 +5768,7 @@ int lfd_linker(void)
             } else {
                 drop_packet_flag = 0;
                 if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
-                    //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
+                    //vlog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                     hold_mode = 1;
                 } else {
                     hold_mode = 0;
@@ -5775,19 +5778,19 @@ int lfd_linker(void)
             hold_mode = 0;
             if(info.head_channel) {
                 if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
-                    //vtun_syslog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                         drop_packet_flag = 1;
                 } else {
-                    //vtun_syslog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
                 }
             } else {
                 if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
-                    //vtun_syslog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    //vlog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
                     hold_mode = 1;
                 } else {
-                    //vtun_syslog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
                 }
             }
@@ -5826,7 +5829,7 @@ int lfd_linker(void)
                     set_W_to(send_q_eff + 2000, 1, &loss_time);
                     set_Wu_to(send_q_eff + 2000);
             } else {
-                vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
+                vlog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
                 // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
             }
         }
@@ -5854,10 +5857,10 @@ int lfd_linker(void)
         }
         if(info.head_channel) {
             if(hold_mode_previous == 1 && hold_mode == 0) {
-                vtun_syslog(LOG_INFO, "HEAD unhold.");
+                vlog(LOG_INFO, "HEAD unhold.");
             }
         }
-        //vtun_syslog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
+        //vlog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         if(hold_mode == 1) {
             was_hold_mode = 1; // for JSON ONLY!
             info.whm_send_q = send_q_eff;
@@ -5875,7 +5878,7 @@ int lfd_linker(void)
                 for (i = 1; i < info.channel_amount; i++) {
                     info.channel[i].packet_download = ((info.channel[i].down_packets * 100000) / tv)*10;
                     //if (info.channel[i].down_packets > 0)
-                        //vtun_syslog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
+                        //vlog(LOG_INFO, "chan %d down packet speed %"PRIu32" packets %"PRIu32" time %"PRIu32" timer %"PRIu32"", i, info.channel[i].packet_download, info.channel[i].down_packets, tv, packet_speed_timer_time.tv_usec/1000);
                     if (max_packets<info.channel[i].down_packets) max_packets=info.channel[i].down_packets;
                     info.channel[i].down_packets = 0;
                 }
@@ -5911,15 +5914,15 @@ int lfd_linker(void)
             get_wb_oldest_ts_unsync(&min_tv);
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
-                vtun_syslog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, shm_conn_info->write_buf[1].frames.length);
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, shm_conn_info->write_buf[1].frames.length);
                 shm_conn_info->tokenbuf+=50;
             }
             
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
-            //    vtun_syslog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
+            //    vlog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
             //}
             if(buf != save_buf) {
-                vtun_syslog(LOG_ERR,"ERROR: buf: CORRUPT!");
+                vlog(LOG_ERR,"ERROR: buf: CORRUPT!");
             }
             if(shm_conn_info->idle) {
                 shm_conn_info->stats[info.process_num].l_pbl_tmp = INT32_MAX;
@@ -6017,7 +6020,7 @@ int lfd_linker(void)
             }
             
             if(max_ACS2 != info.channel[1].ACS2) {
-                vtun_syslog(LOG_ERR,"ERROR: ACS2 on chan 1 not highest!: %d, ch: %d", max_ACS2, Hchan);
+                vlog(LOG_ERR,"ERROR: ACS2 on chan 1 not highest!: %d, ch: %d", max_ACS2, Hchan);
                 max_ACS2 = info.channel[1].ACS2;
             }
             
@@ -6254,7 +6257,7 @@ int lfd_linker(void)
 
             skip=0;
             if(PCS == 0 && PCS_aux != 0) {
-                vtun_syslog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
+                vlog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
             }
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
@@ -6287,14 +6290,14 @@ int lfd_linker(void)
             uint32_t chan_mask = shm_conn_info->channels_mask;
             if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
                 linker_term = TERM_NONFATAL;
-                vtun_syslog(LOG_INFO, "Need to exit by peer");
+                vlog(LOG_INFO, "Need to exit by peer");
             }
             sem_post(&(shm_conn_info->AG_flags_sem));
             for (uint32_t i = 0; i < 32; i++) {
                 if (!(chan_mask & (1 << i))) {
                     if (last_channels_mask & (1 << i)) {
 #ifdef DEBUGG
-                        vtun_syslog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
+                        vlog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
 #endif
                         uint32_t i_n = htonl(i);
                         uint16_t flag_n = htons(FRAME_DEAD_CHANNEL);
@@ -6302,7 +6305,7 @@ int lfd_linker(void)
                         memcpy(buf, &flag_n, sizeof(uint16_t));
                         int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
+                            vlog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
                             linker_term = TERM_NONFATAL;
                         }
                     }
@@ -6310,7 +6313,7 @@ int lfd_linker(void)
             }
             last_channels_mask = chan_mask;
             if (shm_conn_info->session_hash_remote != info.session_hash_remote) {
-                vtun_syslog(LOG_INFO, "Need to exit by hash compare; exit");
+                vlog(LOG_INFO, "Need to exit by hash compare; exit");
                 linker_term = TERM_NONFATAL;
             }
         }
@@ -6379,7 +6382,7 @@ int lfd_linker(void)
                 memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //ag_mask
-//                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d", buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+//                vlog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d", buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                 tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                 memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
                 buf_len_real = shm_conn_info->write_buf[1].frames.length;
@@ -6394,7 +6397,7 @@ int lfd_linker(void)
                 //tmp16_n = 0;
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                 if(debug_trace) {
-                vtun_syslog(LOG_ERR,
+                vlog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                         i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
@@ -6403,7 +6406,7 @@ int lfd_linker(void)
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((9 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
-                    vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
+                    vlog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                     linker_term = TERM_NONFATAL;
                     break;
                 }
@@ -6427,7 +6430,7 @@ int lfd_linker(void)
                     // TODO: do we use local_seq_num difference or total packets receive count??
                     info.r_lost++;
                     //if( (info.channel[i].local_seq_num_recv - info.channel[i].local_seq_num_beforeloss) > MAX_REORDER_PERPATH) {
-                    vtun_syslog(LOG_INFO, "sedning loss %hd lrs %d, llrs %d", need_send_loss_FCI_flag, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv);
+                    vlog(LOG_INFO, "sedning loss %hd lrs %d, llrs %d", need_send_loss_FCI_flag, shm_conn_info->write_buf[i].last_received_seq[info.process_num], info.channel[i].local_seq_num_recv);
 
                     if(shm_conn_info->stats[info.process_num].pbl_lossed_cnt < 100) {
                         tmp16_n = htons(need_send_loss_FCI_flag + 10000); // dumbass method of telling that loss is unrecoverable
@@ -6499,7 +6502,7 @@ int lfd_linker(void)
                     tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
-//                    vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d",buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
+//                    vlog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d",buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                     tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                     memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
                     tmp32_n = htons(buf_len_real);
@@ -6514,7 +6517,7 @@ int lfd_linker(void)
                     //tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
                         if(debug_trace) {
-                    vtun_syslog(LOG_ERR,
+                    vlog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                             i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                             (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tv_tmp.tv_sec * 1000000 + tv_tmp.tv_usec));
@@ -6525,7 +6528,7 @@ int lfd_linker(void)
                     info.channel[i].local_seq_num++;
 
                     if (len_ret < 0) {
-                        vtun_syslog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
                         linker_term = TERM_NONFATAL;
                         break;
                     }
@@ -6546,7 +6549,7 @@ int lfd_linker(void)
                 // TODO: DUP code!
                 
                 if(debug_trace) {
-                    vtun_syslog(LOG_ERR, "Sending LWS...");
+                    vlog(LOG_ERR, "Sending LWS...");
                 }
                 sem_wait(&(shm_conn_info->write_buf_sem));
                 *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
@@ -6558,7 +6561,7 @@ int lfd_linker(void)
                 // TODO: select here!
                 int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                 if (len_ret < 0) {
-                    vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                    vlog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                     linker_term = TERM_NONFATAL;
                 }
                 shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
@@ -6588,18 +6591,18 @@ int lfd_linker(void)
             udp_struct->lport = info.channel[1].lport;
             udp_struct->rport = info.channel[1].rport;
             //if (get_udp_stats(udp_struct, 1)) {
-            //    vtun_syslog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
+            //    vlog(LOG_INFO, "udp stat lport %d dport %d tx_q %d rx_q %d drops %d ", udp_struct->lport, udp_struct->rport, udp_struct->tx_q,
             //            udp_struct->rx_q, udp_struct->drops);
             //}
             cubic_t_max = t_from_W(RSR_TOP, info.send_q_limit_cubic_max, info.B, info.C);
             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu); // TODO: place it everywhere whenever W_u_max changes??
             if(shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] > shm_conn_info->write_buf[1].last_received_seq[info.process_num]) {
-                vtun_syslog(LOG_INFO, "WARNING Fixing psl %d > lrs %d to last received seq", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
+                vlog(LOG_INFO, "WARNING Fixing psl %d > lrs %d to last received seq", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
                 shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
             }
 
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
-                vtun_syslog(LOG_INFO, "Session %s network timeout", lfd_host->host);
+                vlog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
 
@@ -6631,7 +6634,7 @@ int lfd_linker(void)
             #ifdef CLIENTONLY
             timersub(&info.current_time, &shm_conn_info->last_head, &tv_tmp_tmp_tmp);
             if (timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {800,0}), >=)) {
-                vtun_syslog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", seq_num, info.exact_rtt);
+                vlog(LOG_ERR, "WARNING! last_head too high psl %d > lrs %d", seq_num, info.exact_rtt);
                 sq_control = 0;
             } else {
                 sq_control = 1;
@@ -6659,9 +6662,9 @@ int lfd_linker(void)
                     info.channel[i].download = shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed;
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].down_data_len_amt = 0;
 #ifdef TRACE
-                    vtun_syslog(LOG_INFO, "upload speed %"PRIu32" kb/s physical channel %d logical channel %d",
+                    vlog(LOG_INFO, "upload speed %"PRIu32" kb/s physical channel %d logical channel %d",
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed, info.process_num, i);
-                    vtun_syslog(LOG_INFO, "download speed %"PRIu32" kb/s physical channel %d logical channel %d",
+                    vlog(LOG_INFO, "download speed %"PRIu32" kb/s physical channel %d logical channel %d",
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].down_current_speed, info.process_num, i);
 #endif
                     // speed in packets/sec calculation
@@ -6669,7 +6672,7 @@ int lfd_linker(void)
                             (shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets / tv_tmp.tv_sec);
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packets = 0;
 #ifdef TRACE
-                    vtun_syslog(LOG_INFO, "download speed %"PRIu32" packet/s physical channel %d logical channel %d lport %d rport %d",
+                    vlog(LOG_INFO, "download speed %"PRIu32" packet/s physical channel %d logical channel %d lport %d rport %d",
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].down_packet_speed, info.process_num, i, info.channel[i].lport, info.channel[i].rport);
 #endif
                 }
@@ -6702,7 +6705,7 @@ int lfd_linker(void)
                             continue;
                         }
                         if (debug_trace) {
-                            vtun_syslog(LOG_INFO, "Sending time lag (now buf_len) for %i buf_len %i.", i, my_miss_packets_max);
+                            vlog(LOG_INFO, "Sending time lag (now buf_len) for %i buf_len %i.", i, my_miss_packets_max);
                         }
                         time_lag_remote = shm_conn_info->stats[i].time_lag_remote;
                         /* we store my_miss_packet_max value in 12 upper bits 2^12 = 4096 mx is 4095*/
@@ -6711,13 +6714,13 @@ int lfd_linker(void)
                         pid_remote = shm_conn_info->stats[i].pid_remote;
                         uint32_t tmp_host = shm_conn_info->miss_packets_max_send_counter++;
                         tmp_host &= 0xFFFF;
-    //vtun_syslog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
+    //vlog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                         sem_post(&(shm_conn_info->stats_sem));
                         sem_wait(write_buf_sem);
                         tmp_host |= shm_conn_info->tflush_counter << 16;
                         shm_conn_info->tflush_counter = 0;
                         sem_post(write_buf_sem);
-    //                    vtun_syslog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
+    //                    vlog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
                         uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                         memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
                         uint16_t FRAME_TIME_LAG_h = htons(FRAME_TIME_LAG);
@@ -6729,7 +6732,7 @@ int lfd_linker(void)
                         int len_ret = proto_write(info.channel[0].descriptor, buf,
                                 ((sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint32_t)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
+                            vlog(LOG_ERR, "Could not send time_lag + pid pkt; exit"); //?????
                             linker_term = TERM_NONFATAL; //?????
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[0].up_data_len_amt += len_ret;
@@ -6742,8 +6745,8 @@ int lfd_linker(void)
                     delay_cnt = 1;
                 mean_delay = (delay_acc / delay_cnt);
 #ifdef DEBUGG
-                //vtun_syslog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, info.rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, info.info.rtt, (info.current_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
-                //vtun_syslog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5], statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
+                //vlog(LOG_INFO, "tick! cn: %s; md: %d, dacq: %d, w: %d, isl: %d, bl: %d, as: %d, bsn: %d, brn: %d, bsx: %d, drop: %d, rrqrx: %d, rxs: %d, ms: %d, rxmntf: %d, rxm_notf: %d, chok: %d, info.rtt: %d, lkdf: %d, msd: %d, ch: %d, chsdev: %d, chrdev: %d, mlh: %d, mrh: %d, mld: %d", lfd_host->host, channel_mode, dev_my_cnt, weight, incomplete_seq_len, buf_len, shm_conn_info->normal_senders, statb.bytes_sent_norm, statb.bytes_rcvd_norm, statb.bytes_sent_rx, statb.pkts_dropped, statb.rxmit_req_rx, statb.rxmits, statb.mode_switches, statb.rxm_ntf, statb.rxmits_notfound, statb.chok_not, info.info.rtt, (info.current_time.tv_sec - shm_conn_info->lock_time), mean_delay, info.channel_amount, std_dev(statb.bytes_sent_chan, info.channel_amount), std_dev(&statb.bytes_rcvd_chan[1], (info.channel_amount-1)), statb.max_latency_hit, statb.max_reorder_hit, statb.max_latency_drops);
+                //vlog(LOG_INFO, "ti! s/r %d %d %d %d %d %d / %d %d %d %d %d %d", statb.bytes_rcvd_chan[0],statb.bytes_rcvd_chan[1],statb.bytes_rcvd_chan[2],statb.bytes_rcvd_chan[3],statb.bytes_rcvd_chan[4],statb.bytes_rcvd_chan[5], statb.bytes_sent_chan[0],statb.bytes_sent_chan[1],statb.bytes_sent_chan[2],statb.bytes_sent_chan[3],statb.bytes_sent_chan[4],statb.bytes_sent_chan[5] );
 #endif
                 dev_my_cnt = 0;
                 last_tick = info.current_time.tv_sec;
@@ -6760,7 +6763,7 @@ int lfd_linker(void)
                         if(!select_net_write(i)) continue;
                         // TODO: DUP code!
                         if(debug_trace) {
-                            vtun_syslog(LOG_ERR, "Sending LWS...");
+                            vlog(LOG_ERR, "Sending LWS...");
                         }
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
@@ -6771,7 +6774,7 @@ int lfd_linker(void)
                         // send LWS
                         int len_ret = udp_write(info.channel[i].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                            vlog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
@@ -6799,7 +6802,7 @@ int lfd_linker(void)
                 }
             }
             if (alive_physical_channels == 0) {
-                vtun_syslog(LOG_ERR, "ASSERT All physical channels dead!!!");
+                vlog(LOG_ERR, "ASSERT All physical channels dead!!!");
                 alive_physical_channels = 1;
             }
             
@@ -6808,7 +6811,7 @@ int lfd_linker(void)
             check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
-                vtun_syslog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
+                vlog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
             }
             
                last_timing.tv_sec = info.current_time.tv_sec;
@@ -6862,7 +6865,7 @@ int lfd_linker(void)
                 if (fast_check_timer(&shm_conn_info->packet_code[selection][i].timer, &info.current_time)
                         && (shm_conn_info->packet_code[selection][i].len_sum > 0)) {
 #ifdef CODE_LOG
-                    vtun_syslog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&info.current_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
+                    vlog(LOG_INFO, "raise REDUNDANT_CODE_TIMER_TIME add FRAME_REDUNDANCY_CODE to fast resend selection %d seq start %u stop %u  cur %u len %i time passed %u", selection, shm_conn_info->packet_code[selection][i].start_seq, shm_conn_info->packet_code[selection][i].stop_seq, shm_conn_info->packet_code[selection][i].current_seq, shm_conn_info->packet_code[selection][i].len_sum,tv2ms(&info.current_time) - tv2ms(&shm_conn_info->packet_code[selection][i].timer.start_time));
 #endif
                     shm_conn_info->packet_code[selection][i].stop_seq = shm_conn_info->packet_code[selection][i].current_seq;
                     len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[selection][i],
@@ -6879,13 +6882,13 @@ int lfd_linker(void)
                         info.channel[i].local_seq_num = 0;
                     }
 #ifdef CODE_LOG
-                    vtun_syslog(LOG_ERR, "add redund code to fast_resend");
+                    vlog(LOG_ERR, "add redund code to fast_resend");
 #endif
                     sem_wait(&(shm_conn_info->resend_buf_sem));
                     int idx = add_fast_resend_frame(i, buf2, len_sum | VTUN_BAD_FRAME, 0);
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     if (idx == -1) {
-                        vtun_syslog(LOG_ERR, "ERROR: fast_resend_buf is full");
+                        vlog(LOG_ERR, "ERROR: fast_resend_buf is full");
                     }
 
                 }
@@ -6937,11 +6940,11 @@ int lfd_linker(void)
         }
         sem_post(write_buf_sem);
         #ifdef FRTTDBG
-            vtun_syslog(LOG_INFO, "next_token_ms %d", next_token_ms);
+            vlog(LOG_INFO, "next_token_ms %d", next_token_ms);
         #endif
         FD_ZERO(&fdset);
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
+        vlog(LOG_INFO, "debug: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
 #endif
         struct timespec sel_tv;
         if (((hold_mode == 0) || (drop_packet_flag == 1)) && (info.just_started_recv == 1)) {
@@ -6960,8 +6963,8 @@ int lfd_linker(void)
                 sel_tv.tv_nsec = next_token_ms * 1000 * 1000;
             }
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "tun read select skip");
-            vtun_syslog(LOG_INFO, "debug: HOLD_MODE");
+            vlog(LOG_INFO, "tun read select skip");
+            vlog(LOG_INFO, "debug: HOLD_MODE");
 #endif
         }
         for (i = 0; i < info.channel_amount; i++) {
@@ -6976,7 +6979,7 @@ int lfd_linker(void)
         gettimeofday(&cpulag, NULL);
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
         if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
-            vtun_syslog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+            vlog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
         // <<< END CPU_LAG
 main_select:
@@ -6988,7 +6991,7 @@ main_select:
 #ifdef DEBUGG
 if(drop_packet_flag) {
         //gettimeofday(&work_loop2, NULL );
-        vtun_syslog(LOG_INFO, "First select time: us descriptors num: %i", length);
+        vlog(LOG_INFO, "First select time: us descriptors num: %i", length);
 }
 #endif
 
@@ -6997,10 +7000,10 @@ if(drop_packet_flag) {
         if (len < 0) { // selecting from multiple processes does actually work...
             // errors are OK if signal is received... TODO: do we have any signals left???
             if( errno != EAGAIN && errno != EINTR ) {
-                vtun_syslog(LOG_INFO, "eagain select err; exit");
+                vlog(LOG_INFO, "eagain select err; exit");
                 break;
             } else {
-                //vtun_syslog(LOG_INFO, "else select err; continue norm");
+                //vlog(LOG_INFO, "else select err; continue norm");
                 continue;
             }
         }
@@ -7010,14 +7013,14 @@ if(drop_packet_flag) {
         if( !len ) {
             /* We are idle, lets check connection */
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "idle...");
+            vlog(LOG_INFO, "idle...");
 #endif
                 /* Send ECHO request */
                 if((info.current_time.tv_sec - last_action) > lfd_host->PING_INTERVAL) {
                     if(ping_rcvd) {
                          ping_rcvd = 0;
                          last_ping = info.current_time.tv_sec;
-                         vtun_syslog(LOG_INFO, "PING ...");
+                         vlog(LOG_INFO, "PING ...");
                          // ping ALL channels! this is required due to 120-sec limitation on some NATs
                     for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
                         if(!select_net_write(i)) continue;
@@ -7030,7 +7033,7 @@ if(drop_packet_flag) {
                             len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                         }
                         if (len_ret < 0) {
-                                 vtun_syslog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
+                                 vlog(LOG_ERR, "Could not send echo request chan %d reason %s (%d)", i, strerror(errno), errno);
                                  linker_term = TERM_NONFATAL;
                                  break;
                              }
@@ -7083,7 +7086,7 @@ if(drop_packet_flag) {
                 }
             }
             if (alive_physical_channels == 0) {
-                vtun_syslog(LOG_ERR, "ASSERT All physical channels dead!!!");
+                vlog(LOG_ERR, "ASSERT All physical channels dead!!!");
                 alive_physical_channels = 1;
             }
         }
@@ -7120,22 +7123,22 @@ if(drop_packet_flag) {
         CHKCPU(112);
 #ifdef DEBUGG
 if(drop_packet_flag) {
-                vtun_syslog(LOG_INFO, "data on net... chan %d", chan_num);
+                vlog(LOG_INFO, "data on net... chan %d", chan_num);
 }
 #endif
                 if( len<= 0 ) {
                     if (len == 0) {
-                        vtun_syslog(LOG_INFO, "proto_read return 0, the peer with %d has performed an orderly shutdown. TERM_NONFATAL", chan_num);
+                        vlog(LOG_INFO, "proto_read return 0, the peer with %d has performed an orderly shutdown. TERM_NONFATAL", chan_num);
                         linker_term = TERM_NONFATAL;
                         break;
                     }
                     if(len < 0) {
-                         vtun_syslog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
+                         vlog(LOG_INFO, "sem_post! proto read <0; reason %s (%d)", strerror(errno), errno);
                          linker_term = TERM_NONFATAL;
                          break;
                     }
                     if(proto_err_cnt > 5) { // TODO XXX whu do we need this?? why doesnt proto_read just return <0???
-                             vtun_syslog(LOG_INFO, "MAX proto read len==0 reached; exit!");
+                             vlog(LOG_INFO, "MAX proto read len==0 reached; exit!");
                              linker_term = TERM_NONFATAL;
                              break;
                     }
@@ -7148,10 +7151,10 @@ if(drop_packet_flag) {
                 fl = len & ~VTUN_FSIZE_MASK;
                 len = len & VTUN_FSIZE_MASK;
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, length);
+                vlog(LOG_INFO, "data on net... chan %d len %i", chan_num, length);
 #endif
                 if(debug_trace) {
-                    vtun_syslog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
+                    vlog(LOG_INFO, "data on net... chan %d len %i", chan_num, len);
                 }
         CHKCPU(12);
                 shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].down_data_len_amt += len;
@@ -7159,11 +7162,11 @@ if(drop_packet_flag) {
                     if( fl==VTUN_BAD_FRAME ) {
                         flag_var = ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))));
                         if(flag_var == FRAME_MODE_NORM) {
-                            vtun_syslog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
+                            vlog(LOG_ERR, "ASSERT FAILED! received FRAME_MODE_NORM flag while not in MODE_RETRANSMIT mode!");
                             continue;
                         } else if (flag_var == FRAME_REDUNDANCY_CODE) {
 #ifdef CODE_LOG
-                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,ntohl(*((uint32_t *)(buf))));
+                            vlog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,ntohl(*((uint32_t *)(buf))));
                             print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
 #endif
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
@@ -7181,13 +7184,13 @@ if(drop_packet_flag) {
                                     &shm_conn_info->packet_code_bulk_counter, buf, len);
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,&shm_conn_info->wb_just_write_frames[chan_num],
                                     shm_conn_info->frames_buf, &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
-                            vtun_syslog(LOG_INFO, "FRAME_REDUNDANCY_CODE start_seq %"PRIu32" stop_seq %"PRIu32" LostAmount %d",
+                            vlog(LOG_INFO, "FRAME_REDUNDANCY_CODE start_seq %"PRIu32" stop_seq %"PRIu32" LostAmount %d",
                                     shm_conn_info->packet_code_recived[chan_num][sumIndex].start_seq,
                                     shm_conn_info->packet_code_recived[chan_num][sumIndex].stop_seq,
                                     shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
                             if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
 //#ifdef CODE_LOG
-                                vtun_syslog(LOG_INFO, "Uniq lostSeq %u found lws %lu", lostSeq, shm_conn_info->write_buf[chan_num].last_written_seq );
+                                vlog(LOG_INFO, "Uniq lostSeq %u found lws %lu", lostSeq, shm_conn_info->write_buf[chan_num].last_written_seq );
 //#endif
                                 int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
                                         &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
@@ -7198,7 +7201,7 @@ if(drop_packet_flag) {
                                         print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                                 "ASSERT BAD packet repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                     } else {
-                                        vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 2}", lfd_host->host, lostSeq);
+                                        vlog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 2}", lfd_host->host, lostSeq);
 #ifdef CODE_LOG
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "repaired ", lostSeq, shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
 #endif
@@ -7217,13 +7220,13 @@ if(drop_packet_flag) {
                         } else if (flag_var == FRAME_JUST_STARTED) {
                             // the opposite end has zeroed counters; zero mine!
                             uint32_t session_hash_remote = ntohl(*((uint32_t *) (buf)));
-                            vtun_syslog(LOG_INFO, "received FRAME_JUST_STARTED; receive remote hash - %u", session_hash_remote);
+                            vlog(LOG_INFO, "received FRAME_JUST_STARTED; receive remote hash - %u", session_hash_remote);
                             info.just_started_recv = 1;
                             sem_wait(&(shm_conn_info->AG_flags_sem));
                             if (shm_conn_info->session_hash_remote != session_hash_remote) {
                                 shm_conn_info->session_hash_remote = session_hash_remote;
                                 uint32_t chan_mask = shm_conn_info->channels_mask;
-                                vtun_syslog(LOG_INFO, "zeroing counters old - %u new remote hash - %u",shm_conn_info->session_hash_remote, session_hash_remote );
+                                vlog(LOG_INFO, "zeroing counters old - %u new remote hash - %u",shm_conn_info->session_hash_remote, session_hash_remote );
                                 shm_conn_info->tokens_lastadd_tv = info.current_time;
                                 sem_post(&(shm_conn_info->AG_flags_sem));
                                 info.session_hash_remote = session_hash_remote;
@@ -7273,24 +7276,24 @@ if(drop_packet_flag) {
                             */
                             // connect to port specified
                             if (server_addr(&rmaddr, lfd_host) < 0) {
-                                vtun_syslog(LOG_ERR, "Could not set server address!");
+                                vlog(LOG_ERR, "Could not set server address!");
                                 linker_term = TERM_FATAL;
                                 break;
                             }
                             inet_ntop(AF_INET, &rmaddr.sin_addr, ipstr, sizeof ipstr);
-                            vtun_syslog(LOG_INFO, "Channels connecting to %s to create %d channels", ipstr, P_TCP_CONN_AMOUNT);
+                            vlog(LOG_INFO, "Channels connecting to %s to create %d channels", ipstr, P_TCP_CONN_AMOUNT);
                             usleep(500000);
 
                             for (i = 1; i <= P_TCP_CONN_AMOUNT; i++) {
                                 errno = 0;
                                 if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-                                    vtun_syslog(LOG_ERR, "Can't create CHAN socket. %s(%d) chan %d", strerror(errno), errno, i);
+                                    vlog(LOG_ERR, "Can't create CHAN socket. %s(%d) chan %d", strerror(errno), errno, i);
                                     linker_term = TERM_FATAL;
                                     break;
                                 }
                                 if (lfd_host->RT_MARK != -1) {
                                     if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_MARK, &lfd_host->RT_MARK, sizeof(lfd_host->RT_MARK))) {
-                                        vtun_syslog(LOG_ERR, "Client CHAN socket rt mark error %s(%d)", strerror(errno), errno);
+                                        vlog(LOG_ERR, "Client CHAN socket rt mark error %s(%d)", strerror(errno), errno);
                                         break_out = 1;
                                         break;
                                     }
@@ -7299,7 +7302,7 @@ if(drop_packet_flag) {
                                 sendbuff = RCVBUF_SIZE;
                                 // WARNING! This should be on sysadmin's duty to optimize!
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVBUFFORCE, &sendbuff, sizeof(int)) == -1) {
-                                    vtun_syslog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
+                                    vlog(LOG_ERR, "WARNING! Can not set rmem (SO_RCVBUF) size. Performance will be poor.");
                                 }
                                 */
 
@@ -7311,7 +7314,7 @@ if(drop_packet_flag) {
                                 usleep(500000);
                             }
                             if (i < P_TCP_CONN_AMOUNT) {
-                                vtun_syslog(LOG_ERR, "Could not connect all requested tuns; exit");
+                                vlog(LOG_ERR, "Could not connect all requested tuns; exit");
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
@@ -7325,7 +7328,7 @@ if(drop_packet_flag) {
                             //double call for getcockname beacause frst call returned ZERO in addr
                             laddrlen = sizeof(localaddr);
                             if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-                                vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                vlog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                 linker_term = TERM_NONFATAL;
                                 break;
                             }
@@ -7335,40 +7338,40 @@ if(drop_packet_flag) {
                                 rmaddrlen = sizeof(rmaddr);
                                 laddrlen = sizeof(localaddr);
                                 if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
-                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    vlog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
                                 info.channel[i].lport = ntohs(localaddr.sin_port);
                                 if (getpeername(info.channel[i].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
-                                    vtun_syslog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
+                                    vlog(LOG_ERR, "Channels socket getsockname error; retry %s(%d)", strerror(errno), errno);
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
                                 info.channel[i].rport = ntohs(rmaddr.sin_port);
-                                vtun_syslog(LOG_INFO, "Client descriptor - %i logical channel - %i lport - %i rport - %i",info.channel[i].descriptor, i, info.channel[i].lport, info.channel[i].rport);
+                                vlog(LOG_INFO, "Client descriptor - %i logical channel - %i lport - %i rport - %i",info.channel[i].descriptor, i, info.channel[i].lport, info.channel[i].rport);
                             }
                             for(i = 1; i < info.channel_amount; i++) {
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-                                    vtun_syslog(LOG_ERR, "setsockopt failed");
+                                    vlog(LOG_ERR, "setsockopt failed");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
                                 if (setsockopt(info.channel[i].descriptor, SOL_SOCKET, SO_SNDTIMEO, (char *) &socket_timeout, sizeof(socket_timeout)) < 0) {
-                                    vtun_syslog(LOG_ERR, "setsockopt failed");
+                                    vlog(LOG_ERR, "setsockopt failed");
                                     linker_term = TERM_NONFATAL;
                                     break;
                                 }
                             }
-                            vtun_syslog(LOG_INFO,"Successfully set up %d connection channels", info.channel_amount);
+                            vlog(LOG_INFO,"Successfully set up %d connection channels", info.channel_amount);
                             continue;
                         } else if(flag_var == FRAME_LAST_WRITTEN_SEQ) {
                             PCS_aux++;
 #ifdef DEBUGG
-                            vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
+                            vlog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
 #endif
                             if(debug_trace) {
-                                vtun_syslog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
+                                vlog(LOG_INFO, "received FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", ntohl(*((uint32_t *)buf)), chan_num);
                             }
                             // TODO: no sync here!!?!?!
                             if( ntohl(*((uint32_t *)buf)) > shm_conn_info->write_buf[chan_num].remote_lws) shm_conn_info->write_buf[chan_num].remote_lws = ntohl(*((uint32_t *)buf));
@@ -7392,15 +7395,15 @@ if(drop_packet_flag) {
 							sem_wait(&(shm_conn_info->stats_sem));
                             shm_conn_info->tflush_counter_recv = tmp_h >> 16;
 #ifdef DEBUGG
-                            vtun_syslog(LOG_INFO, "recv pid - %i packet_miss - %"PRIu32" tmp_h %"PRIu32"",time_lag_local.pid, miss_packets_max_tmp, tmp_h);
-							vtun_syslog(LOG_INFO, "Miss packet counter was - %"PRIu32" recv - %"PRIu32"",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
+                            vlog(LOG_INFO, "recv pid - %i packet_miss - %"PRIu32" tmp_h %"PRIu32"",time_lag_local.pid, miss_packets_max_tmp, tmp_h);
+							vlog(LOG_INFO, "Miss packet counter was - %"PRIu32" recv - %"PRIu32"",shm_conn_info->miss_packets_max_recv_counter, miss_packets_max_recv_counter);
 #endif
                             if ((miss_packets_max_recv_counter > shm_conn_info->miss_packets_max_recv_counter)) {
                                 miss_packets_max = miss_packets_max_tmp;
                                 shm_conn_info->miss_packets_max = miss_packets_max;
                                 shm_conn_info->miss_packets_max_recv_counter = miss_packets_max_recv_counter;
 #ifdef DEBUGG
-                                vtun_syslog(LOG_INFO, "Miss packets(buf_len) for counter %u is %u apply", miss_packets_max_recv_counter, miss_packets_max_tmp);
+                                vlog(LOG_INFO, "Miss packets(buf_len) for counter %u is %u apply", miss_packets_max_recv_counter, miss_packets_max_tmp);
 #endif
                             }
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
@@ -7412,7 +7415,7 @@ if(drop_packet_flag) {
                             }
 
                             if (debug_trace) {
-                                vtun_syslog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
+                                vlog(LOG_INFO, "Time lag for pid: %i is %u", time_lag_local.pid, time_lag_local.time_lag);
                             }
 
 							time_lag_local.time_lag = shm_conn_info->stats[info.process_num].time_lag;
@@ -7433,7 +7436,7 @@ if(drop_packet_flag) {
                             start_json(lossLog, &lossLog_cur);
                             memcpy(&tmp_h, buf, sizeof(uint32_t));
                             int idx = ntohl(tmp_h);
-                            //vtun_syslog(LOG_INFO, "FRAME_LOSS_INFO recv idx %d", idx);
+                            //vlog(LOG_INFO, "FRAME_LOSS_INFO recv idx %d", idx);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + sizeof(uint32_t), sizeof(uint32_t));
                             tv_tmp.tv_sec = ntohl(tmp_h);
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t));
@@ -7461,7 +7464,7 @@ if(drop_packet_flag) {
                                 int hsnum = (int)ntohs(tmp_s);
                                 int who_lost = -1;
                                 if(hsnum == -1) {
-                                    vtun_syslog(LOG_ERR, "WARNING could not detect who lost %lu - sending unconditionally", sqn);
+                                    vlog(LOG_ERR, "WARNING could not detect who lost %lu - sending unconditionally", sqn);
                                 } else {
                                     who_lost = hsnum2pnum(hsnum);
                                 }
@@ -7498,12 +7501,12 @@ if(drop_packet_flag) {
                                             sem_wait(&(shm_conn_info->resend_buf_sem));
                                             len = get_resend_frame_unconditional(1, &sqn_s, &out2, &mypid);
                                             if (len == -1) {
-                                                vtun_syslog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
+                                                vlog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
                                             } else {
                                                 memcpy(out_buf, out2, len);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
-                                                vtun_syslog(LOG_INFO, "resending packet 2 %lu len %d", sqn, len);
+                                                vlog(LOG_INFO, "resending packet 2 %lu len %d", sqn, len);
                                                 assert_packet_ipv4("resend2", out2, len);
                                                send_packet(1, out_buf, len);
                                             }
@@ -7590,10 +7593,10 @@ if(drop_packet_flag) {
                             info.channel[chan_num].packet_seq_num_acked = ntohl(tmp32_n); // each packet data here
                             memcpy(&tmp32_n, buf + 4 * sizeof(uint16_t) + 2 * sizeof(uint32_t), sizeof(uint32_t)); // PCS send
                             info.PCS2_recv = ntohl(tmp32_n);
-                            //vtun_syslog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
+                            //vlog(LOG_ERR, "local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             // rtt calculation, TODO: DUP code below!
                             if( (info.rtt2_lsn[chan_num] != 0) && (info.channel[chan_num].packet_seq_num_acked > info.rtt2_lsn[chan_num])) {
-                                //vtun_syslog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
+                                //vlog(LOG_INFO,"WARNING! rtt2 calculated via FCI receive event!");
                                 timersub(&info.current_time, &info.rtt2_tv[chan_num], &tv_tmp);
                                 //info.rtt2 = tv2ms(&tv_tmp);
                                 info.rtt2_lsn[chan_num] = 0;
@@ -7649,12 +7652,12 @@ if(drop_packet_flag) {
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len counter
                             int buf_len_counter = ntohs(tmp32_n);
                             memcpy(&tmp32_n, buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len
-//                            vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv %d counter %d was %d",ntohs(tmp32_n), buf_len_counter, shm_conn_info->buf_len_recv_counter);
+//                            vlog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv %d counter %d was %d",ntohs(tmp32_n), buf_len_counter, shm_conn_info->buf_len_recv_counter);
                             if (buf_len_counter > shm_conn_info->buf_len_recv_counter) {
                                 shm_conn_info->buf_len_recv = (int)ntohs(tmp32_n);
-//                                vtun_syslog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv apply");
+//                                vlog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv apply");
                             }
-                            //vtun_syslog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
+                            //vlog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
                             
                             memcpy(&tmp16_n, buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); 
                             shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
@@ -7669,14 +7672,14 @@ if(drop_packet_flag) {
                             //if (info.max_send_q < info.channel[chan_num].send_q) {
                             //    info.max_send_q = info.channel[chan_num].send_q;
                             //}
-                            //vtun_syslog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
+                            //vlog(LOG_INFO, "FCI send_q %d", info.channel[chan_num].send_q);
                             //if (info.channel[chan_num].send_q > 90000)
-                            //    vtun_syslog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
+                            //    vlog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 
                             if(debug_trace) {
-                                vtun_syslog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
+                                vlog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             }
-                            //vtun_syslog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
+                            //vlog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             uint32_t my_max_send_q = 0;
                             for (int i = 1; i < info.channel_amount; i++) {
                                 if (my_max_send_q < info.channel[i].send_q) {
@@ -7685,16 +7688,16 @@ if(drop_packet_flag) {
                                 }
                             }
                             if ((info.channel[chan_num].packet_loss == -1) && (info.Wmax_saved != 0)) { 
-                                vtun_syslog(LOG_INFO, "Undoing congestion control: Wmax %d", info.Wmax_saved);
+                                vlog(LOG_INFO, "Undoing congestion control: Wmax %d", info.Wmax_saved);
                                 info.send_q_limit_cubic_max = info.Wmax_saved;
                                 loss_time = info.Wmax_tv;
                                 info.Wmax_saved = 0;
                             } else if ((info.channel[chan_num].packet_loss == -1) && (info.Wmax_saved == 0)) {
-                                vtun_syslog(LOG_INFO, "Cannot undo congestion: Wmax %d", info.Wmax_saved);
+                                vlog(LOG_INFO, "Cannot undo congestion: Wmax %d", info.Wmax_saved);
                             }
                             
                             if((info.channel[chan_num].packet_loss == -1) && (shm_conn_info->stats[info.process_num].l_pbl_tmp_saved != 0)) {
-                                vtun_syslog(LOG_INFO, "Undoing PLP drop: l_pbl_recv %d", shm_conn_info->stats[info.process_num].l_pbl_recv_saved);
+                                vlog(LOG_INFO, "Undoing PLP drop: l_pbl_recv %d", shm_conn_info->stats[info.process_num].l_pbl_recv_saved);
                                 // TODO: unsynced
                                 shm_conn_info->stats[info.process_num].l_pbl_recv = shm_conn_info->stats[info.process_num].l_pbl_recv_saved;
                                 shm_conn_info->stats[info.process_num].l_pbl_tmp = shm_conn_info->stats[info.process_num].l_pbl_tmp_saved; 
@@ -7702,7 +7705,7 @@ if(drop_packet_flag) {
                                 timeradd(&info.current_time, &loss_tv, &shm_conn_info->stats[info.process_num].plp_immune);
                                 shm_conn_info->stats[info.process_num].l_pbl_tmp_saved = 0;
                             } else if ((info.channel[chan_num].packet_loss == -1) && (shm_conn_info->stats[info.process_num].l_pbl_tmp_saved == 0)) {
-                                vtun_syslog(LOG_INFO, "Cannot undo PLP drop: l_pbl_recv %d", shm_conn_info->stats[info.process_num].l_pbl_recv_saved);
+                                vlog(LOG_INFO, "Cannot undo PLP drop: l_pbl_recv %d", shm_conn_info->stats[info.process_num].l_pbl_recv_saved);
                             }
                                 
                                 
@@ -7710,7 +7713,7 @@ if(drop_packet_flag) {
                             //Для чего нужен подсчет значения потерь через info.channel[chan_num].packet_loss ( возможно ложное срабатывание в дальнейшем
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
                                 // TODO: need to get L_PBL somehow here - see dumbass method at FCI send
-                                vtun_syslog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
+                                vlog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 info.p_lost++;
@@ -7738,27 +7741,27 @@ if(drop_packet_flag) {
                                             // check if we are the best from all other
                                             if(!percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
                                                     && (shm_conn_info->stats[info.process_num].ACK_speed < ch_max_ACS)) {
-                                                vtun_syslog(LOG_INFO, "Head changed to %d due to ACS>ACSh: %d > %d", ch_max_ACS_ch, ch_max_ACS, shm_conn_info->stats[info.process_num].ACK_speed);
+                                                vlog(LOG_INFO, "Head changed to %d due to ACS>ACSh: %d > %d", ch_max_ACS_ch, ch_max_ACS, shm_conn_info->stats[info.process_num].ACK_speed);
                                                 shm_conn_info->max_chan = ch_max_ACS_ch; // we found chan with better ACS (10% corridor)
                                             } else if ( percent_delta_equal(shm_conn_info->stats[info.process_num].ACK_speed, ch_max_ACS, 10)
                                                     && (ch_max_ACS_W > shm_conn_info->stats[info.process_num].W_cubic)) {
                                                 // check Wh/Wi here
                                                 // our process has smaller window with same speed; assume we're not the best now
-                                                vtun_syslog(LOG_INFO, "Head changed to %d due to W>Wh: %d > %d", ch_max_ACS_ch, ch_max_ACS_W, shm_conn_info->stats[info.process_num].W_cubic);
+                                                vlog(LOG_INFO, "Head changed to %d due to W>Wh: %d > %d", ch_max_ACS_ch, ch_max_ACS_W, shm_conn_info->stats[info.process_num].W_cubic);
                                                 shm_conn_info->max_chan = ch_max_ACS_ch;
                                             } else {
-                                                vtun_syslog(LOG_INFO, "Head (real) lossing after idle");
+                                                vlog(LOG_INFO, "Head (real) lossing after idle");
                                                 shm_conn_info->idle = 0;
                                                 shm_conn_info->head_lossing = 1;
                                             }
                                         } else {
                                             // we are the ONLY channel, drop flags
-                                            vtun_syslog(LOG_INFO, "Head (only) lossing after idle");
+                                            vlog(LOG_INFO, "Head (only) lossing after idle");
                                             shm_conn_info->idle = 0;
                                             shm_conn_info->head_lossing = 1;
                                         }
                                     } else {
-                                       // vtun_syslog(LOG_INFO, "Head lossing");
+                                       // vlog(LOG_INFO, "Head lossing");
                                         shm_conn_info->head_lossing = 1;
                                     }
                                     sem_post(&(shm_conn_info->stats_sem));
@@ -7868,10 +7871,10 @@ if(drop_packet_flag) {
                                                     - (info.channel[chan_num].packet_recv_upload_avg - info.channel[chan_num].packet_recv_upload) / 4;
 #ifdef DEBUGG
                             if(show_speed){
-                                vtun_syslog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                                vlog(LOG_INFO, "channel %d speed %"PRIu32" Speed_avg %"PRIu32"",chan_num, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             }
 #endif
-                            //vtun_syslog(LOG_INFO, "FCI spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                            //vlog(LOG_INFO, "FCI spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = // TODO: remove! never used
@@ -7885,16 +7888,16 @@ if(drop_packet_flag) {
                             sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 #ifdef DEBUGG
-                            vtun_syslog(LOG_ERR,
+                            vlog(LOG_ERR,
                                     "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32" send_q %"PRIu32"",
                                     chan_num, info.channel[chan_num].send_q, info.channel[chan_num].packet_recv, (int16_t)info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].send_q);
 #endif
                             continue;
                         } else {
-							vtun_syslog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
+							vlog(LOG_ERR, "WARNING! unknown frame mode received: %du, real flag - %u!", (unsigned int) flag_var, ntohs(*((uint16_t *)(buf+(sizeof(uint32_t)))))) ;
 					}
-                        vtun_syslog(LOG_ERR, "Cannot resend frame %"PRIu32"; chan %d coz remomed api", ntohl(*((uint32_t *)buf)), chan_num);
+                        vlog(LOG_ERR, "Cannot resend frame %"PRIu32"; chan %d coz remomed api", ntohl(*((uint32_t *)buf)), chan_num);
                         continue;
 
                     } // bad frame end
@@ -7903,12 +7906,12 @@ if(drop_packet_flag) {
                         PCS_aux++;
                         /* Send ECHO reply */
                         if(!select_net_write(chan_num)) {
-                            vtun_syslog(LOG_ERR, "Could not send echo reply due to net not selecting");
+                            vlog(LOG_ERR, "Could not send echo reply due to net not selecting");
                             continue;
                         }
                         last_net_read = info.current_time.tv_sec;
                         if(debug_trace) {
-                            vtun_syslog(LOG_INFO, "sending PONG...");
+                            vlog(LOG_INFO, "sending PONG...");
                         }
                         int len_ret;
                         if (chan_num == 0) {
@@ -7918,7 +7921,7 @@ if(drop_packet_flag) {
                             len_ret = udp_write(info.channel[chan_num].descriptor, buf, VTUN_ECHO_REP);
                         }
                         if ( len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "Could not send echo reply");
+                            vlog(LOG_ERR, "Could not send echo reply");
                             linker_term = TERM_NONFATAL;
                             break;
                         }
@@ -7931,7 +7934,7 @@ if(drop_packet_flag) {
                         PCS_aux++;
                         /* Just ignore ECHO reply */
                         if(debug_trace) {
-                            vtun_syslog(LOG_INFO, "... was echo reply");
+                            vlog(LOG_INFO, "... was echo reply");
                         }
                         
                         if(chan_num == 0) ping_rcvd = 1;
@@ -7965,7 +7968,7 @@ if(drop_packet_flag) {
                         continue; 
                     }
                     if( fl==VTUN_CONN_CLOSE ) {
-                        vtun_syslog(LOG_INFO,"Connection close requested by other side daemon");
+                        vlog(LOG_INFO,"Connection close requested by other side daemon");
                         linker_term = TERM_NONFATAL;
                         break;
                     }
@@ -8005,7 +8008,7 @@ if(drop_packet_flag) {
                     CHKCPU(2);
                     len = seqn_break_tail(out, len, &seq_num, &flag_var, &local_seq_tmp, &mini_sum, &last_recv_lsn, &packet_recv_spd);
 #ifdef CODE_LOG
-                    vtun_syslog(LOG_INFO, "PKT local seq num %"PRIu32" seq_num %"PRIu32"", local_seq_tmp, seq_num);
+                    vlog(LOG_INFO, "PKT local seq num %"PRIu32" seq_num %"PRIu32"", local_seq_tmp, seq_num);
 #endif
                     // rtt calculation
                     if( (info.rtt2_lsn[chan_num] != 0) && (last_recv_lsn > info.rtt2_lsn[chan_num])) {
@@ -8030,7 +8033,7 @@ if(drop_packet_flag) {
                             uint32_t packet_lag = last_recv_lsn - start_of_train;
                             start_of_train = 0;
                             //if(packet_lag > (TRAIN_PKTS + TRAIN_PKTS/2)) {
-                            //    vtun_syslog(LOG_ERR, "WARNING Train calc wrong! packet_lag %d need train restart ASAP", packet_lag);
+                            //    vlog(LOG_ERR, "WARNING Train calc wrong! packet_lag %d need train restart ASAP", packet_lag);
                             //    sem_wait(&(shm_conn_info->common_sem));
                             //    shm_conn_info->last_flood_sent.tv_sec = 0;
                             //    sem_post(&(shm_conn_info->common_sem));
@@ -8050,7 +8053,7 @@ if(drop_packet_flag) {
                             sem_post(&(shm_conn_info->stats_sem));
                             // <-- end max_chan set
                             
-                            vtun_syslog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
+                            vlog(LOG_INFO, "%s paket_lag %"PRIu32" bdp %"PRIu32"%"PRIu32"us %"PRIu32"ms",  lfd_host->host, packet_lag, info.bdp1.tv_sec,
                                     info.bdp1.tv_usec, tv2ms(&info.bdp1));
                         }
                     }
@@ -8087,10 +8090,10 @@ if(drop_packet_flag) {
                     }
 #ifdef DEBUGG
 if(drop_packet_flag) {
-                    vtun_syslog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
+                    vlog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 }
 #endif
-              //      vtun_syslog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
+              //      vlog(LOG_INFO, "PKT send_q %d", info.channel[chan_num].send_q);
                     // the following is to calculate my_max_send_q_chan_num only
                     uint32_t my_max_send_q = 0;
                     for (int i = 1; i < info.channel_amount; i++) {
@@ -8121,13 +8124,13 @@ if(drop_packet_flag) {
                     shm_conn_info->stats[info.process_num].srtt2_100 = info.srtt2_100; // TODO: do this copy only if RTT2 recalculated (does not happen each frame)
                     sem_post(&(shm_conn_info->stats_sem));
 
-                    //vtun_syslog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
+                    //vlog(LOG_INFO, "PKT spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
 
                     /* Accumulate loss packet*/
                     uint16_t mini_sum_check = (uint16_t)(seq_num + local_seq_tmp + last_recv_lsn);
                     
                     if(mini_sum != mini_sum_check) { // TODO: remove!
-                        vtun_syslog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, ntohs(mini_sum), mini_sum_check);
+                        vlog(LOG_ERR, "PACKET CHECKSUM ERROR chan %d, seq_num %lu, %"PRId16" != %"PRId16"", chan_num, seq_num, ntohs(mini_sum), mini_sum_check);
                         continue;
                     }
                     
@@ -8144,11 +8147,11 @@ if(drop_packet_flag) {
                     info.channel[chan_num].packet_recv_counter++;
 #ifdef DEBUGG
 if(drop_packet_flag) {
-                    vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, length, (int16_t)info.channel[chan_num].packet_loss_counter);
+                    vlog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, length, (int16_t)info.channel[chan_num].packet_loss_counter);
 }
 #endif
                     if(debug_trace) {
-                        vtun_syslog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
+                        vlog(LOG_INFO, "Receive frame ... chan %d local seq %"PRIu32" seq_num %"PRIu32" recv counter  %"PRIu16" len %d loss is %"PRId16"", chan_num, info.channel[chan_num].local_seq_num_recv,seq_num, info.channel[chan_num].packet_recv_counter, len, (int16_t)info.channel[chan_num].packet_loss_counter);
                     }
                     CHKCPU(28);
                     // HOLY CRAP! remove this! --->>>
@@ -8156,7 +8159,7 @@ if(drop_packet_flag) {
                     //    congestion-avoided priority resend frames
                     if(chan_num == 0) { // reserved aux channel
                          if(flag_var == 0) { // this is a workaround for some bug... TODO!!
-                              vtun_syslog(LOG_ERR,"BUG! flag_var == 0 received on chan 0! sqn %"PRIu32", len %d. DROPPING",seq_num, len);
+                              vlog(LOG_ERR,"BUG! flag_var == 0 received on chan 0! sqn %"PRIu32", len %d. DROPPING",seq_num, len);
                               sem_post(write_buf_sem);
                               continue;
                          } 
@@ -8193,14 +8196,14 @@ if(drop_packet_flag) {
                             shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount--;
                         }
 #ifdef CODE_LOG
-                        vtun_syslog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
+                        vlog(LOG_INFO, "LostAmount %d", shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount);
 #endif
                         if (shm_conn_info->packet_code_recived[chan_num][sumIndex].lostAmount == 1) {
                             uint32_t lostSeq = frame_llist_getLostPacket_byRange(&shm_conn_info->write_buf[chan_num].frames,
                                     &shm_conn_info->wb_just_write_frames[chan_num], shm_conn_info->frames_buf,
                                     &shm_conn_info->packet_code_recived[chan_num][sumIndex]);
 #ifdef CODE_LOG
-                            vtun_syslog(LOG_INFO, "packet after sum Uniq lostSeq %u found", lostSeq);
+                            vlog(LOG_INFO, "packet after sum Uniq lostSeq %u found", lostSeq);
 #endif
                             int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[chan_num][0],
                                     &shm_conn_info->wb_just_write_frames[chan_num], &shm_conn_info->write_buf[chan_num].frames,
@@ -8211,7 +8214,7 @@ if(drop_packet_flag) {
                                     print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "ASSERT BAD packet after sum repaired ", lostSeq,
                                                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum);
                                 } else {
-                                    vtun_syslog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 1}", lfd_host->host, lostSeq);
+                                    vlog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 1}", lfd_host->host, lostSeq);
                                     
 #ifdef CODE_LOG
                                 print_head_of_packet(shm_conn_info->packet_code_recived[chan_num][packet_index].sum, "packet after sum repaired ", lostSeq,
@@ -8227,16 +8230,16 @@ if(drop_packet_flag) {
                     sem_post(write_buf_sem);
 #ifdef DEBUGG
                     gettimeofday(&work_loop2, NULL );
-                    vtun_syslog(LOG_INFO, "write_buf_add time: %"PRIu32" us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
+                    vlog(LOG_INFO, "write_buf_add time: %"PRIu32" us", (long int) ((work_loop2.tv_sec - work_loop1.tv_sec) * 1000000 + (work_loop2.tv_usec - work_loop1.tv_usec)));
 #endif
                     if(incomplete_seq_len == -1) {
-                        vtun_syslog(LOG_ERR, "ASSERT FAILED! free write buf assert failed on chan %d", chan_num_virt);
+                        vlog(LOG_ERR, "ASSERT FAILED! free write buf assert failed on chan %d", chan_num_virt);
                         buf_len = 100000; // flush the sh*t
                     }
 
                     CHKCPU(31);
                     if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
-                        vtun_syslog(LOG_ERR, "WARNING! MAX_ALLOWED_BUF_LEN reached! Flushing... chan %d", chan_num_virt);
+                        vlog(LOG_ERR, "WARNING! MAX_ALLOWED_BUF_LEN reached! Flushing... chan %d", chan_num_virt);
                     }
                     sem_wait(write_buf_sem);
                     struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
@@ -8267,7 +8270,7 @@ if(drop_packet_flag) {
                     if(cond_flag && select_net_write(chan_num_virt)) {
                         sem_wait(write_buf_sem);
                         if(debug_trace) {
-                            vtun_syslog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
+                            vlog(LOG_INFO, "sending FRAME_LAST_WRITTEN_SEQ lws %"PRIu32" chan %d", shm_conn_info->write_buf[chan_num_virt].last_written_seq, chan_num_virt);
                         }
                         *((uint32_t *)buf) = htonl(shm_conn_info->write_buf[chan_num_virt].last_written_seq);
                         last_last_written_seq[chan_num_virt] = shm_conn_info->write_buf[chan_num_virt].last_written_seq;
@@ -8277,7 +8280,7 @@ if(drop_packet_flag) {
                         // send LWS - 2
                         int len_ret = udp_write(info.channel[chan_num_virt].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
                         if (len_ret < 0) {
-                            vtun_syslog(LOG_ERR, "Could not send last_written_seq pkt; exit");
+                            vlog(LOG_ERR, "Could not send last_written_seq pkt; exit");
                             linker_term = TERM_NONFATAL;
                         }
                         shm_conn_info->stats[info.process_num].speed_chan_data[chan_num_virt].up_data_len_amt += len_ret;
@@ -8297,7 +8300,7 @@ if(drop_packet_flag) {
         // if we could not create logical channels YET. We can't send data from tun to net. Hope to create later...
             if ((info.channel_amount <= 1) || (info.just_started_recv == 0)) { // only service channel available
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
+            vlog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
 #endif
             if(timercmp(&tv, &select_tv_copy, ==)) { // means select was an immediate return
                 // fill in all structs for immediate read
@@ -8321,7 +8324,7 @@ if(drop_packet_flag) {
         sem_getvalue(write_buf_sem, &wbs_val);
         if ( wbs_val > 1 ) {
             sem_wait(write_buf_sem);
-            vtun_syslog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
+            vlog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
         }
 
         CHKCPU(4);
@@ -8362,20 +8365,20 @@ if(drop_packet_flag) {
         CHKCPU(41);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "debug: R_MODE continue err");
+                vlog(LOG_INFO, "debug: R_MODE continue err");
 #endif
                 len = 0;
             } else if (len == BREAK_ERROR) {
-                vtun_syslog(LOG_INFO, "retransmit_send() BREAK_ERROR");
+                vlog(LOG_INFO, "retransmit_send() BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
 //            break;
             } else if ((len == LASTPACKETMY_NOTIFY) | (len == HAVE_FAST_RESEND_FRAME)) { // if this physical channel had sent last packet
 #ifdef DEBUGG
-                    vtun_syslog(LOG_INFO, "debug: R_MODE main send");
+                    vlog(LOG_INFO, "debug: R_MODE main send");
 #endif
                 if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
                     len = 0; // shittyhold - should never kick in again!    
-                    vtun_syslog(LOG_INFO, "shit! hold!");
+                    vlog(LOG_INFO, "shit! hold!");
                 } else {
                 len = select_devread_send(buf, out2);
         CHKCPU(42);
@@ -8383,7 +8386,7 @@ if(drop_packet_flag) {
                 
                 if (len > 0) {
                 } else if (len == BREAK_ERROR) {
-                    vtun_syslog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
+                    vlog(LOG_INFO, "select_devread_send() R_MODE BREAK_ERROR");
                     linker_term = TERM_NONFATAL;
 //                break;
                 } else if (len == CONTINUE_ERROR) {
@@ -8394,11 +8397,11 @@ if(drop_packet_flag) {
             }
         } else { // this is AGGREGATION MODE(AG_MODE) we jump here if all channels ready for aggregation. It very similar to the old MODE_NORMAL ...
 #ifdef DEBUGG
-        vtun_syslog(LOG_INFO, "debug: AG_MODE");
+        vlog(LOG_INFO, "debug: AG_MODE");
 #endif
             if( (drop_packet_flag == 1) && (drop_counter > 0) ) {
                     len = 0; // shittyhold // never
-                    vtun_syslog(LOG_INFO, "shit! hold!");
+                    vlog(LOG_INFO, "shit! hold!");
             } else {
             len = select_devread_send(buf, out2);
         CHKCPU(43);
@@ -8406,29 +8409,29 @@ if(drop_packet_flag) {
             if (len > 0) {
                 dirty_seq_num++;
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);
+                vlog(LOG_INFO, "Dirty seq_num - %u", dirty_seq_num);
 #endif
             } else if (len == BREAK_ERROR) {
-                vtun_syslog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
+                vlog(LOG_INFO, "select_devread_send() AG_MODE BREAK_ERROR");
                 linker_term = TERM_NONFATAL;
             } else if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select_devread_send() CONTINUE");
+                vlog(LOG_INFO, "select_devread_send() CONTINUE");
 #endif
                 len = 0;
             } else if (len == TRYWAIT_NOTIFY) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
+                vlog(LOG_INFO, "select_devread_send() TRYWAIT_NOTIFY");
 #endif
                 len = 0;
             } else if (len == NET_WRITE_BUSY_NOTIFY) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
+                vlog(LOG_INFO, "select_devread_send() NET_WRITE_BUSY_NOTIFY");
 #endif
                 len = 0;
             } else if (len == SEND_Q_NOTIFY) {
 #ifdef DEBUGG
-                vtun_syslog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
+                vlog(LOG_INFO, "select_devread_send() SEND_Q_NOTIFY");
 #endif
                 len = 0;
             }
@@ -8460,12 +8463,12 @@ if(drop_packet_flag) {
                 len = get_last_packet(1, &last_sent_packet_num[1].seq_num, &out, &sender_pid);
             }
             if (len == -1) {
-                vtun_syslog(LOG_ERR, "WARNING Cannot send train");
+                vlog(LOG_ERR, "WARNING Cannot send train");
             } else {
                 memcpy(buf, out, len);
             }
             if(len < 900) {
-                vtun_syslog(LOG_ERR, "WARNING Train car too small to load track!");
+                vlog(LOG_ERR, "WARNING Train car too small to load track!");
             }
             sem_post(&(shm_conn_info->resend_buf_sem));
             for (; flood_flag > 0; flood_flag--) {
@@ -8474,7 +8477,7 @@ if(drop_packet_flag) {
                 info.channel[1].packet_recv_counter = 0;
                 // send DATA
                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
-//                vtun_syslog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
+//                vlog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
 //                        info.channel[1].local_seq_num);
                 info.channel[1].local_seq_num++;
             }
@@ -8495,17 +8498,17 @@ if(drop_packet_flag) {
                 if (i == 0) {
                     len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                     if(debug_trace) {
-                        vtun_syslog(LOG_INFO, "PING2 chan_num %d", i);
+                        vlog(LOG_INFO, "PING2 chan_num %d", i);
                     }
                 } else {
                     // send ping request - 2
                     len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
                     if(debug_trace) {
-                        vtun_syslog(LOG_INFO, "PING2 chan_num %d", i);
+                        vlog(LOG_INFO, "PING2 chan_num %d", i);
                     }
                 }
                 if (len_ret < 0) {
-						vtun_syslog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
+						vlog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
 						break;
 					}
 					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
@@ -8534,12 +8537,12 @@ if(drop_packet_flag) {
     shm_conn_info->ag_mask &= ~(1 << info.process_num); // set bin mask to zero
     sem_post(&(shm_conn_info->AG_flags_sem));
 #ifdef JSON
-    vtun_syslog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
+    vlog(LOG_INFO,"{\"name\":\"%s\",\"exit\":1}", lfd_host->host);
 #endif
 
-    vtun_syslog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop TERM=%i", lfd_host->host, info.process_num, linker_term);
+    vlog(LOG_INFO, "process_name - %s p_chan_num : %i,  exiting linker loop TERM=%i", lfd_host->host, info.process_num, linker_term);
     if( !linker_term && errno )
-        vtun_syslog(LOG_INFO,"Reason: %s (%d)", strerror(errno), errno);
+        vlog(LOG_INFO,"Reason: %s (%d)", strerror(errno), errno);
 
     if (linker_term == VTUN_SIG_TERM) {
         lfd_host->persist = 0;
@@ -8572,13 +8575,13 @@ if(drop_packet_flag) {
     sigaction(SIGSEGV, &sa, NULL);
     */
     if(buf != save_buf) {
-        vtun_syslog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
+        vlog(LOG_ERR,"ERROR: cannot free buf: CORRUPT!");
         lfd_free(save_buf);
     } else {
         lfd_free(buf);
     }
     if(save_out_buf != out_buf) {
-        vtun_syslog(LOG_ERR,"ERROR: cannot free out_buf: CORRUPT!");
+        vlog(LOG_ERR,"ERROR: cannot free out_buf: CORRUPT!");
         lfd_free(save_out_buf);
     } else {
         lfd_free(out_buf);
@@ -8623,7 +8626,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     weight_cnt = 0;
     acnt = 0; // assert variable
 
-    vtun_syslog_init();
+    vlog_init();
     // these are for retransmit mode... to be removed
     retransmit_count = 0;
     channel_mode = MODE_NORMAL;
@@ -8677,18 +8680,18 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         info.channel_amount = P_TCP_CONN_AMOUNT + 1; // current here number of channels include service_channel
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
-            vtun_syslog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
+            vlog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
             return 0;
         }
         if (info.channel_amount > MAX_TCP_LOGICAL_CHANNELS) {
-            vtun_syslog(LOG_ERR, "ASSERT! channel amount corrupt %i channels. Exit ", info.channel_amount);
+            vlog(LOG_ERR, "ASSERT! channel amount corrupt %i channels. Exit ", info.channel_amount);
             info.channel_amount = MAX_TCP_LOGICAL_CHANNELS;
             linker_term = TERM_NONFATAL;
             return 0;
         }
         chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
         if (chan_info == NULL ) {
-            vtun_syslog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
+            vlog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
             return 0;
         }
         info.channel[0].descriptor = host->rmt_fd; // service channel
@@ -8704,16 +8707,16 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     shm_conn_info->hold_mask |= (1 << info.process_num); // set bin mask to 1 (free send allowed)
     shm_conn_info->need_to_exit &= ~(1 << info.process_num);
 #ifdef DEBUGG
-            vtun_syslog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, info.process_num);
+            vlog(LOG_INFO, "debug: new channel_mask %xx0 add channel - %u", shm_conn_info->channels_mask, info.process_num);
 #endif
     sem_post(&(shm_conn_info->AG_flags_sem));
 
     /* Create pid directory if need */
     if (mkdir(LINKFD_PID_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
         if (errno == EEXIST) {
-            vtun_syslog(LOG_INFO, "%s already  exists :)", LINKFD_PID_DIR);
+            vlog(LOG_INFO, "%s already  exists :)", LINKFD_PID_DIR);
         } else {
-            vtun_syslog(LOG_ERR, "Can't create lock directory %s: %s (%d)", LINKFD_PID_DIR, strerror(errno), errno);
+            vlog(LOG_ERR, "Can't create lock directory %s: %s (%d)", LINKFD_PID_DIR, strerror(errno), errno);
         }
     }
 
@@ -8722,11 +8725,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     sprintf(pid_file_str, "%s/%s", LINKFD_PID_DIR, lfd_host->host);
     int pid_file_fd = open(pid_file_str, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
     if (pid_file_fd < 0) {
-        vtun_syslog(LOG_ERR, "Can't create temp lock file %s", pid_file_str);
+        vlog(LOG_ERR, "Can't create temp lock file %s", pid_file_str);
     }
     int len = sprintf(pid_str, "%d\n", info.pid);
     if (write(pid_file_fd, pid_str, len) != len) {
-        vtun_syslog(LOG_ERR, "Can't write PID %d to %s", info.pid, pid_file_str);
+        vlog(LOG_ERR, "Can't write PID %d to %s", info.pid, pid_file_str);
     }
     close(pid_file_fd);
 
@@ -8772,7 +8775,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
             setvbuf(host->stat.file, NULL, _IOLBF, 0);
             //alarm(VTUN_STAT_IVAL);
         } else
-            vtun_syslog(LOG_ERR, "Can't open stats file %s", file);
+            vlog(LOG_ERR, "Can't open stats file %s", file);
     }
 
     io_init();
@@ -8781,7 +8784,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
 
     io_init();
 
-    vtun_syslog_free();
+    vlog_free();
     remove(pid_file_str); // rm file with my pid
     free(info.channel);
     free(chan_info);

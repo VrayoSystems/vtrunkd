@@ -46,6 +46,7 @@
 
 #include "vtun.h"
 #include "lib.h"
+#include "log.h"
 #include "compat.h"
 
 /* Global options for the server and client */
@@ -127,7 +128,7 @@ int main(int argc, char *argv[], char *env[])
     //default_host.MAX_TUNNELS_NUM = P_MAX_TUNNELS_NUM;
 
     /* Start logging to syslog and stderr */
-    vtun_openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+    vlog_open("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
     while ((opt = getopt(argc, argv, "S:R:mDisf:P:L:t:M:npvh?")) != EOF) {
         switch (opt) {
@@ -201,8 +202,8 @@ int main(int argc, char *argv[], char *env[])
 
     if (vtun.syslog != LOG_DAEMON) {
         /* Restart logging to syslog using specified facility  */
-        vtun_closelog();
-        vtun_openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, vtun.syslog);
+        vlog_close();
+        vlog_open("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, vtun.syslog);
     }
 
     if (!svr) {
@@ -213,7 +214,7 @@ int main(int argc, char *argv[], char *env[])
         hst = argv[optind++];
 
         if ( !(host = find_host(hst)) ) {
-            vtun_syslog(LOG_ERR, "Host %s not found in %s", hst, vtun.cfg_file);
+            vlog(LOG_ERR, "Host %s not found in %s", hst, vtun.cfg_file);
             exit(1);
         }
 
@@ -251,7 +252,7 @@ int main(int argc, char *argv[], char *env[])
         core_limit.rlim_max = RLIM_INFINITY;
 
         if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
-            vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+            vlog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
         }
         /* Direct stdin,stdout,stderr to '/dev/null' */
         fd = open("/dev/null", O_RDWR);
@@ -300,7 +301,7 @@ void write_pid(void)
     FILE *f;
 
     if ( !(f = fopen(VTUN_PID_FILE, "w")) ) {
-        vtun_syslog(LOG_ERR, "Can't write PID file");
+        vlog(LOG_ERR, "Can't write PID file");
         return;
     }
 
@@ -311,7 +312,7 @@ void write_pid(void)
 void reread_config(int sig)
 {
     if ( !read_config(vtun.cfg_file) ) {
-        vtun_syslog(LOG_ERR, "No hosts defined");
+        vlog(LOG_ERR, "No hosts defined");
         exit(1);
     }
 }

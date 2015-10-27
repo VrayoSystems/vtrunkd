@@ -32,6 +32,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 
 /*
  * Shaper module.
@@ -55,7 +56,7 @@ int shaper_init(struct vtun_host *host)
 
     bytes = 0;
 
-    vtun_syslog(LOG_INFO, "Traffic shaping(speed %dK) initialized.", host->spd_out);
+    vlog(LOG_INFO, "Traffic shaping(speed %dK) initialized.", host->spd_out);
     return 0;
 }
 
@@ -67,13 +68,6 @@ int shaper_counter(int len, char *in, char **out)
 
     *out = in;
     return len;
-}
-
-/* Convert tv struct to milisec */
-unsigned long inline tv2ms(struct timeval tv)
-{
-    register unsigned long ms = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
-    return  ms ? ms : 1;
 }
 
 #ifndef timersub
@@ -147,7 +141,7 @@ struct lfd_mod lfd_shaper = {
 
 int no_shaper(struct vtun_host *host)
 {
-    vtun_syslog(LOG_INFO, "Traffic shaping is not supported");
+    vlog(LOG_INFO, "Traffic shaping is not supported");
     return -1;
 }
 

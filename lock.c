@@ -40,6 +40,7 @@
 #include "linkfd.h"
 #include "lib.h" 
 #include "lock.h"
+#include "log.h"
 
 int create_lock(char * file)
 {
@@ -52,16 +53,16 @@ int create_lock(char * file)
     /* Create lock directory*/
     if (mkdir(VTUN_LOCK_DIR, S_IRWXU | S_IRWXG | S_IRWXO) == -1) {
         if (errno == EEXIST) {
-            vtun_syslog(LOG_INFO, "%s already  exists", VTUN_LOCK_DIR);
+            vlog(LOG_INFO, "%s already  exists", VTUN_LOCK_DIR);
         } else {
-            vtun_syslog(LOG_INFO, "Can't create lock directory %s: %s (%d)", VTUN_LOCK_DIR, strerror(errno), errno);
+            vlog(LOG_INFO, "Can't create lock directory %s: %s (%d)", VTUN_LOCK_DIR, strerror(errno), errno);
         }
 
     }
   /* Create temp file */
   sprintf(tmp_file, "%s_%d_tmp\n", file, pid);
   if( (fd = open(tmp_file, O_WRONLY|O_CREAT|O_TRUNC, 0644)) < 0 ){
-     vtun_syslog(LOG_ERR, "Can't create temp lock file %s", file);
+     vlog(LOG_ERR, "Can't create temp lock file %s", file);
      return -1;
   }
 
@@ -73,7 +74,7 @@ int create_lock(char * file)
         ret = -1;
      }
   } else { 
-     vtun_syslog(LOG_ERR, "Can't write to %s", tmp_file);
+     vlog(LOG_ERR, "Can't write to %s", tmp_file);
      ret = -1;
   }
   close(fd);
@@ -103,7 +104,7 @@ pid_t read_lock(char * file)
   if( !pid || errno == ERANGE ){
      /* Broken lock file */
      if( unlink(file) < 0 )
-        vtun_syslog(LOG_ERR, "Unable to remove broken lock %s", file);
+        vlog(LOG_ERR, "Unable to remove broken lock %s", file);
      return -1;
   }
 
@@ -111,7 +112,7 @@ pid_t read_lock(char * file)
   if( kill(pid, 0) < 0 && errno == ESRCH ){
      /* Process is dead. Remove stale lock. */
      if( unlink(file) < 0 )
-        vtun_syslog(LOG_ERR, "Unable to remove stale lock %s", file);
+        vlog(LOG_ERR, "Unable to remove stale lock %s", file);
      return -1;
   }
 
@@ -134,11 +135,11 @@ int lock_host(struct vtun_host * host)
      /* Old process is alive */
      switch( host->multi ){
 	case VTUN_MULTI_KILL:
-	    vtun_syslog(LOG_INFO, "We have another process (process %d), connection deny", pid);
+	    vlog(LOG_INFO, "We have another process (process %d), connection deny", pid);
             return -1; //temporaly, deny if process working
-           vtun_syslog(LOG_INFO, "Killing old connection (process %d)", pid);
+           vlog(LOG_INFO, "Killing old connection (process %d)", pid);
            if( kill(pid, SIGTERM) < 0 && errno != ESRCH ){
-              vtun_syslog(LOG_ERR, "Can't kill process %d. %s",pid,strerror(errno));
+              vlog(LOG_ERR, "Can't kill process %d. %s",pid,strerror(errno));
               return -1;
            }
            /* Give it a time(up to 5 secs) to terminate */
@@ -149,10 +150,10 @@ int lock_host(struct vtun_host * host)
 
 	   /* Make sure it's dead */		 
            if( !kill(pid, SIGKILL) ){
-              vtun_syslog(LOG_ERR, "Process %d ignored TERM, killed with KILL", pid);
+              vlog(LOG_ERR, "Process %d ignored TERM, killed with KILL", pid);
    	      /* Remove lock */
               if( unlink(lock_file) < 0 )
-                 vtun_syslog(LOG_ERR, "Unable to remove lock %s", lock_file);
+                 vlog(LOG_ERR, "Unable to remove lock %s", lock_file);
 	   }
 
 	   break;
@@ -173,5 +174,5 @@ void unlock_host(struct vtun_host *host)
   sprintf(lock_file, "%s/%s", VTUN_LOCK_DIR, host->host);
 
   if( unlink(lock_file) < 0 )
-     vtun_syslog(LOG_ERR, "Unable to remove lock %s", lock_file);
+     vlog(LOG_ERR, "Unable to remove lock %s", lock_file);
 }

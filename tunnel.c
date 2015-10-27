@@ -79,6 +79,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 #include "netlib.h"
 #include "driver.h"
 
@@ -127,11 +128,11 @@ read_fd(int fd, void *ptr, size_t nbytes, int *recvfd)
     if ( (cmptr = CMSG_FIRSTHDR(&msg)) != NULL &&
             cmptr->cmsg_len == CMSG_LEN(sizeof(int))) {
         if (cmptr->cmsg_level != SOL_SOCKET) {
-            vtun_syslog(LOG_ERR, "control level != SOL_SOCKET");
+            vlog(LOG_ERR, "control level != SOL_SOCKET");
             return -1;
         }
         if (cmptr->cmsg_type != SCM_RIGHTS) {
-            vtun_syslog(LOG_ERR, "control type != SCM_RIGHTS");
+            vlog(LOG_ERR, "control type != SCM_RIGHTS");
             return -1;
         }
         *recvfd = *((int *) CMSG_DATA(cmptr));
@@ -274,7 +275,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
 
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        vtun_syslog(LOG_ERR, "srv socket");
+        vlog(LOG_ERR, "srv socket");
         return -1;
     }
 
@@ -283,18 +284,18 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
     unlink(local.sun_path);
     len = strlen(local.sun_path) + sizeof(local.sun_family);
     if (bind(s, (struct sockaddr *)&local, len) == -1) {
-        vtun_syslog(LOG_ERR, "srv bind");
+        vlog(LOG_ERR, "srv bind");
         return -1;
     }
 
     if (listen(s, 5) == -1) {
-        vtun_syslog(LOG_ERR, "listen");
+        vlog(LOG_ERR, "listen");
         return -1;
     }
 
     gettimeofday(&cur_time, NULL);
 
-    vtun_syslog(LOG_INFO, "fd_server waiting for a connection...\n");
+    vlog(LOG_INFO, "fd_server waiting for a connection...\n");
     int select_counter = 0;
     while (!fdserver_term) {
         int done, n = 0, i;
@@ -309,10 +310,10 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         if ( (len = select(s + 1, &fdset, NULL, NULL, &tv)) < 0 ) { // selecting from multiple processes does actually work...
 // errors are OK if signal is received... TODO: do we have any signals left???
             if ( errno != EAGAIN && errno != EINTR ) {
-                vtun_syslog(LOG_INFO, "fd_server eagain select err; exit");
+                vlog(LOG_INFO, "fd_server eagain select err; exit");
                 break;
             } else {
-//vtun_syslog(LOG_INFO, "fd_server else select err; continue norm");
+//vlog(LOG_INFO, "fd_server else select err; continue norm");
                 continue;
             }
         }
@@ -323,18 +324,18 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
             t = sizeof(remote);
 
             if ((s2 = accept(s, (struct sockaddr *)&remote, &t)) == -1) {
-                vtun_syslog(LOG_ERR, "srv accept");
+                vlog(LOG_ERR, "srv accept");
                 return -1;
             }
 
-            vtun_syslog(LOG_INFO, "fd_server connected.\n");
+            vlog(LOG_INFO, "fd_server connected.\n");
 
             done = 0;
             do {
 
                 if (!done)
                     if (write_fd(s2, &ptr, ptr_len, fd) < 0) {
-                        vtun_syslog(LOG_ERR, "fd_srv send error");
+                        vlog(LOG_ERR, "fd_srv send error");
                         done = 1;
                     }
                 done = 1;
@@ -352,19 +353,19 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         process_logs(shm_conn_info);
 #endif
     }
-    vtun_syslog(LOG_INFO, "Killing old connections");
+    vlog(LOG_INFO, "Killing old connections");
     /* Make sure it's dead */
     for (int i = 0; i < 32; i++) {
         if (!(shm_conn_info->channels_mask & (1 << i))) {
             continue;
         }
         if (!kill(shm_conn_info->stats[i].pid, SIGKILL)) {
-            vtun_syslog(LOG_ERR, "Process %d killed with KILL", shm_conn_info->stats[i].pid);
+            vlog(LOG_ERR, "Process %d killed with KILL", shm_conn_info->stats[i].pid);
         }
     }
 // clean up
     memset(shm_conn_info, 0, sizeof(struct conn_info));
-    vtun_syslog(LOG_INFO, "fd_server zeroing shm & exiting.\n");
+    vlog(LOG_INFO, "fd_server zeroing shm & exiting.\n");
     exit(0);
 
     return 0;
@@ -377,14 +378,14 @@ int read_fd_full(int *fd, char *dev) {
     struct sockaddr_un local, remote;
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        vtun_syslog(LOG_ERR, "cannot create socket for fd_server connection");
+        vlog(LOG_ERR, "cannot create socket for fd_server connection");
         return -1;
     }
     remote.sun_family = AF_UNIX;
     sprintf(remote.sun_path, "/tmp/vtrunkd_%s.socket", dev);
     len = strlen(remote.sun_path) + sizeof(remote.sun_family);
     if (connect(s, (struct sockaddr *)&remote, len) == -1) {
-        vtun_syslog(LOG_ERR, "can not connect to fd_server UNIX SOCKET %s ", remote.sun_path);
+        vlog(LOG_ERR, "can not connect to fd_server UNIX SOCKET %s ", remote.sun_path);
         close(s); // dunno why this couls happen but anyways...
         return -1;
     }
@@ -415,18 +416,18 @@ int tunnel(struct vtun_host *host, int srv)
 
 
     if (host->persist == VTUN_PERSIST_KEEPIF) {
-        vtun_syslog(LOG_INFO, "PERSIST enabled");
+        vlog(LOG_INFO, "PERSIST enabled");
     } else {
-        vtun_syslog(LOG_INFO, "PERSIST DIS-abled");
+        vlog(LOG_INFO, "PERSIST DIS-abled");
     }
 
 
     if ( (host->persist == VTUN_PERSIST_KEEPIF) &&
             (host->loc_fd >= 0) ) {
         interface_already_open = 0; // always try to reopen interface since shm is always required to get!!
-        vtun_syslog(LOG_INFO, "Reusing open fd(NOT:-)!");
+        vlog(LOG_INFO, "Reusing open fd(NOT:-)!");
     } else {
-        vtun_syslog(LOG_INFO, "New fd required (%d) ", host->loc_fd);
+        vlog(LOG_INFO, "New fd required (%d) ", host->loc_fd);
     }
 
     /* Initialize device. */
@@ -438,21 +439,21 @@ int tunnel(struct vtun_host *host, int srv)
         switch ( host->flags & VTUN_TYPE_MASK ) {
         case VTUN_TTY:
             if ( (fd[0] = pty_open(dev)) < 0 ) {
-                vtun_syslog(LOG_ERR, "Can't allocate pseudo tty. %s(%d)", strerror(errno), errno);
+                vlog(LOG_ERR, "Can't allocate pseudo tty. %s(%d)", strerror(errno), errno);
                 return -1;
             }
             break;
 
         case VTUN_PIPE:
             if ( pipe_open(fd) < 0 ) {
-                vtun_syslog(LOG_ERR, "Can't create pipe. %s(%d)", strerror(errno), errno);
+                vlog(LOG_ERR, "Can't create pipe. %s(%d)", strerror(errno), errno);
                 return -1;
             }
             break;
 
         case VTUN_ETHER:
             if ( (fd[0] = tap_open(dev)) < 0 ) {
-                vtun_syslog(LOG_ERR, "Can't allocate tap device %s. %s(%d)", dev, strerror(errno), errno);
+                vlog(LOG_ERR, "Can't allocate tap device %s. %s(%d)", dev, strerror(errno), errno);
                 return -1;
             }
             break;
@@ -462,13 +463,13 @@ int tunnel(struct vtun_host *host, int srv)
                 int while_end = 1;
                 for (int i = 0; while_end; i++) {
                     if (srv) {
-                        vtun_syslog(LOG_INFO, "vtrunkd SERVER: trying to attach to running server");
+                        vlog(LOG_INFO, "vtrunkd SERVER: trying to attach to running server");
                         if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
-                            vtun_syslog(LOG_ERR, "shmget 3");
+                            vlog(LOG_ERR, "shmget 3");
                             return -1;
                         }
                         if ((shm_conn_info = shmat(shmid, NULL, 0)) == ((struct conn_info *) - 1)) {
-                            vtun_syslog(LOG_ERR, "shmat 3");
+                            vlog(LOG_ERR, "shmat 3");
                             return -1;
                         }
 // now scan for names, only fail if no found
@@ -479,29 +480,29 @@ int tunnel(struct vtun_host *host, int srv)
                             }
                         }
                         if (connid < 0) {
-                            vtun_syslog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find master server shm", dev, strerror(errno),
+                            vlog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find master server shm", dev, strerror(errno),
                                         errno);
                             return 0;
                         }
                         if (!shm_conn_info[connid].rdy) {
                             if (i == 20) {
-                                vtun_syslog(LOG_ERR, "SHM not ready EXIT");
+                                vlog(LOG_ERR, "SHM not ready EXIT");
                                 return 0;
                             }
-                            vtun_syslog(LOG_WARNING, "SHM not ready yet; I'll try again");
+                            vlog(LOG_WARNING, "SHM not ready yet; I'll try again");
                             usleep(200000);
                             continue;
                         }
                     } else {
-                        vtun_syslog(LOG_INFO, "vtrunkd CLIENT: trying to attach to running buddy");
+                        vlog(LOG_INFO, "vtrunkd CLIENT: trying to attach to running buddy");
 // match only first conn...
 // here comes the play. !. detect whether we are server or client??
                         if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info), 0666)) < 0) {
-                            vtun_syslog(LOG_ERR, "shmget 4");
+                            vlog(LOG_ERR, "shmget 4");
                             return -1;
                         }
                         if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) - 1) {
-                            vtun_syslog(LOG_ERR, "shmat 4 - %s(%d)",
+                            vlog(LOG_ERR, "shmat 4 - %s(%d)",
                                         strerror(errno), errno); // FAULT HERE
                             return -1;
                         }
@@ -512,16 +513,16 @@ int tunnel(struct vtun_host *host, int srv)
 // ok
                             connid = 0;
                         } else {
-                            vtun_syslog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find running buddy shm %s != %s", dev,
+                            vlog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find running buddy shm %s != %s", dev,
                                         strerror(errno), errno, shm_conn_info[0].devname, dev);
                             return 0;
                         }
                         if (!shm_conn_info[connid].rdy) {
                             if (i == 20) {
-                                vtun_syslog(LOG_ERR, "SHM not ready EXIT");
+                                vlog(LOG_ERR, "SHM not ready EXIT");
                                 return 0;
                             }
-                            vtun_syslog(LOG_WARNING, "SHM not ready yet; I'll try again");
+                            vlog(LOG_WARNING, "SHM not ready yet; I'll try again");
                             usleep(200000);
                             continue;
                         }
@@ -534,7 +535,7 @@ int tunnel(struct vtun_host *host, int srv)
 // in either case, try to read
 
                 if (read_fd_full(&fd[0], dev) < 0) {
-//vtun_syslog(LOG_ERR,"Cannot read fd tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
+//vlog(LOG_ERR,"Cannot read fd tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
 // wtf is going on here?? always <0! ?!?
 //return -1;
                 }
@@ -543,7 +544,7 @@ int tunnel(struct vtun_host *host, int srv)
 
 
                 if (fd[0] < 0) { // still...
-                    vtun_syslog(LOG_ERR, "CRITICAL ERROR Can't allocate tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
+                    vlog(LOG_ERR, "CRITICAL ERROR Can't allocate tun device %s. %s(%d); failed to get from server", dev, strerror(errno), errno);
                     return 0;
                 } else {
 // now we are forked, and have everything set up (?)
@@ -552,13 +553,13 @@ int tunnel(struct vtun_host *host, int srv)
             } else {
 // We were able to open device => we are new connection. connect shm, set devname in conn_info
                 if (srv) {
-                    vtun_syslog(LOG_INFO, "vtrunkd SERVER: setting up fresh connection");
+                    vlog(LOG_INFO, "vtrunkd SERVER: setting up fresh connection");
                     if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM, 0666)) < 0) {
-                        vtun_syslog(LOG_ERR, "CRITICAL ERROR shmget 5");
+                        vlog(LOG_ERR, "CRITICAL ERROR shmget 5");
                         return -1;
                     }
                     if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) - 1) {
-                        vtun_syslog(LOG_ERR, "CRITICAL ERROR shmat 5");
+                        vlog(LOG_ERR, "CRITICAL ERROR shmat 5");
                         return -1;
                     }
 // now scan for free names
@@ -570,18 +571,18 @@ int tunnel(struct vtun_host *host, int srv)
                         }
                     }
                     if (i >= vtun.MAX_TUNNELS_NUM - 1) {
-                        vtun_syslog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find free slots master server shm", dev, strerror(errno), errno);
+                        vlog(LOG_ERR, "Can't allocate tun device %s. %s(%d) - did not find free slots master server shm", dev, strerror(errno), errno);
                         return -1;
                     }
                 } else {
-                    vtun_syslog(LOG_INFO, "vtrunkd CLIENT: setting up fresh connection");
+                    vlog(LOG_INFO, "vtrunkd CLIENT: setting up fresh connection");
 
                     if ((shmid = shmget(vtun.shm_key, sizeof(struct conn_info), 0666)) < 0) {
-                        vtun_syslog(LOG_ERR, "CRITICAL ERROR shmget 6");
+                        vlog(LOG_ERR, "CRITICAL ERROR shmget 6");
                         return -1;
                     }
                     if ((shm_conn_info = shmat(shmid, NULL, 0)) == (struct conn_info *) - 1) {
-                        vtun_syslog(LOG_ERR, "CRITICAL ERROR shmat 6");
+                        vlog(LOG_ERR, "CRITICAL ERROR shmat 6");
                         return -1;
                     }
 
@@ -590,10 +591,10 @@ int tunnel(struct vtun_host *host, int srv)
                     if (shm_conn_info[0].devname[0] == 0) {
 // ok
                         strcpy(shm_conn_info[0].devname, dev);
-                        vtun_syslog(LOG_INFO, "copied tun name to shm_conn_info: %s", shm_conn_info[0].devname);
+                        vlog(LOG_INFO, "copied tun name to shm_conn_info: %s", shm_conn_info[0].devname);
                         connid = 0;
                     } else {
-                        vtun_syslog(LOG_ERR, "CRITICAL ERROR Can't allocate tun device %s. %s(%d) - did not find freeslot at running buddy shm", dev, strerror(errno), errno);
+                        vlog(LOG_ERR, "CRITICAL ERROR Can't allocate tun device %s. %s(%d) - did not find freeslot at running buddy shm", dev, strerror(errno), errno);
                         return -1;
                     }
                 }
@@ -607,18 +608,18 @@ int tunnel(struct vtun_host *host, int srv)
                     strcpy(ifr_queue.ifr_name, dev);
                     ifr_queue.ifr_qlen = host->TUN_TXQUEUE_LEN;
                     if (ioctl(ctl_sock, SIOCSIFTXQLEN, (void *) &ifr_queue) < 0) {
-                        vtun_syslog(LOG_ERR, "ioctl SIOCGIFTXQLEN");
+                        vlog(LOG_ERR, "ioctl SIOCGIFTXQLEN");
                         return -1;
                     }
                     close(ctl_sock);
                 }
                 else {
-                    vtun_syslog(LOG_ERR, "error open control socket");
+                    vlog(LOG_ERR, "error open control socket");
                     return -1;
                 }
 
 // init all semaphores, etc...
-                vtun_syslog(LOG_INFO, "init vars sem %s", shm_conn_info[connid].devname);
+                vlog(LOG_INFO, "init vars sem %s", shm_conn_info[connid].devname);
 
                 sem_init(&shm_conn_info[connid].tun_device_sem, 1, 1);
                 sem_init(&shm_conn_info[connid].write_buf_sem, 1, 1);
@@ -650,9 +651,9 @@ int tunnel(struct vtun_host *host, int srv)
                 frame_llist_init(&shm_conn_info[connid].rb_free_frames);
                 frame_llist_fill(&shm_conn_info[connid].rb_free_frames, shm_conn_info[connid].resend_frames_buf, RESEND_BUF_SIZE);
 
-                vtun_syslog(LOG_INFO, "Starting fd_server");
+                vlog(LOG_INFO, "Starting fd_server");
                 if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-                    vtun_syslog(LOG_ERR, "socket 4");
+                    vlog(LOG_ERR, "socket 4");
                     return -1;
                 }
                 remote.sun_family = AF_UNIX;
@@ -661,7 +662,7 @@ int tunnel(struct vtun_host *host, int srv)
                 if (connect(s, (struct sockaddr *)&remote, len) == -1) {
                     pid2 = fork();
                     if (pid2 < 0) {
-                        vtun_syslog(LOG_ERR, "Couldn't fork() on fd server");
+                        vlog(LOG_ERR, "Couldn't fork() on fd server");
                         return 0;
                     }
                     if (pid2 != 0) {
@@ -678,7 +679,7 @@ int tunnel(struct vtun_host *host, int srv)
             }
             break;
         }
-        vtun_syslog(LOG_INFO, "Setting loc_fd to %d", fd[0]);
+        vlog(LOG_INFO, "Setting loc_fd to %d", fd[0]);
         host->loc_fd = fd[0];
     }
     host->sopt.dev = strdup(dev);
@@ -699,7 +700,7 @@ int tunnel(struct vtun_host *host, int srv)
 
     case VTUN_UDP:
         if ( (opt = udp_session(host)) == -1) {
-            vtun_syslog(LOG_ERR, "Can't establish UDP session");
+            vlog(LOG_ERR, "Can't establish UDP session");
             close(fd[1]);
             if ( ! ( host->persist == VTUN_PERSIST_KEEPIF ) )
                 close(fd[0]);
@@ -719,10 +720,10 @@ int tunnel(struct vtun_host *host, int srv)
     core_limit.rlim_max = RLIM_INFINITY;
 
     if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
-        vtun_syslog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
+        vlog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
     }
     if ( pid < 0 ) {
-        vtun_syslog(LOG_ERR, "Couldn't fork()");
+        vlog(LOG_ERR, "Couldn't fork()");
         if ( ! ( host->persist == VTUN_PERSIST_KEEPIF ) )
             close(fd[0]);
         close(fd[1]);
@@ -736,7 +737,7 @@ int tunnel(struct vtun_host *host, int srv)
             case VTUN_TTY:
                 /* Open pty slave (becomes controlling terminal) */
                 if ( (fd[1] = open(dev, O_RDWR)) < 0) {
-                    vtun_syslog(LOG_ERR, "Couldn't open slave pty");
+                    vlog(LOG_ERR, "Couldn't open slave pty");
                     exit(0);
                 }
             /* Fall through */
@@ -812,7 +813,7 @@ int tunnel(struct vtun_host *host, int srv)
     }
     shm_conn_info[connid].stats[my_conn_num].pid = getpid();
     if (my_conn_num == -1) {
-        vtun_syslog(LOG_ERR, "could not find free conn_num for stats, exit.");
+        vlog(LOG_ERR, "could not find free conn_num for stats, exit.");
         return -1;
     }
 
@@ -825,13 +826,13 @@ int tunnel(struct vtun_host *host, int srv)
 // if we do "free" here, we need to kill fd server, free the local fd tun device - otherwise it will try shm_find+fd_read and fail
 // now check the lock.. if left locked - release!
             if (sem_trywait(&(shm_conn_info[connid].tun_device_sem)) == -1) {
-                vtun_syslog(LOG_ERR, "ASSERT: usecount == 0 && sem left unclosed!");
+                vlog(LOG_ERR, "ASSERT: usecount == 0 && sem left unclosed!");
             } else {
                 sem_post(&(shm_conn_info[connid].tun_device_sem));
             }
         }
         if (shm_conn_info[connid].usecount < 0) {
-            vtun_syslog(LOG_ERR, "ASSERT: usecount < 0 !!!");
+            vlog(LOG_ERR, "ASSERT: usecount < 0 !!!");
         }
     } else {
 // noop
