@@ -1,9 +1,9 @@
-/*  
-   vtrunkd - Virtual Tunnel Trunking over TCP/IP network. 
+/*
+   vtrunkd - Virtual Tunnel Trunking over TCP/IP network.
 
    Copyright (C) 2011  Andrew Gryaznov <realgrandrew@gmail.com>
 
-   Vtrunkd has been derived from VTUN package by Maxim Krasnyansky. 
+   Vtrunkd has been derived from VTUN package by Maxim Krasnyansky.
    vtun Copyright (C) 1998-2000  Maxim Krasnyansky <max_mk@yahoo.com>
 
    This program is free software; you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 /*
  * main.c,v 1.1.1.2.2.8.2.4 2006/11/16 04:03:41 mtbishop Exp
- */ 
+ */
 
 #include "config.h"
 #include "version.h"
@@ -40,8 +40,8 @@
 #endif
 
 #ifdef DEBUGG
-     #include <sys/types.h>
-     #include <sys/gmon.h>
+#include <sys/types.h>
+#include <sys/gmon.h>
 #endif
 
 #include "vtun.h"
@@ -58,131 +58,131 @@ void reread_config(int sig);
 void usage(void);
 void version();
 
-extern int optind,opterr,optopt;
+extern int optind, opterr, optopt;
 extern char *optarg;
 
 int main(int argc, char *argv[], char *env[])
 {
-     int svr, daemon, sock, dofork, fd, opt;
-     struct vtun_host *host = NULL;
-     struct sigaction sa;
-     char *hst;
+    int svr, daemon, sock, dofork, fd, opt;
+    struct vtun_host *host = NULL;
+    struct sigaction sa;
+    char *hst;
 
-     /* Configure default settings */
-     svr = 0; daemon = 1; sock = 0; dofork = 1;
+    /* Configure default settings */
+    svr = 0; daemon = 1; sock = 0; dofork = 1;
 
-     vtun.cfg_file = VTUN_CONFIG_FILE;
-     vtun.persist = -1;
-     vtun.timeout = -1;
-     
-     vtun.MAX_TUNNELS_NUM = -1; // todo: defaults?
-     
-     /* Dup strings because parser will try to free them */
-     vtun.ppp   = strdup("/usr/sbin/pppd");
-     vtun.ifcfg = strdup("/sbin/ifconfig");
-     vtun.route = strdup("/sbin/route");
-     vtun.fwall = strdup("/sbin/ipchains");	
-     vtun.iproute = strdup("/sbin/ip");	
+    vtun.cfg_file = VTUN_CONFIG_FILE;
+    vtun.persist = -1;
+    vtun.timeout = -1;
 
-     vtun.svr_name = NULL;
-     vtun.svr_addr = NULL;
-     vtun.bind_addr.port = -1;
-     vtun.start_port = 0;
-     vtun.end_port = 0;
-     vtun.svr_type = -1;
-     vtun.syslog   = LOG_DAEMON;
-     vtun.shm_key = SHM_TUN_KEY;
+    vtun.MAX_TUNNELS_NUM = -1; // todo: defaults?
 
-     /* Initialize default host options */
-     memset(&default_host, 0, sizeof(default_host));
-     default_host.flags   = VTUN_TTY | VTUN_TCP;
-     default_host.multi   = VTUN_MULTI_ALLOW;
-     default_host.timeout = VTUN_CONNECT_TIMEOUT;
-     default_host.ka_interval = 30;
-     default_host.ka_failure  = 4;
-     default_host.loc_fd = default_host.rmt_fd = -1;
-     
-     default_host.TICK_SECS = P_TICK_SECS;
-     default_host.RXMIT_CNT_DROP_PERIOD = P_RXMIT_CNT_DROP_PERIOD;
-     default_host.MAX_WEIGHT_NORM = P_MAX_WEIGHT_NORM;
-     default_host.WEIGHT_SCALE = P_WEIGHT_SCALE;
-     default_host.WEIGHT_SMOOTH_DIV = P_WEIGHT_SMOOTH_DIV;
-     default_host.WEIGHT_START_STICKINESS = P_WEIGHT_START_STICKINESS;
-     default_host.WEIGHT_SAW_STEP_UP_DIV = P_WEIGHT_SAW_STEP_UP_DIV;
-     default_host.WEIGHT_SAW_STEP_UP_MIN_STEP = P_WEIGHT_SAW_STEP_UP_MIN_STEP;
-     default_host.WEIGHT_SAW_STEP_DN_DIV = P_WEIGHT_SAW_STEP_DN_DIV;
-     default_host.WEIGHT_MSEC_DELAY = P_WEIGHT_MSEC_DELAY;
-     default_host.PEN_USEC_IMMUNE = P_PEN_USEC_IMMUNE;
-     default_host.MAX_LATENCY = P_MAX_LATENCY;
-     default_host.MAX_LATENCY_DROP = P_MAX_LATENCY_DROP;
-     default_host.MAX_ALLOWED_BUF_LEN = P_MAX_ALLOWED_BUF_LEN;
-     default_host.MAX_REORDER = P_MAX_REORDER;
-     default_host.MAX_IDLE_TIMEOUT = P_MAX_IDLE_TIMEOUT;
-     default_host.FRAME_COUNT_SEND_LWS = P_FRAME_COUNT_SEND_LWS;
-     default_host.PING_INTERVAL = P_PING_INTERVAL;
-     default_host.TUN_TXQUEUE_LEN = P_TUN_TXQUEUE_LEN;
-     default_host.TCP_CONN_AMOUNT = P_TCP_CONN_AMOUNT;
-     default_host.START_WEIGHT = 0;
-     default_host.RT_MARK = -1;
-     //default_host.MAX_TUNNELS_NUM = P_MAX_TUNNELS_NUM;
+    /* Dup strings because parser will try to free them */
+    vtun.ppp   = strdup("/usr/sbin/pppd");
+    vtun.ifcfg = strdup("/sbin/ifconfig");
+    vtun.route = strdup("/sbin/route");
+    vtun.fwall = strdup("/sbin/ipchains");
+    vtun.iproute = strdup("/sbin/ip");
 
-     /* Start logging to syslog and stderr */
-     openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+    vtun.svr_name = NULL;
+    vtun.svr_addr = NULL;
+    vtun.bind_addr.port = -1;
+    vtun.start_port = 0;
+    vtun.end_port = 0;
+    vtun.svr_type = -1;
+    vtun.syslog   = LOG_DAEMON;
+    vtun.shm_key = SHM_TUN_KEY;
+
+    /* Initialize default host options */
+    memset(&default_host, 0, sizeof(default_host));
+    default_host.flags   = VTUN_TTY | VTUN_TCP;
+    default_host.multi   = VTUN_MULTI_ALLOW;
+    default_host.timeout = VTUN_CONNECT_TIMEOUT;
+    default_host.ka_interval = 30;
+    default_host.ka_failure  = 4;
+    default_host.loc_fd = default_host.rmt_fd = -1;
+
+    default_host.TICK_SECS = P_TICK_SECS;
+    default_host.RXMIT_CNT_DROP_PERIOD = P_RXMIT_CNT_DROP_PERIOD;
+    default_host.MAX_WEIGHT_NORM = P_MAX_WEIGHT_NORM;
+    default_host.WEIGHT_SCALE = P_WEIGHT_SCALE;
+    default_host.WEIGHT_SMOOTH_DIV = P_WEIGHT_SMOOTH_DIV;
+    default_host.WEIGHT_START_STICKINESS = P_WEIGHT_START_STICKINESS;
+    default_host.WEIGHT_SAW_STEP_UP_DIV = P_WEIGHT_SAW_STEP_UP_DIV;
+    default_host.WEIGHT_SAW_STEP_UP_MIN_STEP = P_WEIGHT_SAW_STEP_UP_MIN_STEP;
+    default_host.WEIGHT_SAW_STEP_DN_DIV = P_WEIGHT_SAW_STEP_DN_DIV;
+    default_host.WEIGHT_MSEC_DELAY = P_WEIGHT_MSEC_DELAY;
+    default_host.PEN_USEC_IMMUNE = P_PEN_USEC_IMMUNE;
+    default_host.MAX_LATENCY = P_MAX_LATENCY;
+    default_host.MAX_LATENCY_DROP = P_MAX_LATENCY_DROP;
+    default_host.MAX_ALLOWED_BUF_LEN = P_MAX_ALLOWED_BUF_LEN;
+    default_host.MAX_REORDER = P_MAX_REORDER;
+    default_host.MAX_IDLE_TIMEOUT = P_MAX_IDLE_TIMEOUT;
+    default_host.FRAME_COUNT_SEND_LWS = P_FRAME_COUNT_SEND_LWS;
+    default_host.PING_INTERVAL = P_PING_INTERVAL;
+    default_host.TUN_TXQUEUE_LEN = P_TUN_TXQUEUE_LEN;
+    default_host.TCP_CONN_AMOUNT = P_TCP_CONN_AMOUNT;
+    default_host.START_WEIGHT = 0;
+    default_host.RT_MARK = -1;
+    //default_host.MAX_TUNNELS_NUM = P_MAX_TUNNELS_NUM;
+
+    /* Start logging to syslog and stderr */
+    vtun_openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
     while ((opt = getopt(argc, argv, "S:R:mDisf:P:L:t:M:npvh?")) != EOF) {
-	switch(opt){
-	    case 'S':
-	        vtun.shm_key = atoi(optarg);
-	        break;
-	    case 'R':
-	        vtun.start_port = 0;
-	        char *start_port = optarg;
-	        char *end_port = strchr(start_port,'-');
-	        *end_port = '\0';
-	        end_port++;
-	        vtun.start_port = atoi(start_port);
+        switch (opt) {
+        case 'S':
+            vtun.shm_key = atoi(optarg);
+            break;
+        case 'R':
+            vtun.start_port = 0;
+            char *start_port = optarg;
+            char *end_port = strchr(start_port, '-');
+            *end_port = '\0';
+            end_port++;
+            vtun.start_port = atoi(start_port);
             vtun.end_port = atoi(end_port);
-	        break;
-	    case 'm':
-	        if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) {
-		    perror("Unable to mlockall()");
-		    exit(-1);
-	        }
-		break;
+            break;
+        case 'm':
+            if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) {
+                perror("Unable to mlockall()");
+                exit(-1);
+            }
+            break;
         case 'D':
-        // enable debug
-        debug_trace = 1;
-        break;
-	    case 'i':
-		vtun.svr_type = VTUN_INETD;
-	    case 's':
-		svr = 1;
-		break;
-	    case 'L':
-		vtun.svr_addr = strdup(optarg);
-        if(svr) { // WARNING! -s option is required BEFORE -L for server to bind correctly
-            vtun.bind_addr.type = VTUN_ADDR_NAME;
-            vtun.bind_addr.name = strdup(optarg);
-        }
-		break;
-	    case 'P':
-		vtun.bind_addr.port = atoi(optarg);
-		break;
-	    case 'f':
-		vtun.cfg_file = strdup(optarg);
-		break;
-	    case 'n':
-		daemon = 0;
-		break;
-	    case 'p':
-		vtun.persist = 1;
-		break;
-	    case 't':
-	        vtun.timeout = atoi(optarg);
-	        break;
-	    case 'M':
-	        vtun.MAX_TUNNELS_NUM = atoi(optarg);
-	        break;
+            // enable debug
+            debug_trace = 1;
+            break;
+        case 'i':
+            vtun.svr_type = VTUN_INETD;
+        case 's':
+            svr = 1;
+            break;
+        case 'L':
+            vtun.svr_addr = strdup(optarg);
+            if (svr) { // WARNING! -s option is required BEFORE -L for server to bind correctly
+                vtun.bind_addr.type = VTUN_ADDR_NAME;
+                vtun.bind_addr.name = strdup(optarg);
+            }
+            break;
+        case 'P':
+            vtun.bind_addr.port = atoi(optarg);
+            break;
+        case 'f':
+            vtun.cfg_file = strdup(optarg);
+            break;
+        case 'n':
+            daemon = 0;
+            break;
+        case 'p':
+            vtun.persist = 1;
+            break;
+        case 't':
+            vtun.timeout = atoi(optarg);
+            break;
+        case 'M':
+            vtun.MAX_TUNNELS_NUM = atoi(optarg);
+            break;
         case 'v':
             version();
             exit(0);
@@ -192,60 +192,60 @@ int main(int argc, char *argv[], char *env[])
             usage();
             exit(0);
             break;
-            default:
-		usage();
-	        exit(1);
-	}
-     }
-     reread_config(0);
+        default:
+            usage();
+            exit(1);
+        }
+    }
+    reread_config(0);
 
-     if (vtun.syslog != LOG_DAEMON) {
-	/* Restart logging to syslog using specified facility  */
- 	closelog();
- 	openlog("vtrunkd", LOG_PID|LOG_NDELAY|LOG_PERROR, vtun.syslog);
-     }
+    if (vtun.syslog != LOG_DAEMON) {
+        /* Restart logging to syslog using specified facility  */
+        vtun_closelog();
+        vtun_openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, vtun.syslog);
+    }
 
-     if(!svr){
-	if( argc - optind < 2 ){
-	   usage();
-           exit(1);
-	}
-	hst = argv[optind++];
+    if (!svr) {
+        if ( argc - optind < 2 ) {
+            usage();
+            exit(1);
+        }
+        hst = argv[optind++];
 
-        if( !(host = find_host(hst)) ){	
-	   vtun_syslog(LOG_ERR,"Host %s not found in %s", hst, vtun.cfg_file);
-	   exit(1);
+        if ( !(host = find_host(hst)) ) {
+            vtun_syslog(LOG_ERR, "Host %s not found in %s", hst, vtun.cfg_file);
+            exit(1);
         }
 
-	vtun.svr_name = strdup(argv[optind]);
-     } 
-      	
-     /* 
-      * Now fill uninitialized fields of the options structure
-      * with default values. 
-      */ 
-     if(vtun.bind_addr.port == -1)
-	vtun.bind_addr.port = VTUN_PORT;
-     if(vtun.persist == -1)
-	vtun.persist = 0;
-     if(vtun.timeout == -1)
-	vtun.timeout = VTUN_TIMEOUT;
-     if(vtun.MAX_TUNNELS_NUM == -1)
+        vtun.svr_name = strdup(argv[optind]);
+    }
+
+    /*
+     * Now fill uninitialized fields of the options structure
+     * with default values.
+     */
+    if (vtun.bind_addr.port == -1)
+        vtun.bind_addr.port = VTUN_PORT;
+    if (vtun.persist == -1)
+        vtun.persist = 0;
+    if (vtun.timeout == -1)
+        vtun.timeout = VTUN_TIMEOUT;
+    if (vtun.MAX_TUNNELS_NUM == -1)
         vtun.MAX_TUNNELS_NUM = P_MAX_TUNNELS_NUM;
 
-     switch( vtun.svr_type ){
-	case -1:
-	   vtun.svr_type = VTUN_STAND_ALONE;
-	   break;
-	case VTUN_INETD:
-	   sock = dup(0);
-	   dofork = 0; 
-	   break;
-     }
+    switch ( vtun.svr_type ) {
+    case -1:
+        vtun.svr_type = VTUN_STAND_ALONE;
+        break;
+    case VTUN_INETD:
+        sock = dup(0);
+        dofork = 0;
+        break;
+    }
 
-     if( daemon ){
-	if( dofork && fork() )
-	   exit(0);
+    if ( daemon ) {
+        if ( dofork && fork() )
+            exit(0);
         struct rlimit core_limit;
         core_limit.rlim_cur = RLIM_INFINITY;
         core_limit.rlim_max = RLIM_INFINITY;
@@ -255,79 +255,79 @@ int main(int argc, char *argv[], char *env[])
         }
         /* Direct stdin,stdout,stderr to '/dev/null' */
         fd = open("/dev/null", O_RDWR);
-	close(0); dup(fd);
-	close(1); dup(fd);
+        close(0); dup(fd);
+        close(1); dup(fd);
         close(2); dup(fd);
         close(fd);
 
-	setsid();
+        setsid();
 
-	chdir("/");
+        chdir("/");
 #ifdef DEBUGG
-          // now init the profiler; don;t forget to set GMON_OUT_PREFIX
-          extern void _start (void), etext (void);
-	  monstartup ((u_long) &_start, (u_long) &etext);
+        // now init the profiler; don;t forget to set GMON_OUT_PREFIX
+        extern void _start (void), etext (void);
+        monstartup ((u_long) &_start, (u_long) &etext);
 #endif
-     }
+    }
 
-     if(svr){
-        memset(&sa,0,sizeof(sa));     
-        sa.sa_handler=reread_config;
-        sigaction(SIGHUP,&sa,NULL);
+    if (svr) {
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = reread_config;
+        sigaction(SIGHUP, &sa, NULL);
 
-        init_title(argc,argv,env,"vtrunkd[s]: ");
+        init_title(argc, argv, env, "vtrunkd[s]: ");
 
-	if( vtun.svr_type == VTUN_STAND_ALONE )	
-	   write_pid();
-	
-	server(sock);
-     } else {	
-        init_title(argc,argv,env,"vtrunkd[c]: ");
+        if ( vtun.svr_type == VTUN_STAND_ALONE )
+            write_pid();
+
+        server(sock);
+    } else {
+        init_title(argc, argv, env, "vtrunkd[c]: ");
         client(host);
-     }
+    }
 
-     closelog();
-	
-     return 0;
+    closelog();
+
+    return 0;
 }
 
-/* 
+/*
  * Very simple PID file creation function. Used by server.
- * Overrides existing file. 
+ * Overrides existing file.
  */
 void write_pid(void)
 {
-     FILE *f;
+    FILE *f;
 
-     if( !(f=fopen(VTUN_PID_FILE,"w")) ){
-        vtun_syslog(LOG_ERR,"Can't write PID file");
+    if ( !(f = fopen(VTUN_PID_FILE, "w")) ) {
+        vtun_syslog(LOG_ERR, "Can't write PID file");
         return;
-     }
+    }
 
-     fprintf(f,"%d",(int)getpid());
-     fclose(f);
+    fprintf(f, "%d", (int)getpid());
+    fclose(f);
 }
 
 void reread_config(int sig)
 {
-     if( !read_config(vtun.cfg_file) ){
-	vtun_syslog(LOG_ERR,"No hosts defined");
-	exit(1);
-     }
+    if ( !read_config(vtun.cfg_file) ) {
+        vtun_syslog(LOG_ERR, "No hosts defined");
+        exit(1);
+    }
 }
 
 void usage(void)
 {
-     printf("vtrunkd version %s\n", VERSION); // new versioning
-     printf("Usage: \n");
-     printf("  Server:\n");
-     printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
-     printf("  Client:\n");
-     /* I don't think these work. I'm disabling the suggestion - bish 20050601*/
-     /* these actually do work. At least given in config file -- grandrew 20110507*/
-     printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
-	    "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)]\n");
-     printf("Page size is %d\n", getpagesize());
+    printf("vtrunkd version %s\n", VERSION); // new versioning
+    printf("Usage: \n");
+    printf("  Server:\n");
+    printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
+    printf("  Client:\n");
+    /* I don't think these work. I'm disabling the suggestion - bish 20050601*/
+    /* these actually do work. At least given in config file -- grandrew 20110507*/
+    printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
+           "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)]\n");
+    printf("Page size is %d\n", getpagesize());
 }
 
 void version() {

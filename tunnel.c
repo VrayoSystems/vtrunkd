@@ -270,7 +270,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
 
-    openlog("fd server", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
+    openlog("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {

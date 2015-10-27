@@ -38,6 +38,9 @@
 #include <math.h>
 #include <netinet/tcp.h>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
@@ -136,6 +139,8 @@ int syslog_dup_counter = 0;
 int syslog_sequential_counter = 0;
 int syslog_dup_type = 0; //0 - dups no found 1 - single dup 2 - double dup
 int init = 0;
+#define SYSLOG_HOST_LEN 256
+char syslog_host[SYSLOG_HOST_LEN] = { 0x00 };
 
 int shm_log_state = 0; // 0 - regular log 1 - over shm
 struct {
@@ -476,6 +481,17 @@ void vtun_direct_syslog(char *format, ...) {
 
 }
 
+void vtun_openlog(const char *ident, int option, int facility)
+{
+    strncpy(syslog_host, ident, SYSLOG_HOST_LEN);
+    openlog(syslog_host, option, facility);
+}
+
+void vtun_closelog()
+{
+    closelog();
+}
+
 void vtun_syslog(int priority, char *format, ...) {
 #ifdef SYSLOG
     static volatile sig_atomic_t in_syslog = 0;
@@ -610,8 +626,11 @@ void vtun_syslog(int priority, char *format, ...) {
         }
 
         if (print) {
+            struct timeval ts;
+            gettimeofday(&ts, NULL);
+
             if (syslog_dup_counter) {
-                print_vtun_shm_syslog(priority, "Last %d message(s) repeat %d times dups %d", syslog_dup_type, syslog_dup_counter / syslog_dup_type + 1, syslog_dup_counter);
+                print_vtun_shm_syslog(priority, "%s [%lu]: Last %d message(s) repeat %d times dups %d", syslog_host, tv2ms(&ts), syslog_dup_type, syslog_dup_counter / syslog_dup_type + 1, syslog_dup_counter);
                 syslog_dup_counter = 0;
                 syslog_dup_type = 0;
                 syslog_sequential_counter = 0;
@@ -622,7 +641,8 @@ void vtun_syslog(int priority, char *format, ...) {
                 }
 
             }
-            print_vtun_shm_syslog(priority, "%s", buf);
+
+            print_vtun_shm_syslog(priority, "%s [%lu]: %s", syslog_host, tv2ms(&ts), buf);
         }
         in_syslog = 0;
     }
