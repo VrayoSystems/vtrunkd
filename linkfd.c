@@ -2459,7 +2459,7 @@ int write_buf_check_n_flush(int logical_channel) {
                       //     && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
                            && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=)
                          )                                          // MLD several checks passed
-                      || (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
+                      //|| (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
                 )
            ) {
             if (!cond_flag) {
