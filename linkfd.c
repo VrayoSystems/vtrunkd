@@ -4949,6 +4949,7 @@ int lfd_linker(void)
                 if (info.last_sent_FLLI_idx == LOSS_ARRAY) {
                     info.last_sent_FLLI_idx = 0;
                 }
+                vlog(LOG_INFO, "FRAME_L_LOSS_INFO sending");
                 uint32_t tmp_h = htonl(info.last_sent_FLLI_idx);
                 memcpy(buf, &tmp_h, sizeof(uint32_t));
                 tmp_h = htons(FRAME_L_LOSS_INFO);
