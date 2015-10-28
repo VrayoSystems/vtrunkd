@@ -4901,11 +4901,11 @@ int lfd_linker(void)
                 if (info.last_sent_FLI_idx == LOSS_ARRAY) {
                     info.last_sent_FLI_idx = 0;
                 }
-                /*vlog(LOG_INFO, "FRAME_LOSS_INFO sending my idx %d shm idx %d time %d %d psl %d pbl %d", info.last_sent_FLI_idx,
+                vlog(LOG_INFO, "FRAME_LOSS_INFO sending my idx %d shm idx %d time %d %d psl %d pbl %d", info.last_sent_FLI_idx,
                         shm_conn_info->loss_idx, shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_sec,
                         shm_conn_info->loss[info.last_sent_FLI_idx].timestamp.tv_usec, shm_conn_info->loss[info.last_sent_FLI_idx].psl,
                         shm_conn_info->loss[info.last_sent_FLI_idx].pbl);
-*/
+
                 uint32_t tmp_h = htonl(info.last_sent_FLI_idx);
                 memcpy(buf, &tmp_h, sizeof(uint32_t));
                 tmp_h = htons(FRAME_LOSS_INFO);
