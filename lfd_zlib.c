@@ -33,6 +33,7 @@
 #include "vtun.h"
 #include "linkfd.h"
 #include "lib.h"
+#include "log.h"
 
 #ifdef HAVE_ZLIB
 
@@ -58,19 +59,19 @@ int zlib_alloc(struct vtun_host *host)
      zi.opaque = (voidpf)0;
     
      if( deflateInit(&zd, zlevel ) != Z_OK ){
-	vtun_syslog(LOG_ERR,"Can't initialize compressor");
+	vlog(LOG_ERR,"Can't initialize compressor");
 	return 1;
      }	
      if( inflateInit(&zi) != Z_OK ){
-	vtun_syslog(LOG_ERR,"Can't initialize decompressor");
+	vlog(LOG_ERR,"Can't initialize decompressor");
 	return 1;
      }	
      if( !(zbuf = (void *) lfd_alloc(zbuf_size)) ){
-	vtun_syslog(LOG_ERR,"Can't allocate buffer for the compressor");
+	vlog(LOG_ERR,"Can't allocate buffer for the compressor");
 	return 1;
      }
    
-     vtun_syslog(LOG_INFO,"ZLIB compression[level %d] initialized.", zlevel);
+     vlog(LOG_INFO,"ZLIB compression[level %d] initialized.", zlevel);
      return 0;
 }
 
@@ -118,7 +119,7 @@ int zlib_comp(int len, char *in, char **out)
      while(1) {
         oavail = zd.avail_out;
         if( (err=deflate(&zd, Z_SYNC_FLUSH)) != Z_OK ){
-           vtun_syslog(LOG_ERR,"Deflate error %d",err);
+           vlog(LOG_ERR,"Deflate error %d",err);
            return -1;
         }
         olen += oavail - zd.avail_out;
@@ -126,7 +127,7 @@ int zlib_comp(int len, char *in, char **out)
 	   break;
 
         if( expand_zbuf(&zd,100) ) {
-	   vtun_syslog( LOG_ERR, "Can't expand compression buffer");
+	   vlog( LOG_ERR, "Can't expand compression buffer");
            return -1;
 	}
      }
@@ -147,14 +148,14 @@ int zlib_decomp(int len, char *in, char **out)
      while(1) {
         oavail = zi.avail_out;
         if( (err=inflate(&zi, Z_SYNC_FLUSH)) != Z_OK ) {
-           vtun_syslog(LOG_ERR,"Inflate error %d len %d", err, len);
+           vlog(LOG_ERR,"Inflate error %d len %d", err, len);
            return -1;
         }
         olen += oavail - zi.avail_out;
         if(!zi.avail_in)
 	   break;
         if( expand_zbuf(&zi,100) ) {
-	   vtun_syslog( LOG_ERR, "Can't expand compression buffer");
+	   vlog( LOG_ERR, "Can't expand compression buffer");
            return -1;
 	}
      }
@@ -178,7 +179,7 @@ struct lfd_mod lfd_zlib = {
 
 int no_zlib(struct vtun_host *host)
 {
-     vtun_syslog(LOG_INFO, "ZLIB compression is not supported");
+     vlog(LOG_INFO, "ZLIB compression is not supported");
      return -1;
 }
 

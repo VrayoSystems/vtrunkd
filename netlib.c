@@ -74,6 +74,7 @@
 
 #include "vtun.h"
 #include "lib.h"
+#include "log.h"
 #include "netlib.h"
 
 /* Connect with timeout */
@@ -150,7 +151,7 @@ int udp_session(struct vtun_host *host)
      int s,opt;
 
      if( (s=socket(AF_INET,SOCK_DGRAM,0))== -1 ){
-        vtun_syslog(LOG_ERR,"Can't create socket");
+        vlog(LOG_ERR,"Can't create socket");
         return -1;
      }
 
@@ -160,39 +161,39 @@ int udp_session(struct vtun_host *host)
      /* Set local address and port */
      local_addr(&saddr, host, 1);
      if( bind(s,(struct sockaddr *)&saddr,sizeof(saddr)) ){
-        vtun_syslog(LOG_ERR,"Can't bind to the socket");
+        vlog(LOG_ERR,"Can't bind to the socket");
         return -1;
      }
 
      opt = sizeof(saddr);
      if( getsockname(s,(struct sockaddr *)&saddr,&opt) ){
-        vtun_syslog(LOG_ERR,"Can't get socket name");
+        vlog(LOG_ERR,"Can't get socket name");
         return -1;
      }
 
      /* Write port of the new UDP socket */
      port = saddr.sin_port;
      if( write_n(host->rmt_fd,(char *)&port,sizeof(short)) < 0 ){
-        vtun_syslog(LOG_ERR,"Can't write port number");
+        vlog(LOG_ERR,"Can't write port number");
         return -1;
      }
      host->sopt.lport = htons(port);
 
      /* Read port of the other's end UDP socket */
      if( readn_t(host->rmt_fd,&port,sizeof(short),host->timeout) < 0 ){
-        vtun_syslog(LOG_ERR,"Can't read port number %s", strerror(errno));
+        vlog(LOG_ERR,"Can't read port number %s", strerror(errno));
         return -1;
      }
 
      opt = sizeof(saddr);
      if( getpeername(host->rmt_fd,(struct sockaddr *)&saddr,&opt) ){
-        vtun_syslog(LOG_ERR,"Can't get peer name");
+        vlog(LOG_ERR,"Can't get peer name");
         return -1;
      }
 
      saddr.sin_port = port;
      if( connect(s,(struct sockaddr *)&saddr,sizeof(saddr)) ){
-        vtun_syslog(LOG_ERR,"Can't connect socket");
+        vlog(LOG_ERR,"Can't connect socket");
         return -1;
      }
      host->sopt.rport = htons(port);
@@ -201,7 +202,7 @@ int udp_session(struct vtun_host *host)
      close(host->rmt_fd); 
      host->rmt_fd = s;	
 
-     vtun_syslog(LOG_INFO,"UDP connection initialized");
+     vlog(LOG_INFO,"UDP connection initialized");
      return s;
 }
 
@@ -214,7 +215,7 @@ int local_addr(struct sockaddr_in *addr, struct vtun_host *host, int con)
         /* Use address of the already connected socket. */
         opt = sizeof(struct sockaddr_in);
         if( getsockname(host->rmt_fd, (struct sockaddr *)addr, &opt) < 0 ){
-           vtun_syslog(LOG_ERR,"Can't get local socket address");
+           vlog(LOG_ERR,"Can't get local socket address");
            return -1; 
         }
      } else {
@@ -240,7 +241,7 @@ int server_addr(struct sockaddr_in *addr, struct vtun_host *host)
       * address can be dynamic.
       */
      if( !(hent = gethostbyname(vtun.svr_name)) ){
-        vtun_syslog(LOG_ERR, "Can't resolv server address: %s", vtun.svr_name);
+        vlog(LOG_ERR, "Can't resolv server address: %s", vtun.svr_name);
         return -1;
      }
      addr->sin_addr.s_addr = *(unsigned long *)hent->h_addr; 
@@ -263,7 +264,7 @@ int generic_addr(struct sockaddr_in *addr, struct vtun_addr *vaddr)
         case VTUN_ADDR_IFACE:
 	 if (!(addr->sin_addr.s_addr =
 	       getifaddr(vaddr->name))) {
-	    vtun_syslog(LOG_ERR,
+	    vlog(LOG_ERR,
 	                "Can't get address of interface %s",
 	                vaddr->name);
 	    return -1;
@@ -271,7 +272,7 @@ int generic_addr(struct sockaddr_in *addr, struct vtun_addr *vaddr)
            break;
         case VTUN_ADDR_NAME:
 	 if (!(hent = gethostbyname(vaddr->name))) {
-	    vtun_syslog(LOG_ERR,
+	    vlog(LOG_ERR,
 	                "Can't resolv local address %s",
 	                vaddr->name);
 	    return -1;

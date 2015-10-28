@@ -34,6 +34,7 @@
 #include "compat.h"
 #include "vtun.h"
 #include "lib.h"
+#include "log.h"
 
 int lineno = 1;
 
@@ -591,7 +592,7 @@ prog_option:
 
 int yyerror(char *s) 
 {
-   vtun_syslog(LOG_ERR, "%s line %d\n", s, lineno);
+   vlog(LOG_ERR, "%s line %d\n", s, lineno);
    return 0;
 }
 
@@ -750,14 +751,14 @@ int read_config(char *file)
 
    if( cfg_loaded ){
       free_host_list();
-      vtun_syslog(LOG_INFO,"Reloading configuration file");
+      vlog(LOG_INFO,"Reloading configuration file");
    }	 
    cfg_loaded = 1;
 
    llist_init(&host_list);
 
    if( !(yyin = fopen(file,"r")) ){
-      vtun_syslog(LOG_ERR,"Can not open %s", file);
+      vlog(LOG_ERR,"Can not open %s", file);
       return -1;      
    }
 
