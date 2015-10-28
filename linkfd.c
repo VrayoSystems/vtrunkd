@@ -6321,8 +6321,6 @@ int lfd_linker(void)
         }
         // <<< END JSON LOGS
         
-        
-        
         if (info.check_shm) { // impossible to work (remove!?)
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
