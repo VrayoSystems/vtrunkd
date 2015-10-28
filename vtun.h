@@ -380,7 +380,7 @@ struct conn_stats {
     uint32_t max_upload_speed;
     uint32_t max_send_q;
     uint32_t max_send_q_avg;
-    int32_t send_q_limit;
+    int32_t send_q_limit; // remove this; replaced by rsr
     uint16_t miss_packets_max; // get from another side
     int32_t ACK_speed;
     int32_t max_ACS2;

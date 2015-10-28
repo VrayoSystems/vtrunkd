@@ -1920,6 +1920,32 @@ int retransmit_send(char *out2, int n_to_send) {
     return 1;
 }
 
+/**
+ * check that the system is in a-hold mode
+ * 
+ */
+ 
+int is_a_hold() {
+    int limit;
+    int sqe;
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+            // if any of the channels are in no-hold mode - return not
+            limit = shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr ? shm_conn_info->stats[i].W_cubic : shm_conn_info->stats[i].rsr;
+            sqe = shm_conn_info->stats[i].sqe_mean;
+            if( percent_delta_equal(sqe, limit, 15) || (sqe > limit) ) {
+                // means hold
+            } else {
+                return 0;
+            }
+            // sqe_mean
+            // rsr
+        }
+    }
+    return 1;
+}
+
 int select_net_write(chan_num) {
     struct timeval tv;
 
@@ -2041,6 +2067,7 @@ int select_devread_send(char *buf, char *out2) {
         }
 
         if (drop_packet_flag == 1) {
+            // #876
             drop_counter++;
 //#ifdef DEBUGG
             int other_chan = 0;
@@ -5429,8 +5456,8 @@ int lfd_linker(void)
             if(info.head_channel != 1) {
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 1 (ON) saving W %d", info.send_q_limit_cubic);
-                info.W_cubic_copy = info.send_q_limit_cubic;
-                info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
+                // info.W_cubic_copy = info.send_q_limit_cubic;
+                // info.Wu_cubic_copy = shm_conn_info->stats[info.process_num].W_cubic_u;
                 if(shm_conn_info->head_lossing && !shm_conn_info->idle) {
                     shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // just to continue AG due to dropping_lossing
                 }
@@ -5441,8 +5468,9 @@ int lfd_linker(void)
                 skip++;
                 vtun_syslog(LOG_INFO, "Switching head to 0 (OFF) restoring W %d if > than current W %d", info.W_cubic_copy, info.send_q_limit_cubic);
                 if(info.send_q_limit_cubic < info.W_cubic_copy) {
-                    set_W_to(info.W_cubic_copy, 1, &loss_time);
-                    set_Wu_to(info.Wu_cubic_copy);
+                    // here #876
+                    // set_W_to(info.W_cubic_copy, 1, &loss_time);
+                    // set_Wu_to(info.Wu_cubic_copy);
                 }
                 info.head_change_tv = info.current_time;
                 info.head_change_safe = 0;
@@ -5744,7 +5772,8 @@ int lfd_linker(void)
                 // here we decide on whether to hold or not to hold
                 drop_packet_flag = 0;
                 if (send_q_eff > info.rsr) {
-                        drop_packet_flag = 1;
+                        // #876
+                        if(is_a_hold()) drop_packet_flag = 1;
                 }
                 // warning the whole block is not sync
                 if(((shm_conn_info->ag_mask & (~(1 << info.process_num))) & (shm_conn_info->channels_mask)) !=  // hope that ag_mask is consistent with chan_mask
@@ -5761,7 +5790,7 @@ int lfd_linker(void)
                     shm_conn_info->hold_mask = shm_conn_info->channels_mask;
                 }
             } else {
-                drop_packet_flag = 0;
+                if(is_a_hold()) drop_packet_flag = 0;
                 if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
                     //vtun_syslog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                     hold_mode = 1;
@@ -5774,6 +5803,7 @@ int lfd_linker(void)
             if(info.head_channel) {
                 if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
                     //vtun_syslog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                        // #876
                         drop_packet_flag = 1;
                 } else {
                     //vtun_syslog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
@@ -5821,8 +5851,12 @@ int lfd_linker(void)
             int slope = 1; // disable by now
             if(slope > -100000) { // TODO: need more fine-tuning!
                     drop_packet_flag = 0;
-                    set_W_to(send_q_eff + 2000, 1, &loss_time);
-                    set_Wu_to(send_q_eff + 2000);
+                    // here #876
+                    // converge only if no losses were detected
+                    if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+                        set_W_to(send_q_eff + 2000, 1, &loss_time);
+                        set_Wu_to(send_q_eff + 2000);
+                    }
             } else {
                 vtun_syslog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
                 // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
@@ -5832,8 +5866,12 @@ int lfd_linker(void)
         // Push down envelope
         if(info.head_channel && (send_q_eff < (int32_t)info.send_q_limit_cubic)) {
             //set_W_to(send_q_eff, 30, &loss_time);
-            set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
-            set_Wu_to(send_q_eff);
+            // here #876
+            // converge only if no losses were detected
+            if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+                set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
+                set_Wu_to(send_q_eff);
+            }
         }
         // <<< END fast convergence to underlying encap flow
         
