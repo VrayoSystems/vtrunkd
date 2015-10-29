@@ -5003,7 +5003,7 @@ int lfd_linker(void)
                 if (info.last_sent_FLLI_idx == LOSS_ARRAY) {
                     info.last_sent_FLLI_idx = 0;
                 }
-                vlog(LOG_INFO, "FRAME_L_LOSS_INFO sending");
+                vlog(LOG_INFO, "FRAME_L_LOSS_INFO sending sqn %lu ts %ld.%06ld", shm_conn_info->l_loss[info.last_sent_FLLI_idx].sqn, shm_conn_info->l_loss[info.last_sent_FLLI_idx].timestamp);
                 uint32_t tmp_h = htonl(info.last_sent_FLLI_idx);
                 memcpy(buf, &tmp_h, sizeof(uint32_t));
                 tmp_h = htons(FRAME_L_LOSS_INFO);
@@ -5029,7 +5029,7 @@ int lfd_linker(void)
                 FD_ZERO(&fdset2);
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
-                    if (proto_write(service_channel, buf, ((6 * sizeof(uint32_t) + 3 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
+                    if (proto_write(service_channel, buf, ((7 * sizeof(uint32_t) + 3 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
                         vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
                         return 0;
@@ -7630,6 +7630,9 @@ if(drop_packet_flag) {
                                     vlog(LOG_ERR, "WARNING could not detect who lost %lu - not resending", sqn);
                                 } else {
                                     who_lost = hsnum2pnum(hsnum);
+                                    if(who_lost == -1) {
+                                        vlog(LOG_ERR, "WARNING could not resolve who lost %lu - not resending", sqn);
+                                    }
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
                                 sem_wait(&(shm_conn_info->stats_sem));
@@ -7661,7 +7664,7 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 sem_post(&(shm_conn_info->stats_sem));
-                                if( psl <= 50 ) {
+                                if( psl <= 50 && who_lost > -1) {
                                     // now find chan with smallest RTT
                                     int min_rtt = INT32_MAX;
                                     int min_rtt_chan = 0;
