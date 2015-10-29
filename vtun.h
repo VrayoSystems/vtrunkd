@@ -26,6 +26,7 @@
 #define _VTUN_H
 #include "llist.h"
 #include "frame_llist.h"
+#include "const.h"
 #include "version.h"
 #include <semaphore.h>
 #include <sys/types.h>
@@ -129,8 +130,6 @@
 #endif
 // maximum compiled-in buffers for tcp channels per link
 #define MAX_TCP_LOGICAL_CHANNELS 7//100 // int
-// max aggregated VPN-links compiled-in (+ some extras for racing)
-#define MAX_TCP_PHYSICAL_CHANNELS 7
 // 10 seconds to start accepting tcp channels; otherwise timeout
 #define CHAN_START_ACCEPT_TIMEOUT 10
 #define FAST_RESEND_BUF_SIZE (MAX_TCP_PHYSICAL_CHANNELS*3)
@@ -511,6 +510,7 @@ struct phisical_status { // A.K.A. "info"
         unsigned int seq_num;
         unsigned int local_seq_num;
     } lossed_loop_data[LOSSED_BACKLOG_SIZE]; // array of seq_nums for lossed detect
+    uint32_t lossed_local_seq_num_lost_start; /** start seq_num of lost packet */
     int lossed_complete_received;
     int lossed_last_received;
     /** Collect statistic*/

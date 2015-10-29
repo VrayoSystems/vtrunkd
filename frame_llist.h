@@ -27,6 +27,7 @@
 
 #include <sys/time.h>
 #include <stdint.h>
+#include "const.h"
 
 #define VTUN_FRAME_SIZE2 (3*512)
 
@@ -34,6 +35,7 @@ struct frame_seq {
     char out[VTUN_FRAME_SIZE2];
     int len;
     unsigned long seq_num;
+    unsigned long local_seq_num[MAX_TCP_PHYSICAL_CHANNELS];
     int rel_next; // relative pointer [TODO: make it short or even char!]
     int sender_pid; // okay as short?
     int chan_num;
