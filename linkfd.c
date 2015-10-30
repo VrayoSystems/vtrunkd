@@ -5682,7 +5682,7 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( shm_conn_info->idle )
                            //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
-                           || !mawmar_allowed()
+                           || ((ag_flag_local == R_MODE) && (!mawmar_allowed()))
                            || (( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached())
                            //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
@@ -5835,9 +5835,13 @@ int lfd_linker(void)
                 hold_mode = 0; // no hold whatsoever;
                 // here we decide on whether to hold or not to hold
                 drop_packet_flag = 0;
-                if (send_q_eff > info.rsr) {
+                //if (send_q_eff > info.rsr) {
+                if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
                         if(is_a_hold()) drop_packet_flag = 1;
+                        else {
+                            hold_mode = 1;
+                        }
                 }
                 // warning the whole block is not sync
                 if(((shm_conn_info->ag_mask & (~(1 << info.process_num))) & (shm_conn_info->channels_mask)) !=  // hope that ag_mask is consistent with chan_mask
@@ -5854,7 +5858,7 @@ int lfd_linker(void)
                     shm_conn_info->hold_mask = shm_conn_info->channels_mask;
                 }
             } else {
-                if(is_a_hold()) drop_packet_flag = 0;
+                drop_packet_flag = 0;
                 if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
                     //vlog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                     hold_mode = 1;
@@ -5865,7 +5869,8 @@ int lfd_linker(void)
         } else { // R_MODE.. no intermediate modes.. yet ;-)
             hold_mode = 0;
             if(info.head_channel) {
-                if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
+                //if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
+                if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
                     //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                         drop_packet_flag = 1;
@@ -7917,7 +7922,7 @@ if(drop_packet_flag) {
                                 }
                                 ms2tv(&loss_tv, info.exact_rtt);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
-                                if(info.head_channel) {
+                                if(0 && info.head_channel) {
                                     info.send_q_limit_cubic_max = info.max_send_q; // fast-converge to flow (head now always converges!)
                                     info.W_u_max = info.max_send_q_u;
                                     info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
