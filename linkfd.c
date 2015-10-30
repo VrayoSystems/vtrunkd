@@ -1476,7 +1476,7 @@ int get_resend_frame_unconditional(int chan_num, uint32_t *seq_num, char **out, 
 }
 
 // the same GRF but no expiration
-int get_resend_frame_local_sqn(int chan_num, int process_num, uint32_t local_seq_num, uint32_t *seq_num, char **out, int *sender_pid) {
+int get_resend_frame_local_sqn(int chan_num, int process_num, uint32_t local_seq_num, uint32_t *seq_num, char **out, int *sender_pid, int *idx) {
     int i, j, j_previous, len = -1;
     
     //find start point
@@ -1502,6 +1502,7 @@ int get_resend_frame_local_sqn(int chan_num, int process_num, uint32_t local_seq
                 *((uint16_t *) (shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV+ (len+sizeof(uint32_t)))) = (uint16_t)htons(chan_num +FLAGS_RESERVED); // WAS: channel-mode. TODO: RXMIT mode broken HERE!! // clean flags?
                 *out = shm_conn_info->resend_frames_buf[j_previous].out + LINKFD_FRAME_RESERV;
                 *sender_pid = shm_conn_info->resend_frames_buf[j_previous].sender_pid;
+                *idx = j_previous;
                 return len;
             } else {
                 j_previous = j;
@@ -1977,7 +1978,6 @@ int is_a_hold() {
     uint32_t chan_mask = shm_conn_info->channels_mask;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
-            // if any of the channels are in no-hold mode - return not
             limit = shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr ? shm_conn_info->stats[i].W_cubic : shm_conn_info->stats[i].rsr;
             sqe = shm_conn_info->stats[i].sqe_mean;
             if( percent_delta_equal(sqe, limit, 15) || (sqe > limit) ) {
@@ -1985,8 +1985,6 @@ int is_a_hold() {
             } else {
                 return 0;
             }
-            // sqe_mean
-            // rsr
         }
     }
     return 1;
@@ -2122,13 +2120,13 @@ int select_devread_send(char *buf, char *out2) {
             else
                 other_chan = 0;
             info.dropping = 1;
-            if (debug_trace) {
+            //if (debug_trace) {
                 vlog(LOG_INFO, "drop_packet_flag info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d, hold_!head: %d",
                         info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
                         shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg,
                         shm_conn_info->stats[other_chan].hold);
-                info.max_send_q = 0;
-            }
+                //info.max_send_q = 0;
+            //}
 
             sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
@@ -5648,22 +5646,23 @@ int lfd_linker(void)
                 
             info.rsr = d_rsr;
             
-            // now compute W
-            timersub(&(info.current_time), &loss_time, &t_tv);
-            int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-            t = t / CUBIC_T_DIV;
-            t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
-            set_W_unsync(t);
-            t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
-            shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
+            
             
             //pump_adj = (int) d_pump_adj;
             rtt_shift = (int) d_rtt_shift;
         }
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
         
-
-            CHKCPU(84);
+        // now compute W
+        timersub(&(info.current_time), &loss_time, &t_tv);
+        int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+        t = t / CUBIC_T_DIV;
+        t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
+        set_W_unsync(t);
+        t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
+        shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
+        
+        CHKCPU(84);
         //int send_q_limit_cubic_apply = (info.send_q_limit_cubic > shm_conn_info->stats[info.process_num].W_cubic_u ? info.send_q_limit_cubic : shm_conn_info->stats[info.process_num].W_cubic_u);
         int send_q_limit_cubic_apply = info.send_q_limit_cubic;
         if (send_q_limit_cubic_apply < SEND_Q_LIMIT_MINIMAL) {
@@ -5830,7 +5829,8 @@ int lfd_linker(void)
 
         // HOLD/DROP setup >>>
         int hold_mode_previous = hold_mode;
-        if(ag_flag_local == AG_MODE) {
+        //if(ag_flag_local == AG_MODE) {
+        if(agag > 30) {
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
                 // here we decide on whether to hold or not to hold
@@ -5868,12 +5868,13 @@ int lfd_linker(void)
             }
         } else { // R_MODE.. no intermediate modes.. yet ;-)
             hold_mode = 0;
+            drop_packet_flag = 0;
             if(info.head_channel) {
                 //if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
                 if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
                     //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                        drop_packet_flag = 1;
+                        drop_packet_flag = 1; // no drop in retransmit? TODO HERE
                 } else {
                     //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
@@ -5915,11 +5916,12 @@ int lfd_linker(void)
         
         
         // fast convergence to underlying encap flow >>> 
-        if(drop_packet_flag) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
+        if(info.head_channel && (drop_packet_flag || hold_mode)) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
             //int slope = get_slope(&smalldata);
             int slope = 1; // disable by now
             if(slope > -100000) { // TODO: need more fine-tuning!
-                    drop_packet_flag = 0;
+                    //drop_packet_flag = 0;
+                    //hold_mode = 0;
                     // here #876
                     // converge only if no losses were detected
                     if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
@@ -6156,6 +6158,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "super", "%d", super);
             super = 0;
             add_json(js_buf, &js_cur, "hold", "%d", was_hold_mode); // TODO: remove
+            add_json(js_buf, &js_cur, "a_hold", "%d", is_a_hold()); // TODO: remove
             was_hold_mode = 0; // TODO: remove
             //add_json(js_buf, &js_cur, "ag?", "%d", ag_flag_local);
             add_json(js_buf, &js_cur, "agag", "%d", agag);
@@ -7687,7 +7690,8 @@ if(drop_packet_flag) {
                                         uint32_t seqn;
                                         for(uint32_t sqn_s = sqn; sqn_s < sqn + psl; sqn_s++) {
                                             sem_wait(&(shm_conn_info->resend_buf_sem));
-                                            len = get_resend_frame_local_sqn(1, who_lost ,sqn_s, &seqn, &out2, &mypid);
+                                            int lidx = -1;
+                                            len = get_resend_frame_local_sqn(1, who_lost ,sqn_s, &seqn, &out2, &mypid, &lidx);
                                             if (len == -1) {
                                                 vlog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn_s);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
@@ -7697,6 +7701,7 @@ if(drop_packet_flag) {
                                                 vlog(LOG_INFO, "resending packet 2 lsn %lu sqn %lu len %d", sqn_s, seqn, len);
                                                 assert_packet_ipv4("resend2", out2, len);
                                                 send_packet(1, out_buf, len);
+                                                shm_conn_info->resend_frames_buf[lidx].local_seq_num[info.process_num] = info.channel[1].local_seq_num - 1; // in case it will be lost again
                                             }
                                         }
                                     }
@@ -7928,17 +7933,25 @@ if(drop_packet_flag) {
                                     info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                 } else {
                                     if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
-                                        //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
                                         info.Wmax_saved = info.send_q_limit_cubic_max;
                                         info.Wmax_tv = loss_time;
-                                        info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
+                                        //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
+                                        if(info.max_send_q < info.send_q_limit_cubic) {
+                                            info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
+                                        } else {
+                                            info.send_q_limit_cubic_max = info.send_q_limit_cubic;
+                                        }
                                         if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                             info.W_u_max = info.max_send_q_u;
                                             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                         }
                                     } else {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
-                                        info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                        if(info.max_send_q < info.send_q_limit_cubic) {
+                                            info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                        } else {
+                                            info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);
+                                        }
                                         if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                             info.W_u_max = (int) ((double)info.max_send_q_u * (2.0 - info.Bu) / 2.0);
                                             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
