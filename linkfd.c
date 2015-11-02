@@ -845,6 +845,15 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
     return idx;
 }
 
+/**
+ * get how many percent to push every 50ms
+ * 
+ */
+ 
+int calculate_hsqs_percents(int max, int percent_fill) {
+    return max * percent_fill * percent_fill * percent_fill / 100000;
+}
+
 /*
  * count amount of packets lost sequentially and evenly
  *
@@ -3010,6 +3019,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         #endif
         shm_conn_info->tokens++;
         if( ((shm_conn_info->head_send_q_shift_recv == 10000) || (shm_conn_info->slow_start_recv)) && ((seq_num % SLOW_START_INCINT) == 0)) {
+            vlog(LOG_ERR, "FAST PUSHING MSBL UP ???????");
            shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
@@ -5342,16 +5352,26 @@ int lfd_linker(void)
             } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                        int lossq_above = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100; // above thresh -> push to MBSL
-                        int lossq_below = shm_conn_info->stats[max_chan].loss_send_q * 40 / 100; // below thresh -> push to net
-                        int sqe_pkt = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-                        //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // SQE expreeriment
-                        if(sqe_pkt > lossq_above) {
-                            info.head_send_q_shift = lossq_above - sqe_pkt;
-                        } else if(sqe_pkt < lossq_below) {
-                            info.head_send_q_shift = lossq_below - sqe_pkt;
+                        // int lossq_above = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100; // above thresh -> push to MBSL
+                        // int lossq_below = shm_conn_info->stats[max_chan].loss_send_q * 40 / 100; // below thresh -> push to net
+                        // int sqe_pkt = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+                        // if(sqe_pkt > lossq_above) {
+                        //     info.head_send_q_shift = lossq_above - sqe_pkt;
+                        // } else if(sqe_pkt < lossq_below) {
+                        //     info.head_send_q_shift = lossq_below - sqe_pkt;
+                        // } else {
+                        //     info.head_send_q_shift = 0;
+                        // }
+                        
+                        int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
+                        int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
+                        int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
+                        if(sqe > sqe_above) {
+                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (shm_conn_info->stats[max_chan].rsr / info.eff_len - sqe_above) ); // negative value
+                        } else if(sqe < sqe_below) {
+                            info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ); // positive value
                         } else {
-                            info.head_send_q_shift = 0;
+                            info.head_send_q_shift = 0; // this one is actually not required
                         }
                             
                     } else {
@@ -7782,7 +7802,7 @@ if(drop_packet_flag) {
                                 }
                             }
                             
-                            memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); //forced_rtt
+                            memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                             
                             sem_wait(write_buf_sem);
                             //shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n); // temporarily commented out to enable logs for remote frtt monitoring
