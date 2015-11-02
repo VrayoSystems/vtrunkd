@@ -912,7 +912,8 @@ int check_drop_period_unsync() {
     return 1; // this method is unused
     struct timeval tv_tm, tv_rtt;
     timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
-    ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
+    //ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
+    ms2tv(&tv_rtt, DROP_TIME_IMMUNE/1000);
     if(timercmp(&tv_tm, &tv_rtt, >=)) {
         //vlog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
         return 1;
@@ -1774,8 +1775,8 @@ int retransmit_send(char *out2, int n_to_send) {
     if (drop_packet_flag) {
         return LASTPACKETMY_NOTIFY; // go dropping
     } else if (drop_counter > 0) {
-        vlog(LOG_INFO, "drop_packet_flag (retransmit_send) TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
-        drop_counter = 0;
+        // vlog(LOG_INFO, "drop_packet_flag (retransmit_send) TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d", drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel, shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+        // drop_counter = 0;
     }
     if (hold_mode) {
         return CONTINUE_ERROR;
@@ -2160,13 +2161,21 @@ int select_devread_send(char *buf, char *out2) {
              }
              sem_post(&(shm_conn_info->common_sem));
              */
-            return CONTINUE_ERROR;
+             // introduce immunity timer here
+            
+            sem_wait(&(shm_conn_info->stats_sem));
+            if(check_drop_period_unsync()) {
+            sem_post(&(shm_conn_info->stats_sem));
+                shm_conn_info->drop_time = info.current_time;
+                return CONTINUE_ERROR;
+            } 
+            sem_post(&(shm_conn_info->stats_sem));
         } else {
             if (drop_counter > 0) {
-                vlog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d",
-                        drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
-                        shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
-                drop_counter = 0;
+                // vlog(LOG_INFO, "drop_packet_flag TOTAL %d pkts; info.rsr %d info.W %d, max_send_q %d, send_q_eff %d, head %d, w %d, rtt %d",
+                //         drop_counter, info.rsr, info.send_q_limit_cubic, info.max_send_q, send_q_eff, info.head_channel,
+                //         shm_conn_info->stats[info.process_num].W_cubic, shm_conn_info->stats[info.process_num].rtt_phys_avg);
+                // drop_counter = 0;
             }
         }
 
@@ -5830,7 +5839,7 @@ int lfd_linker(void)
         // HOLD/DROP setup >>>
         int hold_mode_previous = hold_mode;
         //if(ag_flag_local == AG_MODE) {
-        if(agag > 30) {
+        if(agag > AGAG_AG_THRESH) {
             if(info.head_channel) {
                 hold_mode = 0; // no hold whatsoever;
                 // here we decide on whether to hold or not to hold
@@ -5920,11 +5929,11 @@ int lfd_linker(void)
             //int slope = get_slope(&smalldata);
             int slope = 1; // disable by now
             if(slope > -100000) { // TODO: need more fine-tuning!
-                    //drop_packet_flag = 0;
-                    //hold_mode = 0;
                     // here #876
                     // converge only if no losses were detected
                     if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+                        drop_packet_flag = 0;
+                        hold_mode = 0;
                         set_W_to(send_q_eff + 2000, 1, &loss_time);
                         set_Wu_to(send_q_eff + 2000);
                     }
@@ -6189,6 +6198,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
             //add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100); // TCP modle RTT?
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)buf_len_real);
+            add_json(js_buf, &js_cur, "drp", "%d", drop_counter);
+            drop_counter=0;
             add_json(js_buf, &js_cur, "rsr", "%d", (int)info.rsr);
             add_json(js_buf, &js_cur, "rsr_top", "%d", rsr_top);
             add_json(js_buf, &js_cur, "sql", "%d", temp_sql_copy);
