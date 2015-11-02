@@ -16,7 +16,7 @@
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- */
+ *
 
 /*
  * linkfd.c,v 1.4.2.15.2.2 2006/11/16 04:03:23 mtbishop Exp
@@ -5341,46 +5341,28 @@ int lfd_linker(void)
             if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
                 info.head_send_q_shift = head_send_q_shift;
                 vlog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
-                info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
+                info.head_send_q_shift = -10050; // inform the receiver that we need FAST (like SS) consume
                 need_send_FCI = 1;
-            //} else if(ag_flag_local == R_MODE && agag > 0) { 
-            //    int head_send_q_shift =  -shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len; // push down our full send_q to zero
-            //    info.head_send_q_shift = head_send_q_shift;
-            //    vlog(LOG_INFO, "AG-off transition with hsqs %d", info.head_send_q_shift);
-            //    info.head_send_q_shift -= 10000; // inform the receiver that we need FAST (like SS) consume
-            //    need_send_FCI = 1;
             } else {
                 if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                        // int lossq_above = shm_conn_info->stats[max_chan].loss_send_q * 60 / 100; // above thresh -> push to MBSL
-                        // int lossq_below = shm_conn_info->stats[max_chan].loss_send_q * 40 / 100; // below thresh -> push to net
-                        // int sqe_pkt = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-                        // if(sqe_pkt > lossq_above) {
-                        //     info.head_send_q_shift = lossq_above - sqe_pkt;
-                        // } else if(sqe_pkt < lossq_below) {
-                        //     info.head_send_q_shift = lossq_below - sqe_pkt;
-                        // } else {
-                        //     info.head_send_q_shift = 0;
-                        // }
                         
                         int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
                         int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
                         int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
                         if(sqe > sqe_above) {
-                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (shm_conn_info->stats[max_chan].rsr / info.eff_len - sqe_above) ); // negative value
+                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (shm_conn_info->stats[max_chan].rsr / info.eff_len - sqe_above) ) * sqe / 100; // negative value
                         } else if(sqe < sqe_below) {
-                            info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ); // positive value
+                            info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100; // positive value
                         } else {
                             info.head_send_q_shift = 0; // this one is actually not required
                         }
                             
                     } else {
-                        // in unknown value - set HSQS to 1 to push remote buf to net slowly
-                        //info.head_send_q_shift = 10000;
-                        info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
+                        info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
                     }
                 } else {
-                    info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
+                    info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
                 } 
             }
             if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
@@ -5392,27 +5374,17 @@ int lfd_linker(void)
             if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
                 int iK;
                 if(shm_conn_info->head_send_q_shift_recv > 0) {
-                    if((0&& shm_conn_info->slow_start_recv) || (shm_conn_info->head_send_q_shift_recv == 10000)) {
-                        iK = 10000; // zero push in slow start -- this does not work as should be removed
-                    } else {
-                        iK = MSBL_PUSHDOWN_K; // push down
-                    }
+                        iK = 1; // push down
                 } else {
+                    // only this seems to work now
                     if(shm_conn_info->head_send_q_shift_recv < -10000) {
                         iK = 5; // push up FAST
                         shm_conn_info->head_send_q_shift_recv += 10000; // fix it back
                     } else {
-                        iK = MSBL_PUSHUP_K; // push up
+                        iK = 1; // push up
                     }
                 }
-                int msbl_K = shm_conn_info->head_send_q_shift_recv / iK; 
-                if(msbl_K == 0 && shm_conn_info->head_send_q_shift_recv != 0) {
-                    if(shm_conn_info->head_send_q_shift_recv > 0) {
-                        msbl_K = 1;
-                    } else {
-                        msbl_K = -1;
-                    }
-                }
+                int msbl_K = shm_conn_info->head_send_q_shift_recv * iK; 
                 if(!((shm_conn_info->head_send_q_shift_recv == 10000) && (shm_conn_info->slow_start_recv))) {
                     shm_conn_info->max_stuck_buf_len -= msbl_K;
                 }
