@@ -384,7 +384,7 @@ int assert_packet_ipv4(const char *desc, char *data, int len);
 int check_delivery_time_path_unsynced(int pnum, int mld_divider);
 int check_delivery_time_unsynced(int mld_divider);
 int check_rtt_latency_drop_chan(int chan_num);
-inline int get_rto_usec();
+int get_rto_usec();
 int lost_buf_exists(uint32_t seq_num);
 int plp_avg_pbl_unrecoverable(int pnum);
 int print_flush_data();
@@ -4035,7 +4035,7 @@ int get_rttlag(uint32_t ag_mask) {
     }
 }
 
-inline int get_rto_usec() {
+int get_rto_usec() {
     int sum_rtt = (shm_conn_info->frtt_local_applied + shm_conn_info->rttvar_worst) * 1000;
     if(sum_rtt > info.max_latency_drop.tv_usec) {
         return sum_rtt;
@@ -5200,48 +5200,7 @@ int lfd_linker(void)
         }
         // <<< END EXTERNAL LOSS DETECT
         */
-
-
-        // PACKET TRAIN AKA BDP >>>
-        if ((send_q_eff > 10000) && (send_q_eff_mean < 10000) && 0) { // WARNING: switched off! <-- remove this code
-            // now check all other chans
-            // shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
-            // shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
-            int need_send = 1;
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            uint32_t chan_mask = shm_conn_info->channels_mask;
-            sem_post(&(shm_conn_info->AG_flags_sem));
-
-            sem_wait(&(shm_conn_info->stats_sem));
-
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                    if( !( (shm_conn_info->stats[i].sqe_mean < 10000) && (shm_conn_info->stats[i].max_send_q > 10000) )) {
-                        need_send = 0;
-                    }
-                }
-            }
-            sem_post(&(shm_conn_info->stats_sem));
-            if(need_send) {
-                sem_wait(&(shm_conn_info->common_sem));
-                struct timeval time_tmp;
-                timersub(&info.current_time, &shm_conn_info->last_flood_sent, &time_tmp);
-                struct timeval time_tmp2 = { 20, 0 };
-                if (timercmp(&time_tmp, &time_tmp2, >)) {
-                    vlog(LOG_INFO,"Sending train sqe %d > 10000 sqe_mean %d < 10000", send_q_eff, send_q_eff_mean);
-                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                        if (chan_mask & (1 << i)) {
-                            shm_conn_info->flood_flag[i] = 1;
-                        }
-                    }
-                    shm_conn_info->last_flood_sent.tv_sec = info.current_time.tv_sec;
-                    shm_conn_info->last_flood_sent.tv_usec = info.current_time.tv_usec;
-                }
-                sem_post(&(shm_conn_info->common_sem));
-            }
-        }
-        // <<< END PACKET TRAIN AKA BDP
-
+        
 
 #ifdef SEND_Q_LOG
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
@@ -5350,9 +5309,10 @@ int lfd_linker(void)
                         int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
                         int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
                         int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
-                        if(sqe > sqe_above) {
-                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (shm_conn_info->stats[max_chan].rsr / info.eff_len - sqe_above) ) * sqe / 100; // negative value
-                        } else if(sqe < sqe_below) {
+                        int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
+                        if(sqe > sqe_above && sqe_above != rsrp) {
+                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100; // negative value
+                        } else if(sqe < sqe_below && sqe_below > 0) {
                             info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100; // positive value
                         } else {
                             info.head_send_q_shift = 0; // this one is actually not required
