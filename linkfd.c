@@ -5069,7 +5069,8 @@ int lfd_linker(void)
         if(info.previous_idle && !shm_conn_info->idle) { // usnig local previos flag to avoid need of syncing this op!
             // detect IDLE exit and CWR-1S
             shm_conn_info->cwr_tv = info.current_time; // warning this will race into value
-            shm_conn_info->slow_start = 1;
+            //shm_conn_info->slow_start = 1;
+            shm_conn_info->slow_start = 0; // disabled
             shm_conn_info->slow_start_tv = info.current_time;
             info.previous_idle = 0;
         }
@@ -7541,48 +7542,6 @@ if(drop_packet_flag) {
                                 struct timeval cwr_diff;
                                 timersub(&info.current_time, &shm_conn_info->cwr_tv, &cwr_diff);
                                 
-                                if(0 && // disabled this retransmit in favor of local-based
-                                        (psl <= 50) 
-                                        // //|| timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=) 
-                                        // || shm_conn_info->slow_start
-                                    ) { // CWR_PERIOD HERE
-                                    if(0 && timercmp(&cwr_diff, &((struct timeval) {1, 0}), <=)) { // CWR_PERIOD HERE
-                                        // force slow_start till the end of period
-                                        shm_conn_info->slow_start = 1;
-                                        shm_conn_info->slow_start_force = 1;
-                                        need_send_FCI = 1;
-                                        shm_conn_info->slow_start_tv = info.current_time;
-                                    }
-                                    // now find chan with smallest RTT
-                                    int min_rtt = INT32_MAX;
-                                    int min_rtt_chan = 0;
-                                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                                                min_rtt = shm_conn_info->stats[i].exact_rtt;
-                                                min_rtt_chan = i;
-                                            }
-                                        }
-                                    }
-                                    if(min_rtt_chan == info.process_num) {
-                                        // now do retransmit
-                                        int mypid;
-                                        for(uint32_t sqn_s = sqn; sqn_s < sqn + psl; sqn_s++) {
-                                            sem_wait(&(shm_conn_info->resend_buf_sem));
-                                            len = get_resend_frame_unconditional(1, &sqn_s, &out2, &mypid);
-                                            if (len == -1) {
-                                                vlog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn);
-                                                sem_post(&(shm_conn_info->resend_buf_sem));
-                                            } else {
-                                                memcpy(out_buf, out2, len);
-                                                sem_post(&(shm_conn_info->resend_buf_sem));
-                                                vlog(LOG_INFO, "resending packet 2 %lu len %d", sqn_s, len);
-                                                assert_packet_ipv4("resend2", out2, len);
-                                               send_packet(1, out_buf, len);
-                                            }
-                                        }
-                                    }
-                                }
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_pbl", "%d", ntohl(tmp_h));
                                 memcpy(&tmp_h, buf + sizeof(uint16_t) + 6 * sizeof(uint32_t), sizeof(uint32_t));
