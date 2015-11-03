@@ -1061,7 +1061,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     */
     //int max_msbl = max_msrt_mul * rtt_min * smooth_ACPS;
     // TOP the MSBL TODO: move out of HERE 
-    int max_msbl = 1000;
+    int max_msbl = MSBL_LIMIT;
     if(shm_conn_info->max_stuck_buf_len > max_msbl) {
         shm_conn_info->max_stuck_buf_len = max_msbl;
     }
@@ -5298,7 +5298,7 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) HEAD_TRANSITION_DELAY), >=); // protect from immediate dolbejka TODO: need more precise timing
             int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-            if(shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
+            if(0 && shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
                 info.head_send_q_shift = head_send_q_shift;
                 vlog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
                 info.head_send_q_shift = -10050; // inform the receiver that we need FAST (like SS) consume
@@ -5312,9 +5312,25 @@ int lfd_linker(void)
                         int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
                         int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
                         if(sqe > sqe_above && sqe_above != rsrp) {
-                            info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100; // negative value
+                            //info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100/ 100; // negative value
+                            if(sqe > rsrp) {
+                                info.head_send_q_shift = -20;
+                            } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 10)) {
+                                info.head_send_q_shift = -5;
+                            } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 20)) {
+                                info.head_send_q_shift = -2;
+                            } else {
+                                info.head_send_q_shift = -1;
+                            }
                         } else if(sqe < sqe_below && sqe_below > 0) {
-                            info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100; // positive value
+                            //info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100/100; // positive value
+                            if(percent_delta_equal(sqe, sqe_below, 20)) {
+                                info.head_send_q_shift = 1;
+                            } else if(percent_delta_equal(sqe, sqe_below, 40)) {
+                                info.head_send_q_shift = 2;
+                            } else {
+                                info.head_send_q_shift = 30;
+                            }
                         } else {
                             info.head_send_q_shift = 0; // this one is actually not required
                         }
@@ -5352,8 +5368,8 @@ int lfd_linker(void)
                 if(shm_conn_info->max_stuck_buf_len < 0) { 
                     shm_conn_info->max_stuck_buf_len = 0;
                 }
-                if(shm_conn_info->max_stuck_buf_len > 1000) {
-                    shm_conn_info->max_stuck_buf_len = 1000;
+                if(shm_conn_info->max_stuck_buf_len > MSBL_LIMIT) {
+                    shm_conn_info->max_stuck_buf_len = MSBL_LIMIT;
                 }
                 shm_conn_info->msbl_tick = info.current_time;
             }
@@ -5800,7 +5816,7 @@ int lfd_linker(void)
                 //if (send_q_eff > info.rsr) {
                 if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
-                        if(is_a_hold()) drop_packet_flag = 1;
+                        if(is_a_hold() && (shm_conn_info->lbuf_len_recv > (MSBL_LIMIT - MSBL_RESERV))) drop_packet_flag = 1;
                         else {
                             hold_mode = 1;
                         }
@@ -5884,7 +5900,8 @@ int lfd_linker(void)
             if(slope > -100000) { // TODO: need more fine-tuning!
                     // here #876
                     // converge only if no losses were detected
-                    if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+                    //if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+                    if( !shm_conn_info->head_lossing ) {
                         drop_packet_flag = 0;
                         hold_mode = 0;
                         set_W_to(send_q_eff + 2000, 1, &loss_time);
