@@ -5659,7 +5659,7 @@ int lfd_linker(void)
                            || ( channel_dead )
                            || ( shm_conn_info->idle )
                            //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
-                           || ((ag_flag_local == R_MODE) && (!mawmar_allowed()))
+                           || ((agag < AGAG_AG_THRESH) && (!mawmar_allowed()))
                            || (( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached())
                            //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
                            || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
