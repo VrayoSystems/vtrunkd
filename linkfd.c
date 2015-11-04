@@ -5346,7 +5346,7 @@ int lfd_linker(void)
                     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
                 } 
             }
-            if(info.head_send_q_shift - info.head_send_q_shift_old > 20 || info.head_send_q_shift_old - info.head_send_q_shift > 20) {
+            if(info.head_send_q_shift != info.head_send_q_shift_old) {
                 need_send_FCI = 1;
                 info.head_send_q_shift_old = info.head_send_q_shift;
             }
@@ -5856,7 +5856,9 @@ int lfd_linker(void)
                 if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
                     //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                        drop_packet_flag = 1; // no drop in retransmit? TODO HERE
+                        //drop_packet_flag = 1; // no drop in retransmit? TODO HERE
+                        set_W_to(send_q_eff + 2000, 1, &loss_time);
+                        set_Wu_to(send_q_eff + 2000);
                 } else {
                     //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                     drop_packet_flag = 0;
@@ -5898,23 +5900,12 @@ int lfd_linker(void)
         
         
         // fast convergence to underlying encap flow >>> 
-        if(info.head_channel && (drop_packet_flag || hold_mode)) { // => we are HEAD, => rsr = W_cubic => need to shift W_cubic to send_q_eff
-            //int slope = get_slope(&smalldata);
-            int slope = 1; // disable by now
-            if(slope > -100000) { // TODO: need more fine-tuning!
-                    // here #876
-                    // converge only if no losses were detected
-                    //if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
-                    if( !shm_conn_info->head_lossing ) {
-                        drop_packet_flag = 0;
-                        hold_mode = 0;
-                        set_W_to(send_q_eff + 2000, 1, &loss_time);
-                        set_Wu_to(send_q_eff + 2000);
-                    }
-            } else {
-                vlog(LOG_INFO, "Refusing to converge W due to negative slope=%d/100 rsr=%d sq=%d", slope, info.rsr, send_q_eff);
-                // This is where we do not rely on reaching congestion anymore; we can say 'speed reached' before lossing! (& switch AG on!)
-            }
+        if(info.head_channel && (drop_packet_flag || hold_mode) && !shm_conn_info->head_lossing ) { 
+            // if we are head and not lossing -> converge instead of dropping
+            drop_packet_flag = 0;
+            hold_mode = 0;
+            set_W_to(send_q_eff + 2000, 1, &loss_time);
+            set_Wu_to(send_q_eff + 2000);
         }
 
         // Push down envelope
