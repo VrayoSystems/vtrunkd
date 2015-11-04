@@ -10,5 +10,7 @@
 #define MAX_HSQS_PUSH 20 // the same for push MSBL to network
 #define MSBL_LIMIT 1000
 #define MSBL_RESERV 150
+#define PBL_SMOOTH_NUMERATOR 5
+#define PBL_SMOOTH_DENOMINATOR 6
 
 #endif

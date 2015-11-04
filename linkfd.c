@@ -3593,10 +3593,14 @@ int plp_avg_pbl(int pnum) {
 }
 
 int plp_avg_pbl_unrecoverable(int pnum) {
-    if(shm_conn_info->stats[pnum].l_pbl_tmp_unrec > shm_conn_info->stats[pnum].l_pbl_unrec) {
-        return shm_conn_info->stats[pnum].l_pbl_tmp_unrec;
+    if(shm_conn_info->stats[pnum].l_pbl_tmp_unrec > shm_conn_info->stats[pnum].l_pbl_unrec_avg) {
+        if(shm_conn_info->stats[pnum].l_pbl_unrec_avg < INT32_MAX / PBL_SMOOTH_NUMERATOR) {
+            return PBL_SMOOTH_NUMERATOR * shm_conn_info->stats[pnum].l_pbl_unrec_avg / PBL_SMOOTH_DENOMINATOR + shm_conn_info->stats[pnum].l_pbl_tmp_unrec / PBL_SMOOTH_DENOMINATOR;
+        } else {
+            return shm_conn_info->stats[pnum].l_pbl_unrec_avg;
+        }
     } else {
-        return shm_conn_info->stats[pnum].l_pbl_unrec;
+        return shm_conn_info->stats[pnum].l_pbl_unrec_avg;
     }
 }
 
@@ -7600,7 +7604,11 @@ if(drop_packet_flag) {
                                                 shm_conn_info->stats[i].l_pbl_tmp = 0; // WARNING it may collide here!
                                                 if(psl > PSL_RECOVERABLE && shm_conn_info->stats[i].l_pbl_recv > L_PBL_JOIN_EVENTS && shm_conn_info->stats[i].l_pbl_tmp_unrec > L_PBL_JOIN_EVENTS) {
                                                     // unrecoverable loss
-                                                    shm_conn_info->stats[i].l_pbl_unrec = shm_conn_info->stats[i].l_pbl_tmp_unrec;
+                                                    if(shm_conn_info->stats[i].l_pbl_unrec_avg < INT32_MAX / PBL_SMOOTH_NUMERATOR) {
+                                                        shm_conn_info->stats[i].l_pbl_unrec_avg = PBL_SMOOTH_NUMERATOR * shm_conn_info->stats[i].l_pbl_unrec_avg / PBL_SMOOTH_DENOMINATOR + shm_conn_info->stats[i].l_pbl_tmp_unrec / PBL_SMOOTH_DENOMINATOR;
+                                                    } else {
+                                                        shm_conn_info->stats[i].l_pbl_unrec_avg = INT32_MAX;
+                                                    }
                                                     shm_conn_info->stats[i].l_pbl_tmp_unrec = 0;
                                                 }
                                             }
