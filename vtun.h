@@ -778,6 +778,7 @@ struct conn_info {
     int slow_start_prev;
     int slow_start_allowed;
     int slow_start_force;
+    int avg_len_in;
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
     struct timeval cwr_tv; // for CWND Reserve 1s

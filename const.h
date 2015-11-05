@@ -12,5 +12,6 @@
 #define MSBL_RESERV 150
 #define PBL_SMOOTH_NUMERATOR 5
 #define PBL_SMOOTH_DENOMINATOR 6
+#define AVG_LEN_IN_ACK_THRESH 100 /** treat incoming traffic as ACK-only if average incoming packet length is lower than this */
 
 #endif

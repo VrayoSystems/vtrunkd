@@ -1112,9 +1112,9 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
 }
 
 int check_tokens(int chan_num) {
-#ifndef CLIENTONLY
-    return 1; 
-#endif
+    if(shm_conn_info->avg_len_in <= AVG_LEN_IN_ACK_THRESH) {
+        return 1; 
+    }
     if(shm_conn_info->slow_start_recv) {
         return 1; // the hope that this will actually help gain back ss
         //struct timeval since_write_tv;
@@ -2847,6 +2847,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int newf;
     uint32_t istart;
     int j=0;
+    shm_conn_info->avg_len_in = 7 * shm_conn_info->avg_len_in / 8 + len / 8;
 /*  this code moved to upper level a few lines before call
     if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
         // TODO: this fix actually not required if we don't mess packets too much -->
@@ -5684,9 +5685,9 @@ int lfd_linker(void)
         if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
-#ifdef CLIENTONLY
-        ag_flag_local = R_MODE; // TODO WARNING ag disabled on client! need to fix #787 to enable this
-#endif
+// #ifdef CLIENTONLY
+//         ag_flag_local = R_MODE; // TODO WARNING ag disabled on client! need to fix #787 to enable this
+// #endif
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
         } else {
@@ -6157,6 +6158,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "frtt_appl", "%d", shm_conn_info->frtt_local_applied);
             add_json(js_buf, &js_cur, "msbl", "%d", shm_conn_info->max_stuck_buf_len);
             add_json(js_buf, &js_cur, "msrt", "%d", shm_conn_info->max_stuck_rtt);
+            add_json(js_buf, &js_cur, "ali", "%d", shm_conn_info->avg_len_in);
             //add_json(js_buf, &js_cur, "frtt_rem", "%d", info.frtt_remote_predicted); // used for PROTUP only...
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             //add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
