@@ -57,6 +57,9 @@
 #include <inttypes.h>
 #include <math.h>
 #include <sys/mman.h>
+#ifdef PROF
+#include <dlfcn.h>
+#endif
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -595,6 +598,19 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
     *size = len;
     return 0;
 }
+
+#ifdef PROF
+void profexit(int sig)
+{
+    fprintf(stderr, "Exiting on SIGUSR2\n");
+    void (*_mcleanup)(void);
+    _mcleanup = (void (*)(void))dlsym(RTLD_DEFAULT, "_mcleanup");
+    if (_mcleanup == NULL)
+         fprintf(stderr, "Unable to find gprof exit hook\n");
+    else _mcleanup();
+    _exit(0);
+}
+#endif
 
 int update_prev_flushed(int logical_channel, int fprev) {
     if(shm_conn_info->prev_flushed) {
@@ -8881,9 +8897,11 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
         perror ("sigprocmask");
         return 1;
     }
-    
-    //sa.sa_handler=sig_usr2;
-    //sigaction(SIGUSR2,&sa,NULL);
+
+#ifdef PROF
+    sa.sa_handler=profexit;
+    sigaction(SIGUSR2,&sa,NULL);
+#endif
 
     /* Initialize statstic dumps */
     if( host->flags & VTUN_STAT ) {
