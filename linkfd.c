@@ -4308,6 +4308,13 @@ int mawmar_allowed() {
 
 int lfd_linker(void)
 {
+#ifdef PROF
+    int pid = getpid();
+    char pbuf[30];
+    sprintf(pbuf, "/tmp/vtrunkd_%d", pid);
+    mkdir(pbuf, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    chdir(pbuf);
+#endif
     int tpps=0;
     memset((void *)&ag_stat, 0, sizeof(ag_stat));
     memset((void *)&log_tmp, 0, sizeof(log_tmp));
