@@ -8714,6 +8714,10 @@ if(drop_packet_flag) {
     sa.sa_sigaction = SIG_DFL;
     //sa.sa_flags   = SA_SIGINFO;
     sigaction(SIGSEGV, &sa, NULL);*/
+    
+#ifdef PROF
+    chdir("/");
+#endif
 
     return 0;
 }
