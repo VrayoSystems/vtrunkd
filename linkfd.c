@@ -934,11 +934,10 @@ int get_wb_oldest_ts_unsync(struct timeval *min_tv) {
 
 /* check if we are allowed to drop packet again  */
 int check_drop_period_unsync() {
-    return 1; // this method is unused
     struct timeval tv_tm, tv_rtt;
     timersub(&info.current_time, &shm_conn_info->drop_time, &tv_tm);
     //ms2tv(&tv_rtt, shm_conn_info->stats[info.process_num].exact_rtt);
-    ms2tv(&tv_rtt, DROP_TIME_IMMUNE/1000);
+    ms2tv(&tv_rtt, DROP_TIME_IMMUNE/1000); // TODO: unnessessary calculation
     if(timercmp(&tv_tm, &tv_rtt, >=)) {
         //vlog(LOG_ERR, "Last drop passed: %d ms > rtt %d ms", tv2ms(&tv_tm), tv2ms(&tv_rtt));
         return 1;
@@ -2728,7 +2727,8 @@ int write_buf_check_n_flush(int logical_channel) {
             if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
                 shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             }
-            if(frame_seq_tmp.len > 0) {
+            // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
+            if(frame_seq_tmp.len > 0 && !(shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV) && check_drop_period_unsync())) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -2746,7 +2746,11 @@ int write_buf_check_n_flush(int logical_channel) {
                 }
             } else {
                 vlog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
+                drop_counter++;
                 shm_conn_info->write_buf[logical_channel].frames.stub_total--;
+                if(shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) {
+                    shm_conn_info->drop_time = info.current_time;
+                }
             }
 #ifdef DEBUGG
             gettimeofday(&work_loop2, NULL );
@@ -5844,10 +5848,10 @@ int lfd_linker(void)
                 //if (send_q_eff > info.rsr) {
                 if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
-                        if(is_a_hold() && (shm_conn_info->lbuf_len_recv > (MSBL_LIMIT - MSBL_RESERV))) drop_packet_flag = 1;
-                        else {
+                        //if(is_a_hold() && (shm_conn_info->lbuf_len_recv > (MSBL_LIMIT - MSBL_RESERV))) drop_packet_flag = 1;
+                        //else {
                             hold_mode = 1;
-                        }
+                        //}
                 }
                 // warning the whole block is not sync
                 if(((shm_conn_info->ag_mask & (~(1 << info.process_num))) & (shm_conn_info->channels_mask)) !=  // hope that ag_mask is consistent with chan_mask
