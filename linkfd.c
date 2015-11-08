@@ -3233,6 +3233,10 @@ int transition_period_time(int hsqs) {
 }
 
 int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is only used to change head!
+    shm_conn_info->max_chan = 0; // change immedialtey
+    shm_conn_info->max_chan_new = 0;
+    return 1;
+    
     int fixed = 0;
     int htime = 0;
     int Ch = 0;
