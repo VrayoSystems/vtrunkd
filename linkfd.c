@@ -1128,6 +1128,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
 
 int check_tokens(int chan_num) {
     if(shm_conn_info->avg_len_in <= AVG_LEN_IN_ACK_THRESH) {
+        shm_conn_info->max_stuck_buf_len = 0;
         return 1; 
     }
     if(shm_conn_info->slow_start_recv) {
@@ -2134,6 +2135,7 @@ int select_devread_send(char *buf, char *out2) {
 #endif
             return CONTINUE_ERROR;
         }
+        shm_conn_info->avg_len_out = EFF_LEN_AVG_N * shm_conn_info->avg_len_out / EFF_LEN_AVG_D + len / EFF_LEN_AVG_D;
 
         if (drop_packet_flag == 1) {
             // #876
@@ -2538,6 +2540,7 @@ int write_buf_check_n_flush(int logical_channel) {
                            && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=)
                          )                                          // MLD several checks passed
                       //|| (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
+                      || (shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->seq_num_unrecoverable_loss) // can drop due to unrecoverable loss!
                 )
            ) {
             if (!cond_flag) {
@@ -2867,7 +2870,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int newf;
     uint32_t istart;
     int j=0;
-    shm_conn_info->avg_len_in = 7 * shm_conn_info->avg_len_in / 8 + len / 8;
+    shm_conn_info->avg_len_in = EFF_LEN_AVG_N * shm_conn_info->avg_len_in / EFF_LEN_AVG_D + len / EFF_LEN_AVG_D;
 /*  this code moved to upper level a few lines before call
     if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
         // TODO: this fix actually not required if we don't mess packets too much -->
@@ -3944,6 +3947,9 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_last_received = new_idx;
         int loss_calc = lossed_count();
         vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        if(loss_calc > UNRECOVERABLE_LOSS) {
+            shm_conn_info->seq_num_unrecoverable_loss = seq_num;
+        }
         info.lossed_complete_received = new_idx;
         need_send_loss_FCI_flag = loss_calc;
         //lossed_print_debug();
@@ -5712,9 +5718,9 @@ int lfd_linker(void)
         if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
             ag_flag_local = AG_MODE;
         }
-// #ifdef CLIENTONLY
-//         ag_flag_local = R_MODE; // TODO WARNING ag disabled on client! need to fix #787 to enable this
-// #endif
+        if(shm_conn_info->avg_len_out < AVG_LEN_IN_ACK_THRESH) {
+            ag_flag_local = R_MODE; // disable AG if sending small packets
+        }
         if(ag_flag_local == AG_MODE) {
             shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
         } else {
@@ -7639,7 +7645,7 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 sem_post(&(shm_conn_info->stats_sem));
-                                if( psl <= 50 && who_lost > -1) {
+                                if( psl <= UNRECOVERABLE_LOSS && who_lost > -1) {
                                     // now find chan with smallest RTT
                                     int min_rtt = INT32_MAX;
                                     int min_rtt_chan = 0;

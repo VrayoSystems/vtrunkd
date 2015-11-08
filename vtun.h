@@ -125,7 +125,7 @@
     #define RESEND_BUF_SIZE 600 // int
     #define JS_MAX 1000 // data for logs, * 3 times is allocated
 #else
-    #define RESEND_BUF_SIZE 3000 // int
+    #define RESEND_BUF_SIZE 5000 // int
     #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
 #endif
 // maximum compiled-in buffers for tcp channels per link
@@ -672,6 +672,7 @@ struct conn_info {
     sem_t common_sem; // for seq_counter
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     uint32_t flushed_packet[FLUSHED_PACKET_ARRAY_SIZE]; //sync by write_buf_sem
+    uint32_t seq_num_unrecoverable_loss; /** seq_num of unrecoverable loss - just flush up to this one since we're going to retransmit anyways */
     short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
@@ -779,6 +780,7 @@ struct conn_info {
     int slow_start_allowed;
     int slow_start_force;
     int avg_len_in;
+    int avg_len_out;
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
     struct timeval cwr_tv; // for CWND Reserve 1s
