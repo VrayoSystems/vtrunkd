@@ -1232,7 +1232,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     info.least_rx_seq[i] = shm_conn_info->write_buf[i].last_received_seq[p];
                 } else {
                     if(    shm_conn_info->stats[p].channel_dead 
-                       || ((shm_conn_info->stats[p].exact_rtt - shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt) > (buf_latency_ms + (MAX_LATENCY_DROP_USEC / 1000)))) { // do not wait for late packet only if drtt is > MLD or DEAD
+                       //|| ((shm_conn_info->stats[p].exact_rtt - shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt) > (buf_latency_ms + (MAX_LATENCY_DROP_USEC / 1000)))
+                       ) { // do not wait for late packet only if drtt is > MLD or DEAD
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
@@ -5892,16 +5893,13 @@ int lfd_linker(void)
                         set_Wu_to(send_q_eff + 2000);
                 } else {
                     //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                    drop_packet_flag = 0;
                 }
             } else {
                 if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
                     //vlog(LOG_INFO, "R_MODE DROP!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                    drop_packet_flag = 0;
                     hold_mode = 1;
                 } else {
                     //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                    drop_packet_flag = 0;
                 }
             }
         }
@@ -5915,19 +5913,19 @@ int lfd_linker(void)
         if(hold_mode) {
             info.hold_time = info.current_time;
         }
-        #ifdef CLIENTONLY
-        if(!sq_control) {
-            hold_mode = 0;
-            if(! (dirty_seq_num % 30) ) {
-                info.max_latency_drop.tv_usec = 1000;
-                shm_conn_info->frtt_local_applied = 1;
-                shm_conn_info->rttvar_worst = 1;
-                drop_packet_flag = 1;
-            } else {
-                info.max_latency_drop.tv_usec = 50000;
-            }
-        }
-        #endif
+        // #ifdef CLIENTONLY
+        // if(!sq_control) {
+        //     hold_mode = 0;
+        //     if(! (dirty_seq_num % 30) ) {
+        //         info.max_latency_drop.tv_usec = 1000;
+        //         shm_conn_info->frtt_local_applied = 1;
+        //         shm_conn_info->rttvar_worst = 1;
+        //         drop_packet_flag = 1;
+        //     } else {
+        //         info.max_latency_drop.tv_usec = 50000;
+        //     }
+        // }
+        // #endif
         
         
         // // fast convergence to underlying encap flow >>> 
@@ -5959,11 +5957,11 @@ int lfd_linker(void)
         
         shm_conn_info->stats[info.process_num].hold = hold_mode;
         sem_post(&(shm_conn_info->stats_sem));
-        if(!info.head_channel) {
-            if(hold_mode_previous == 0 && hold_mode == 1) {
-                sig_send1(); // notify head (all) about our new condition
-            }
-        }
+        // if(!info.head_channel) {
+        //     if(hold_mode_previous == 0 && hold_mode == 1) {
+        //         sig_send1(); // notify head (all) about our new condition
+        //     }
+        // }
         if(info.head_channel) {
             if(hold_mode_previous == 1 && hold_mode == 0) {
                 vlog(LOG_INFO, "HEAD unhold.");
