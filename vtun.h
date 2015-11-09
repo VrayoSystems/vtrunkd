@@ -780,7 +780,6 @@ struct conn_info {
     int slow_start_allowed;
     int slow_start_force;
     int avg_len_in;
-    uint32_t latest_la_sqn; /** latest SQN used to identify HSQS event update age */
     int avg_len_out;
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
