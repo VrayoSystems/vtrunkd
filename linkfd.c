@@ -3233,9 +3233,9 @@ int transition_period_time(int hsqs) {
 }
 
 int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is only used to change head!
-    shm_conn_info->max_chan = 0; // change immedialtey
-    shm_conn_info->max_chan_new = 0;
-    return 1;
+    // shm_conn_info->max_chan = 0; // change immedialtey
+    // shm_conn_info->max_chan_new = 0;
+    // return 1;
     
     int fixed = 0;
     int htime = 0;
@@ -3500,16 +3500,6 @@ int set_W_cubic_unrecoverable(int t) {
 int set_W_unsync(int t) {
     info.send_q_limit_cubic = cubic_recalculate(t, info.send_q_limit_cubic_max, info.B, info.C);
     shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
-    //vlog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
-    return 1;
-}
-
-// t in ms
-int set_W_unsync_old(int t) {
-    double K = cbrt((((double) info.send_q_limit_cubic_max) * info.B) / info.C);
-    info.send_q_limit_cubic = (uint32_t) (info.C * pow(((double) (t)) - K, 3) + info.send_q_limit_cubic_max);
-    shm_conn_info->stats[info.process_num].W_cubic = info.send_q_limit_cubic;
-
     //vlog(LOG_INFO, "set W t=%d, W=%d, Wmax=%d", t, info.send_q_limit_cubic, info.send_q_limit_cubic_max);
     return 1;
 }
@@ -5940,26 +5930,26 @@ int lfd_linker(void)
         #endif
         
         
-        // fast convergence to underlying encap flow >>> 
-        if(info.head_channel && (drop_packet_flag || hold_mode) && !shm_conn_info->head_lossing ) { 
-            // if we are head and not lossing -> converge instead of dropping
-            drop_packet_flag = 0;
-            hold_mode = 0;
-            set_W_to(send_q_eff + 2000, 1, &loss_time);
-            set_Wu_to(send_q_eff + 2000);
-        }
+        // // fast convergence to underlying encap flow >>> 
+        // if(info.head_channel && (drop_packet_flag || hold_mode) && !shm_conn_info->head_lossing ) { 
+        //     // if we are head and not lossing -> converge instead of dropping
+        //     drop_packet_flag = 0;
+        //     hold_mode = 0;
+        //     set_W_to(send_q_eff + 2000, 1, &loss_time);
+        //     set_Wu_to(send_q_eff + 2000);
+        // }
 
-        // Push down envelope
-        if(info.head_channel && (send_q_eff < (int32_t)info.send_q_limit_cubic)) {
-            //set_W_to(send_q_eff, 30, &loss_time);
-            // here #876
-            // converge only if no losses were detected
-            if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
-                set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
-                set_Wu_to(send_q_eff);
-            }
-        }
-        // <<< END fast convergence to underlying encap flow
+        // // Push down envelope
+        // if(info.head_channel && (send_q_eff < (int32_t)info.send_q_limit_cubic)) {
+        //     //set_W_to(send_q_eff, 30, &loss_time);
+        //     // here #876
+        //     // converge only if no losses were detected
+        //     if( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) {
+        //         set_W_to(send_q_eff, 1, &loss_time); // 1 means immediately!
+        //         set_Wu_to(send_q_eff);
+        //     }
+        // }
+        // // <<< END fast convergence to underlying encap flow
         
 
 #ifdef NOCONTROL
@@ -7945,12 +7935,12 @@ if(drop_packet_flag) {
                                     }
                                 }
                                             
-                                t = 0;
-                                info.max_send_q = 0;
-                                //waste Cubic recalc
-                                sem_wait(&(shm_conn_info->stats_sem));
-                                set_W_unsync(t);
-                                sem_post(&(shm_conn_info->stats_sem));
+                                // t = 0;
+                                // info.max_send_q = 0;
+                                // //waste Cubic recalc
+                                // sem_wait(&(shm_conn_info->stats_sem));
+                                // set_W_unsync(t);
+                                // sem_post(&(shm_conn_info->stats_sem));
                                 if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                     info.u_loss_tv = info.current_time;
                                     info.max_send_q_u = 0;
