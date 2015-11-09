@@ -7751,21 +7751,6 @@ if(drop_packet_flag) {
                                 }
                             }
                             
-                            memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
-                            
-                            sem_wait(write_buf_sem);
-                            //shm_conn_info->forced_rtt_recv = (int) ntohs(tmp16_n); // temporarily commented out to enable logs for remote frtt monitoring
-                            shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
-                            /*
-                            if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
-                                ms2tv(&info.max_latency_drop, shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT); // also set at select
-                            } else {
-                                info.max_latency_drop.tv_sec = 0;
-                                info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
-                            }
-                            */
-                            sem_post(write_buf_sem);
-                            
                             
                             memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint32_t)); //ag_flag
                             shm_conn_info->ag_mask_recv = hsag_mask2ag_mask(ntohl(tmp32_n));
@@ -7804,6 +7789,13 @@ if(drop_packet_flag) {
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp16_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t)); 
                             shm_conn_info->slow_start_recv = ntohs(tmp16_n);
+                            
+                            if(shm_conn_info->stats[info.process_num].la_sqn > shm_conn_info->latest_la_sqn) {
+                                memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
+                                shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
+                                shm_conn_info->latest_la_sqn = shm_conn_info->stats[info.process_num].la_sqn; 
+                            }
+                            
                             // now recalculate MAR is possible...
                             info.channel[chan_num].send_q =
                                     info.channel[chan_num].local_seq_num > info.channel[chan_num].packet_seq_num_acked ?

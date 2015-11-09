@@ -755,6 +755,7 @@ struct conn_info {
     int tpps;
     int forced_rtt_remote;
     int rttvar_worst;
+    uint32_t latest_la_sqn; /** latest SQN used to identify HSQS event update age */
     int remote_head_pnum; // remote head local pnum (for TPC)
     int write_speed_avg;
     int write_speed;
