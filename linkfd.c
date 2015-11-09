@@ -5140,7 +5140,7 @@ int lfd_linker(void)
             }
             exact_rtt = info.rtt2; 
             rttvar = info.srtt2var;
-        } else {
+    } else {
             // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
                 vlog(LOG_ERR, "WARNING! info.rtt == 0!");
@@ -5346,7 +5346,7 @@ int lfd_linker(void)
                 info.head_send_q_shift = -10050; // inform the receiver that we need FAST (like SS) consume
                 need_send_FCI = 1;
             } else {
-                if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
+                //if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
                     if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
                         
                         int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
@@ -5380,9 +5380,9 @@ int lfd_linker(void)
                     } else {
                         info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
                     }
-                } else {
-                    info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
-                } 
+                // } else {
+                //     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
+                // } 
             }
             if(info.head_send_q_shift != info.head_send_q_shift_old) {
                 need_send_FCI = 1;
@@ -5461,6 +5461,9 @@ int lfd_linker(void)
             
             //send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?) // TODO: use correct smoothing algorithm!
             send_q_eff_mean = 6 * send_q_eff_mean / 7 + send_q_eff / 7;
+            if(send_q_eff < info.max_send_q) {
+                info.max_send_q = 8 * info.max_send_q / 9 + send_q_eff / 9;
+            }
             
             if(shm_conn_info->stats[info.process_num].sqe_mean_lossq < send_q_eff) {
                 shm_conn_info->stats[info.process_num].sqe_mean_lossq = send_q_eff;
@@ -7909,26 +7912,27 @@ if(drop_packet_flag) {
                                     info.W_u_max = info.max_send_q_u;
                                     info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                 } else {
-                                    if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
+                                    //if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
+                                    if (info.max_send_q >= info.send_q_limit_cubic_max) {
                                         info.Wmax_saved = info.send_q_limit_cubic_max;
                                         info.Wmax_tv = loss_time;
                                         //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
-                                        if(info.max_send_q < info.send_q_limit_cubic) {
-                                            info.send_q_limit_cubic_max = info.max_send_q; // WTF? why not above? TODO undefined behaviour here
-                                        } else {
-                                            info.send_q_limit_cubic_max = info.send_q_limit_cubic;
-                                        }
+                                        // if(info.max_send_q > info.send_q_limit_cubic) {
+                                            info.send_q_limit_cubic_max = info.max_send_q;
+                                        // } else {
+                                        //     info.send_q_limit_cubic_max = info.send_q_limit_cubic;
+                                        // }
                                         if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                             info.W_u_max = info.max_send_q_u;
                                             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                         }
                                     } else {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
-                                        if(info.max_send_q < info.send_q_limit_cubic) {
+                                        // if(info.max_send_q > info.send_q_limit_cubic) {
                                             info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
-                                        } else {
-                                            info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);
-                                        }
+                                        // } else {
+                                        //     info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);
+                                        // }
                                         if(info.channel[chan_num].packet_loss > PSL_RECOVERABLE) {
                                             info.W_u_max = (int) ((double)info.max_send_q_u * (2.0 - info.Bu) / 2.0);
                                             info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
