@@ -619,6 +619,7 @@ struct phisical_status { // A.K.A. "info"
     int previous_idle;
     int head_send_q_shift;
     int head_send_q_shift_old;
+    int FCI_send_counter;
 };
 
 #define LOSS_ARRAY 80
