@@ -6506,9 +6506,10 @@ int lfd_linker(void)
                 memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                tmp16_n = htons(shm_conn_info->slow_start); 
+                //tmp32_n = htons(shm_conn_info->slow_start); 
+                tmp32_n = htons(shm_conn_info->seq_counter); 
                 //tmp16_n = 0;
-                memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
+                memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 if(debug_trace) {
                 vlog(LOG_ERR,
                         "FRAME_CHANNEL_INFO LLRS send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -6516,7 +6517,7 @@ int lfd_linker(void)
                         (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tmp_tv.tv_sec * 1000000 + tmp_tv.tv_usec));
                         }
                 // send FCI-LLRS
-                int len_ret = udp_write(info.channel[i].descriptor, buf, ((9 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 6 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                 info.channel[i].local_seq_num++;
                 if (len_ret < 0) {
                     vlog(LOG_ERR, "Could not send FRAME_CHANNEL_INFO; reason %s (%d)", strerror(errno), errno);
@@ -6628,9 +6629,10 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                    tmp16_n = htons(shm_conn_info->slow_start); 
+                    tmp32_n = htons(shm_conn_info->seq_counter); 
+                    //tmp16_n = htons(shm_conn_info->slow_start); 
                     //tmp16_n = 0;
-                    memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //global seq_num
+                    memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                         if(debug_trace) {
                     vlog(LOG_ERR,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
@@ -6639,7 +6641,7 @@ int lfd_linker(void)
                         }
                     // send FCI
                     // TODO: select here ???
-                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((9 * sizeof(uint16_t) + 5 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
+                    int len_ret = udp_write(info.channel[i].descriptor, buf, ((8 * sizeof(uint16_t) + 6 * sizeof(uint32_t)) | VTUN_BAD_FRAME));
                     info.channel[i].local_seq_num++;
 
                     if (len_ret < 0) {
@@ -7779,13 +7781,13 @@ if(drop_packet_flag) {
                             shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t)); 
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
-                            memcpy(&tmp16_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint16_t)); 
-                            shm_conn_info->slow_start_recv = ntohs(tmp16_n);
+                            memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t)); 
+                            uint32_t remote_seq = ntohs(tmp32_n);
                             
-                            if(shm_conn_info->stats[info.process_num].la_sqn > shm_conn_info->latest_la_sqn) {
+                            if(remote_seq > shm_conn_info->latest_la_sqn) {
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
-                                shm_conn_info->latest_la_sqn = shm_conn_info->stats[info.process_num].la_sqn; 
+                                shm_conn_info->latest_la_sqn = remote_seq; 
                             }
                             
                             // now recalculate MAR is possible...
