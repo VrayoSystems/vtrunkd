@@ -3065,6 +3065,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         return mlen;
     } else {
         //vlog(LOG_INFO, "write: add to tail!");
+        if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
+            vlog(LOG_ERR, "WARNING! added one packet loss! %lu +2= %lu", shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num, seq_num);
+        }
 
         istart = shm_conn_info->frames_buf[i].seq_num;
         if( (shm_conn_info->frames_buf[i].seq_num > seq_num) &&
@@ -3943,6 +3946,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         int loss_calc = lossed_count();
         vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         if(loss_calc > UNRECOVERABLE_LOSS) {
+            // WARNING! this may not actually work as seq_num may be zero!!
             shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         }
         info.lossed_complete_received = new_idx;
@@ -6029,6 +6033,10 @@ int lfd_linker(void)
                 shm_conn_info->tokenbuf+=50;
             }
             
+            if(shm_conn_info->seq_num_unrecoverable_loss == 0) { // prevent unrecoverable loss from being set to 0 by lossed_consume
+                shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
+            }
+            
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
             //    vlog(LOG_ERR, "WARNING head chan detect may be wrong: max ACS != head ACS");            
             //}
@@ -7786,9 +7794,9 @@ if(drop_packet_flag) {
                             //vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %d > %d ", remote_seq, shm_conn_info->latest_la_sqn);
                             
                             if(remote_seq > shm_conn_info->latest_la_sqn) {
-                                //vlog(LOG_ERR, "Setting hsqs");
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
+                                //vlog(LOG_ERR, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
                                 shm_conn_info->latest_la_sqn = remote_seq; 
                             }
                             
