@@ -5379,13 +5379,13 @@ int lfd_linker(void)
                 //     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
                 // } 
             }
-            if(info.FCI_send_counter < 5) {
+            if(info.head_send_q_shift != info.head_send_q_shift_old) {
+                info.FCI_send_counter = 0;
+            }
+            if(info.FCI_send_counter < 100) { // send as many times as possible?
                 need_send_FCI = 1;
                 info.head_send_q_shift_old = info.head_send_q_shift;
                 info.FCI_send_counter++;
-            }
-            if(info.head_send_q_shift != info.head_send_q_shift_old) {
-                info.FCI_send_counter = 0;
             }
             
             timersub(&info.current_time, &shm_conn_info->msbl_tick, &tv_tmp_tmp_tmp);
