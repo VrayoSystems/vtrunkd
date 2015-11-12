@@ -6507,7 +6507,7 @@ int lfd_linker(void)
                 tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                 memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 //tmp32_n = htons(shm_conn_info->slow_start); 
-                tmp32_n = htons(shm_conn_info->seq_counter); 
+                tmp32_n = htons(shm_conn_info->seq_counter[1]); 
                 //tmp16_n = 0;
                 memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                 if(debug_trace) {
@@ -6629,7 +6629,7 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                    tmp32_n = htons(shm_conn_info->seq_counter); 
+                    tmp32_n = htons(shm_conn_info->seq_counter[1]); 
                     //tmp16_n = htons(shm_conn_info->slow_start); 
                     //tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
@@ -7783,8 +7783,10 @@ if(drop_packet_flag) {
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t)); 
                             uint32_t remote_seq = ntohs(tmp32_n);
+                            //vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %d > %d ", remote_seq, shm_conn_info->latest_la_sqn);
                             
                             if(remote_seq > shm_conn_info->latest_la_sqn) {
+                                //vlog(LOG_ERR, "Setting hsqs");
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
                                 shm_conn_info->latest_la_sqn = remote_seq; 
