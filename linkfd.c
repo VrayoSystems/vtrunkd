@@ -5334,52 +5334,38 @@ int lfd_linker(void)
             //info.head_send_q_shift = shm_conn_info->stats[max_chan].loss_send_q * 65 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) HEAD_TRANSITION_DELAY), >=); // protect from immediate dolbejka TODO: need more precise timing
-            int head_send_q_shift = shm_conn_info->stats[shm_conn_info->max_chan_new].sqe_mean / info.eff_len - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len;
-            if(0 && shm_conn_info->max_chan_new != shm_conn_info->max_chan && headswitch_start_ok && head_send_q_shift < 0) { // TODO HERE: another method in AG_MODE -- in AG_mode is the same??
-                info.head_send_q_shift = head_send_q_shift;
-                vlog(LOG_INFO, "Entering head transition with hsqs %d", info.head_send_q_shift);
-                info.head_send_q_shift = -10050; // inform the receiver that we need FAST (like SS) consume
-                need_send_FCI = 1;
-            } else {
-                //if(shm_conn_info->stats[max_chan].loss_send_q < LOSS_SEND_Q_MAX - 100) {
-                    if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                        
-                        int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
-                        int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
-                        int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
-                        int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
-                        if(sqe > sqe_above && sqe_above != rsrp) {
-                            //info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100/ 100; // negative value
-                            if(sqe > rsrp) {
-                                info.head_send_q_shift = -20;
-                            } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 10)) {
-                                info.head_send_q_shift = -5;
-                            } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 20)) {
-                                info.head_send_q_shift = -2;
-                            } else {
-                                info.head_send_q_shift = -1;
-                            }
-                            //need_send_FCI = 1;
-                        } else if(sqe < sqe_below && sqe_below > 0) {
-                            //info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100/100; // positive value
-                            if(percent_delta_equal(sqe, sqe_below, 20)) {
-                                info.head_send_q_shift = 1;
-                            } else if(percent_delta_equal(sqe, sqe_below, 40)) {
-                                info.head_send_q_shift = 2;
-                            } else {
-                                info.head_send_q_shift = 30;
-                            }
-                            //need_send_FCI = 1;
-                        } else {
-                            info.head_send_q_shift = 0; // this one is actually not required
-                        }
-                            
+            if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
+                int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
+                int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
+                int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
+                int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
+                if(sqe > sqe_above && sqe_above != rsrp) {
+                    //info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100/ 100; // negative value
+                    if(sqe > rsrp) {
+                        info.head_send_q_shift = -20;
+                    } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 10)) {
+                        info.head_send_q_shift = -5;
+                    } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 20)) {
+                        info.head_send_q_shift = -2;
                     } else {
-                        info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
+                        info.head_send_q_shift = -1;
                     }
-                // } else {
-                //     info.head_send_q_shift = LOSS_SEND_Q_MAX * 60 / 100 - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K; // in case of MAX - we may deal wit hreal BETA and real CWND drop here #743
-                // } 
+                    //need_send_FCI = 1;
+                } else if(sqe < sqe_below && sqe_below > 0) {
+                    //info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100/100; // positive value
+                    if(percent_delta_equal(sqe, sqe_below, 20)) {
+                        info.head_send_q_shift = 1;
+                    } else if(percent_delta_equal(sqe, sqe_below, 40)) {
+                        info.head_send_q_shift = 2;
+                    } else {
+                        info.head_send_q_shift = 30;
+                    }
+                    //need_send_FCI = 1;
+                } else {
+                    info.head_send_q_shift = 0; // this one is actually not required
+                }
+            } else {
+                info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
             }
             if(info.head_send_q_shift != info.head_send_q_shift_old) {
                 info.FCI_send_counter = 0;
@@ -5895,12 +5881,12 @@ int lfd_linker(void)
             drop_packet_flag = 0;
             if(info.head_channel) {
                 //if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
-                if (send_q_eff > send_q_limit_cubic_apply) {
+                if (send_q_eff > send_q_limit_cubic_apply/2) {
                         // #876
                     //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                         //drop_packet_flag = 1; // no drop in retransmit? TODO HERE
-                        set_W_to(send_q_eff + 2000, 1, &loss_time);
-                        set_Wu_to(send_q_eff + 2000);
+                        set_W_to(send_q_eff*2, 1, &loss_time);
+                        set_Wu_to(send_q_eff*2);
                 } else {
                     //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
                 }
