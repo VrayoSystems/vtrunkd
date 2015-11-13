@@ -5359,6 +5359,7 @@ int lfd_linker(void)
                             } else {
                                 info.head_send_q_shift = -1;
                             }
+                            //need_send_FCI = 1;
                         } else if(sqe < sqe_below && sqe_below > 0) {
                             //info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100/100; // positive value
                             if(percent_delta_equal(sqe, sqe_below, 20)) {
@@ -5368,6 +5369,7 @@ int lfd_linker(void)
                             } else {
                                 info.head_send_q_shift = 30;
                             }
+                            //need_send_FCI = 1;
                         } else {
                             info.head_send_q_shift = 0; // this one is actually not required
                         }
