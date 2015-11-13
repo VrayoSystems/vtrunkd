@@ -424,9 +424,9 @@ int tunnel(struct vtun_host *host, int srv)
                             return -1;
                         }
 // now scan for names, only fail if no found
-                        for (i = 0; i < vtun.MAX_TUNNELS_NUM; i++) {
-                            if (strcmp(shm_conn_info[i].devname, dev) == 0) {
-                                connid = i;
+                        for (int i2 = 0; i2 < vtun.MAX_TUNNELS_NUM; i2++) {
+                            if (strcmp(shm_conn_info[i2].devname, dev) == 0) {
+                                connid = i2;
                                 break;
                             }
                         }
