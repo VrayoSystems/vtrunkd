@@ -919,7 +919,6 @@ int get_wb_oldest_ts_unsync(struct timeval *min_tv) {
     int packets_checked = 0;
     *min_tv = info.current_time;
 
-    // now count losses over N packets
     while((i > -1) && (packets_checked < 100)) {
         n = shm_conn_info->frames_buf[i].rel_next;
         if( n > -1  && timercmp(&shm_conn_info->frames_buf[n].time_stamp, min_tv, <)) {
@@ -2732,7 +2731,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             }
             // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
-            if(frame_seq_tmp.len > 0 && !(shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV) && check_drop_period_unsync())) {
+            if(frame_seq_tmp.len > 0 && !(shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV) && check_drop_period_unsync())) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -4548,6 +4547,7 @@ int lfd_linker(void)
     }
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].rtt_phys_avg = 1;
+    shm_conn_info->latest_la_sqn = 0;
     strcpy(shm_conn_info->stats[info.process_num].name, lfd_host->host);
     // set up hash name
     shm_conn_info->stats[info.process_num].hsnum = name2hsnum(shm_conn_info->stats[info.process_num].name);
@@ -5342,9 +5342,17 @@ int lfd_linker(void)
                 if(sqe > sqe_above && sqe_above != rsrp) {
                     //info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100/ 100; // negative value
                     if(sqe > rsrp) {
-                        info.head_send_q_shift = -20;
+                        if(info.head_send_q_shift > 0) {
+                            info.head_send_q_shift = -10;
+                        } else {
+                            info.head_send_q_shift -= 5;
+                        }
                     } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 10)) {
-                        info.head_send_q_shift = -5;
+                        if(info.head_send_q_shift > 0) {
+                            info.head_send_q_shift = -5;
+                        } else {
+                            info.head_send_q_shift -= 1;
+                        }
                     } else if(sqe < rsrp && percent_delta_equal(sqe, rsrp, 20)) {
                         info.head_send_q_shift = -2;
                     } else {
@@ -5368,11 +5376,11 @@ int lfd_linker(void)
                 info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
             }
             if(info.head_send_q_shift != info.head_send_q_shift_old) {
+                info.head_send_q_shift_old = info.head_send_q_shift;
                 info.FCI_send_counter = 0;
             }
             if(info.FCI_send_counter < 100) { // send as many times as possible?
                 need_send_FCI = 1;
-                info.head_send_q_shift_old = info.head_send_q_shift;
                 info.FCI_send_counter++;
             }
             
@@ -6013,11 +6021,12 @@ int lfd_linker(void)
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
             }
             
-            struct timeval min_tv, max_pkt_lag, max_lag = {0, 800000};
+            struct timeval min_tv, max_pkt_lag, max_lag = {0, 800000}, since_write_tv;
             get_wb_oldest_ts_unsync(&min_tv);
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
-                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, shm_conn_info->write_buf[1].frames.length);
+                timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length);
                 shm_conn_info->tokenbuf+=50;
             }
             
@@ -7370,6 +7379,7 @@ if(drop_packet_flag) {
                                 memset(shm_conn_info->fast_resend_buf, 0, sizeof(struct frame_seq) * MAX_TCP_PHYSICAL_CHANNELS);
                                 shm_conn_info->resend_buf_idx = 0;
                                 shm_conn_info->fast_resend_buf_idx = 0;
+                                shm_conn_info->latest_la_sqn = 0;
                                 sem_post(&(shm_conn_info->resend_buf_sem));
                             } else {
                                 sem_post(&(shm_conn_info->AG_flags_sem));
@@ -7779,12 +7789,12 @@ if(drop_packet_flag) {
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t)); 
                             uint32_t remote_seq = ntohs(tmp32_n);
-                            //vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %d > %d ", remote_seq, shm_conn_info->latest_la_sqn);
+                            vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %d > %d ", remote_seq, shm_conn_info->latest_la_sqn);
                             
                             if(remote_seq > shm_conn_info->latest_la_sqn) {
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
-                                //vlog(LOG_ERR, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
+                                vlog(LOG_ERR, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
                                 shm_conn_info->latest_la_sqn = remote_seq; 
                             }
                             

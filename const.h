@@ -8,8 +8,8 @@
 #define DROP_TIME_IMMUNE 2500000 // useconds of drop immune
 #define MAX_HSQS_EAT 20 // percent of channel send_q allowed to be eaten in SELECT_SLEEP_USEC
 #define MAX_HSQS_PUSH 20 // the same for push MSBL to network
-#define MSBL_LIMIT 1200
-#define MSBL_RESERV 450
+#define MSBL_LIMIT 1100
+#define MSBL_RESERV 250
 #define PBL_SMOOTH_NUMERATOR 5
 #define PBL_SMOOTH_DENOMINATOR 6
 #define EFF_LEN_AVG_N 7
