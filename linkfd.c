@@ -2003,6 +2003,7 @@ int is_a_hold() {
     int sqe;
     uint32_t chan_mask = shm_conn_info->channels_mask;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        // this does not work - see ag_mask_recv and mode
         if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
             limit = shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr ? shm_conn_info->stats[i].W_cubic : shm_conn_info->stats[i].rsr;
             sqe = shm_conn_info->stats[i].sqe_mean;
@@ -3949,6 +3950,14 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
             shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         }
         info.lossed_complete_received = new_idx;
+        // now push up MSBL
+        if((shm_conn_info->stats[info.process_num].recv_mode == AG_MODE || shm_conn_info->stats[info.process_num].remote_head_channel) && timercmp(&info.recv_loss_immune, &info.current_time, <=)) {
+            vlog(LOG_INFO, "Loss detected - pushing the MSBL up by %d", (shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0)));
+            shm_conn_info->max_stuck_buf_len += shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0);
+            struct timeval loss_tv;
+            ms2tv(&loss_tv, info.exact_rtt);
+            timeradd(&info.current_time, &loss_tv, &info.recv_loss_immune);
+        }
         need_send_loss_FCI_flag = loss_calc;
         //lossed_print_debug();
         return loss_calc;
@@ -5398,7 +5407,13 @@ int lfd_linker(void)
                         iK = 1; // push up
                     }
                 }
-                int msbl_K = shm_conn_info->head_send_q_shift_recv * iK; 
+                int msbl_K;
+                if(timercmp(&info.recv_loss_immune, &info.current_time, <=)) {
+                    msbl_K = shm_conn_info->head_send_q_shift_recv * iK; 
+                } else {
+                    msbl_K = 0; // disable any event processing immediately after detected loss since we now have outdated info
+                }
+                    
                 if(!((shm_conn_info->head_send_q_shift_recv == 10000) && (shm_conn_info->slow_start_recv))) {
                     shm_conn_info->max_stuck_buf_len -= msbl_K;
                 }
@@ -6497,12 +6512,12 @@ int lfd_linker(void)
                 */
                 //tmp16_n = htons(shm_conn_info->frtt_local_applied); //forced_rtt here // replacing this with hsqs
                 tmp16_n = htons(info.head_send_q_shift);
-                memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //forced_rtt
+                memcpy(buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); // hsqs
                 tmp32_n = htonl(ag_mask2hsag_mask(shm_conn_info->ag_mask));
                 memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //ag_mask
 //                vlog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d", buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
-                tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
-                memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
+                tmp32_n = htons(shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len); // sqe_mean (in pkt)
+                memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); // sqe_mean (in pkt)
                 buf_len_real = shm_conn_info->write_buf[1].frames.length;
                 tmp32_n = htons(buf_len_real);
                 memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
@@ -6624,7 +6639,6 @@ int lfd_linker(void)
                     memcpy(buf + 5 * sizeof(uint16_t) + 3 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //forced_rtt
 
 //                    vlog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d",buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
-                    tmp32_n = htons(shm_conn_info->buf_len_send_counter++);
                     memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
                     tmp32_n = htons(buf_len_real);
                     buf_len_real = shm_conn_info->write_buf[1].frames.length;
@@ -7760,6 +7774,7 @@ if(drop_packet_flag) {
                             if(shm_conn_info->stats[info.process_num].recv_mode != (shm_conn_info->ag_mask_recv & (1 << info.process_num))) {
                                 shm_conn_info->stats[info.process_num].recv_mode = (shm_conn_info->ag_mask_recv & (1 << info.process_num)) ? 1 : 0;
                             }
+                            // TODO: check WTF is here ^^^vvv ???
                             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                 if( (i != info.process_num) && (shm_conn_info->stats[i].recv_mode != (shm_conn_info->ag_mask_recv & (1 << i))) ) { 
                                     // we are setting new mode for another channel
@@ -7773,15 +7788,11 @@ if(drop_packet_flag) {
                             }
                                     
                             set_rttlag();
-                            memcpy(&tmp32_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len counter
-                            int buf_len_counter = ntohs(tmp32_n);
+                            memcpy(&tmp16_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); // sqe_mean
+                            shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt = ntohs(tmp16_n);
+                            
                             memcpy(&tmp32_n, buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len
-//                            vlog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv %d counter %d was %d",ntohs(tmp32_n), buf_len_counter, shm_conn_info->buf_len_recv_counter);
-                            if (buf_len_counter > shm_conn_info->buf_len_recv_counter) {
-                                shm_conn_info->buf_len_recv = (int)ntohs(tmp32_n);
-//                                vlog(LOG_ERR,"FRAME_CHANNEL_INFO buf_len_recv apply");
-                            }
-                            //vlog(LOG_INFO, "Received forced_rtt: %d; my forced_rtt: %d", shm_conn_info->forced_rtt_recv, shm_conn_info->forced_rtt);
+                            int buf_len_recv = (int)ntohs(tmp32_n);
                             
                             memcpy(&tmp16_n, buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); 
                             shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
@@ -7794,6 +7805,7 @@ if(drop_packet_flag) {
                             if(remote_seq > shm_conn_info->latest_la_sqn) {
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
+                                shm_conn_info->buf_len_recv = buf_len_recv;
                                 vlog(LOG_ERR, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
                                 shm_conn_info->latest_la_sqn = remote_seq; 
                             }

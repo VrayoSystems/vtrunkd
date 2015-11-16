@@ -431,6 +431,7 @@ struct conn_stats {
     uint32_t la_sqn; // last received global seq_num ACK
     int loss_send_q;
     int32_t ACK_speed_avg;  /**< Moving average of @see ACK_speed */
+    int remote_sqe_mean_pkt; /** remote sqe_mean sent by FCI, in packets */
 };
 /**
  * Structure for garbage statistic and information
@@ -620,6 +621,7 @@ struct phisical_status { // A.K.A. "info"
     int head_send_q_shift;
     int head_send_q_shift_old;
     int FCI_send_counter;
+    struct timeval recv_loss_immune;
 };
 
 #define LOSS_ARRAY 80
@@ -680,7 +682,7 @@ struct conn_info {
     int rxmt_mode_pid; // unused?
     sem_t stats_sem;
     uint16_t miss_packets_max; // get from another side sync on stats_sem
-    int buf_len_recv,buf_len, buf_len_recv_counter, buf_len_send_counter;
+    int buf_len_recv,buf_len;
     struct conn_stats stats[MAX_TCP_PHYSICAL_CHANNELS]; // need to synchronize because can acces few proccees
     uint32_t miss_packets_max_recv_counter; // sync on stats_sem
     uint32_t miss_packets_max_send_counter; // sync on stats_sem
