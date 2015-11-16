@@ -2732,7 +2732,8 @@ int write_buf_check_n_flush(int logical_channel) {
                 shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             }
             // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
-            if(frame_seq_tmp.len > 0 && !(shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV) && check_drop_period_unsync())) {
+            int need_drop = (shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync();
+            if(frame_seq_tmp.len > 0 && !need_drop) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -2752,7 +2753,7 @@ int write_buf_check_n_flush(int logical_channel) {
                 vlog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
                 drop_counter++;
                 shm_conn_info->write_buf[logical_channel].frames.stub_total--;
-                if(shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) {
+                if(need_drop) {
                     shm_conn_info->drop_time = info.current_time;
                 }
             }
