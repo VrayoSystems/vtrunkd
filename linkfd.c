@@ -3969,7 +3969,6 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         int loss_calc = lossed_count();
         vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         if(loss_calc > UNRECOVERABLE_LOSS) {
-            // WARNING! this may not actually work as seq_num may be zero!!
             shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         }
         info.lossed_complete_received = new_idx;
@@ -5349,6 +5348,7 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
             // FAST TIMER HERE: 20 ticks per second
+            
             // #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
             /* 
             if( (shm_conn_info->stats[info.process_num].sqe_mean > SEND_Q_EFF_WORK) 
@@ -6060,11 +6060,6 @@ int lfd_linker(void)
                 timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
                 vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length);
                 shm_conn_info->tokenbuf+=50;
-            }
-            
-            if(shm_conn_info->seq_num_unrecoverable_loss == 0) { // prevent unrecoverable loss from being set to 0 by lossed_consume
-                // not sure if it is reqired
-                shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
             }
             
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
@@ -8308,6 +8303,10 @@ if(drop_packet_flag) {
                     
                     CHKCPU(27);
                     // this is loss detection -->
+                    if(shm_conn_info->seq_num_unrecoverable_loss == 0 && seq_num != 0) { 
+                            // prevent unrecoverable loss from being set to 0 by lossed_consume
+                        shm_conn_info->seq_num_unrecoverable_loss = seq_num;
+                    }
                     unsigned int lrs;
                     if(lossed_consume(local_seq_tmp, seq_num, &lrs, &info.channel[chan_num].local_seq_num_recv) == 0) {
                         info.channel[chan_num].loss_time = info.current_time;
