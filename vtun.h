@@ -506,7 +506,7 @@ struct phisical_status { // A.K.A. "info"
     int tun_device; /**< /dev/tun descriptor */
     int srv; /**< 1 - if I'm server and 0 - if I'm client */
     int head_channel;
-#define LOSSED_BACKLOG_SIZE 100
+#define LOSSED_BACKLOG_SIZE UNRECOVERABLE_LOSS+1
     struct {
         unsigned int seq_num;
         unsigned int local_seq_num;
