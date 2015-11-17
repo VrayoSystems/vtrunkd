@@ -3543,7 +3543,8 @@ int get_t_loss(struct timeval *loss_tv, int tmax) {
 
 int cubic_recalculate(int t, int cubic_max, double beta, double c) {
     double K = cbrt((((double) cubic_max) * beta) / c);
-    return (uint32_t) (c * pow(((double) (t)) - K, 3) + cubic_max);
+    double tp = ((double) (t)) - K;
+    return (uint32_t) (c * tp*tp*tp + cubic_max);
 }
 
 int set_W_cubic_unrecoverable(int t) {
