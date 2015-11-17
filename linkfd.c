@@ -2636,6 +2636,41 @@ int write_buf_check_n_flush(int logical_channel) {
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], tv2ms(&tv_tmp), tv2ms(&since_write_tv), shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length, shm_conn_info->wb_just_write_frames[logical_channel].length, info.current_time, js_buf_fl);
                     loss_flag = 1;
+                } else if (shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->seq_num_unrecoverable_loss) {
+                    info.flush_sequential = shm_conn_info->seq_num_unrecoverable_loss - shm_conn_info->frames_buf[fprev].seq_num;
+                    int sizeF = -1, size1 = -1, sizeJW = -1;
+                    int result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &sizeF);
+                    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &size1);
+                    result = frame_llist_getSize_asserted(FRAME_BUF_SIZE, &shm_conn_info->wb_just_write_frames[logical_channel], shm_conn_info->frames_buf, &sizeJW);
+                    update_prev_flushed(logical_channel, fprev);
+                    r_amt = flush_reason_chan(WHO_LAGGING, logical_channel, lag_pname, shm_conn_info->channels_mask, &who_lost_pnum);
+                    // TODO: calculate real who_lost, etc. instead of these MLD stubs
+                    vlog(LOG_INFO,
+                            "UNRECOVERABLE_LOSS PSL=%d : PBL=%d %s+%d tflush_counter %"PRIu32" isl %d sqn %d, lws %d lrxsqn %d bli %d bl-loc %d(%d) fl %d(%d) jwb %d(%d) lat %"PRIu64" ms wlag %"PRIu64" ms ts %ld.%06ld %s",
+                            info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
+                            shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
+                            info.least_rx_seq[logical_channel], buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, tv2ms(&tv_tmp), tv2ms(&since_write_tv), info.current_time, js_buf_fl);
+                    uint32_t sqn = shm_conn_info->frames_buf[fprev].seq_num;
+                    int idx = fprev;
+                    int n_idx, cnt=0;
+                    while(sqn < shm_conn_info->seq_num_unrecoverable_loss) {
+                        // now jsut discard the packet
+                        cnt++;
+                        vlog(LOG_INFO, "Discarding seq_num %ld cnt %d", sqn, cnt);
+                        n_idx = shm_conn_info->frames_buf[idx].rel_next;
+                        if(frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &idx) < 0) {
+                            vlog(LOG_ERR, "WARNING! tried to pull from empty write_buf 2!");
+                            return 0;
+                        }
+                        frame_llist_append(&shm_conn_info->wb_free_frames, idx, shm_conn_info->frames_buf);
+                        idx = n_idx;
+                        if(idx == -1) {
+                            vlog(LOG_ERR, "ERROR: did not find seq_num_unrecoverable_loss in buffer!");
+                            return 0;
+                        }
+                        sqn = shm_conn_info->frames_buf[idx].seq_num;
+                    }
+                    loss_flag = 1;
                 } else {
                     update_prev_flushed(logical_channel, fprev);
                     int sizeF = -1, size1 = -1, sizeJW = -1;
