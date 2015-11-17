@@ -2846,6 +2846,20 @@ int write_buf_check_n_flush(int logical_channel) {
     }
 }
 
+/**
+ * push up msbl in case of loss for current channel
+ * 
+ */
+ 
+void msbl_push_up_loss_unsync() {
+    struct timeval loss_tv;
+    if((shm_conn_info->stats[info.process_num].recv_mode == AG_MODE || shm_conn_info->stats[info.process_num].remote_head_channel) && timercmp(&info.recv_loss_immune, &info.current_time, <=)) {
+        vlog(LOG_INFO, "Loss detected - pushing the MSBL up by %d", (shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0)));
+        shm_conn_info->max_stuck_buf_len += shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0);
+        ms2tv(&loss_tv, info.exact_rtt);
+        timeradd(&info.current_time, &loss_tv, &info.recv_loss_immune);
+    }
+}
 
 /*
                _ _             _            __               _     _ 
@@ -3822,6 +3836,10 @@ int lossed_latency_drop(unsigned int *last_received_seq) {
     vlog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
     //lossed_print_debug();
     int loss = lossed_count();
+    msbl_push_up_loss_unsync();
+    if(loss > UNRECOVERABLE_LOSS) {
+        shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
+    }
     info.lossed_complete_received = info.lossed_last_received;
     *last_received_seq = info.lossed_loop_data[info.lossed_last_received].local_seq_num;
     return loss;
@@ -3882,6 +3900,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
+        shm_conn_info->seq_num_unrecoverable_loss = seq_num;
+        msbl_push_up_loss_unsync();
         info.lossed_complete_received = 0;
         info.lossed_last_received = 0;
         info.lossed_loop_data[0].local_seq_num = local_seq_num;
@@ -3895,6 +3915,8 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
+        shm_conn_info->seq_num_unrecoverable_loss = seq_num;
+        msbl_push_up_loss_unsync();
         info.lossed_complete_received = new_idx;
         info.lossed_last_received = new_idx;
         info.lossed_loop_data[new_idx].local_seq_num = local_seq_num;
@@ -3952,13 +3974,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         }
         info.lossed_complete_received = new_idx;
         // now push up MSBL
-        if((shm_conn_info->stats[info.process_num].recv_mode == AG_MODE || shm_conn_info->stats[info.process_num].remote_head_channel) && timercmp(&info.recv_loss_immune, &info.current_time, <=)) {
-            vlog(LOG_INFO, "Loss detected - pushing the MSBL up by %d", (shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0)));
-            shm_conn_info->max_stuck_buf_len += shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0);
-            struct timeval loss_tv;
-            ms2tv(&loss_tv, info.exact_rtt);
-            timeradd(&info.current_time, &loss_tv, &info.recv_loss_immune);
-        }
+        msbl_push_up_loss_unsync();
         need_send_loss_FCI_flag = loss_calc;
         //lossed_print_debug();
         return loss_calc;
@@ -6047,6 +6063,7 @@ int lfd_linker(void)
             }
             
             if(shm_conn_info->seq_num_unrecoverable_loss == 0) { // prevent unrecoverable loss from being set to 0 by lossed_consume
+                // not sure if it is reqired
                 shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
             }
             
