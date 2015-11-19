@@ -5298,53 +5298,53 @@ int lfd_linker(void)
         // <<< END SEND_Q_EFF CALC
         
         // SLOW START DETECTOR >>>
-        sem_wait(&(shm_conn_info->write_buf_sem));
-        struct timeval ss_runtime;
-        struct timeval ss_immune = SLOW_START_IMMUNE;
-        struct timeval ss_max_run = SLOW_START_MAX_RUN;
-        timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
-        shm_conn_info->slow_start_allowed = 1;
-        if(timercmp(&ss_runtime, &ss_max_run, >=)) {
-            shm_conn_info->slow_start_allowed = 0;
-            if(shm_conn_info->slow_start) {
-                shm_conn_info->slow_start = 0;
-                // The ONLY slow start EXIT here!
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) {
-                        // leave lossq as unknown
-                        //if(shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_MAX) {
-                            //shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[i].sqe_mean / info.eff_len;
-                        //}
-                    }
-                }
-                need_send_FCI = 1;
-            }
-        }
-        if(timercmp(&ss_runtime, &ss_immune, >=)) {
-            shm_conn_info->slow_start_allowed = 1;
-        }
-           /* // this is slow-start -unidle KISS experiment (do a slow start on each new connection?) 
-        if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
-            int gsq = get_cwnd();
-            info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
-            if((shm_conn_info->slow_start_force || (info.gsend_q_grow >= 30 && info.gsend_q_grow < 100)) && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
-                shm_conn_info->slow_start = 1;
-            } else {
-                shm_conn_info->slow_start = 0;
-                shm_conn_info->slow_start_force = 0;
-            }
-            if(shm_conn_info->slow_start != shm_conn_info->slow_start_prev) {
-                if(shm_conn_info->slow_start) {
-                    shm_conn_info->slow_start_tv = info.current_time;
-                }
-                need_send_FCI = 1;
-            }
-            shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
-            shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
-            shm_conn_info->ssd_gsq_old = gsq;
-        }
-        */
-        sem_post(&(shm_conn_info->write_buf_sem));
+        // sem_wait(&(shm_conn_info->write_buf_sem));
+        // struct timeval ss_runtime;
+        // struct timeval ss_immune = SLOW_START_IMMUNE;
+        // struct timeval ss_max_run = SLOW_START_MAX_RUN;
+        // timersub(&info.current_time, &shm_conn_info->slow_start_tv, &ss_runtime);
+        // shm_conn_info->slow_start_allowed = 1;
+        // if(timercmp(&ss_runtime, &ss_max_run, >=)) {
+        //     shm_conn_info->slow_start_allowed = 0;
+        //     if(shm_conn_info->slow_start) {
+        //         shm_conn_info->slow_start = 0;
+        //         // The ONLY slow start EXIT here!
+        //         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        //             if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) {
+        //                 // leave lossq as unknown
+        //                 //if(shm_conn_info->stats[i].loss_send_q == LOSS_SEND_Q_MAX) {
+        //                     //shm_conn_info->stats[i].loss_send_q = shm_conn_info->stats[i].sqe_mean / info.eff_len;
+        //                 //}
+        //             }
+        //         }
+        //         need_send_FCI = 1;
+        //     }
+        // }
+        // if(timercmp(&ss_runtime, &ss_immune, >=)) {
+        //     shm_conn_info->slow_start_allowed = 1;
+        // }
+        //   /* // this is slow-start -unidle KISS experiment (do a slow start on each new connection?) 
+        // if(shm_conn_info->seq_counter[1] - shm_conn_info->ssd_pkts_sent >= 50) {
+        //     int gsq = get_cwnd();
+        //     info.gsend_q_grow = gsq - shm_conn_info->ssd_gsq_old;
+        //     if((shm_conn_info->slow_start_force || (info.gsend_q_grow >= 30 && info.gsend_q_grow < 100)) && shm_conn_info->slow_start_allowed) { // grow > 100 means we have a window restore or some other crazy stuff??
+        //         shm_conn_info->slow_start = 1;
+        //     } else {
+        //         shm_conn_info->slow_start = 0;
+        //         shm_conn_info->slow_start_force = 0;
+        //     }
+        //     if(shm_conn_info->slow_start != shm_conn_info->slow_start_prev) {
+        //         if(shm_conn_info->slow_start) {
+        //             shm_conn_info->slow_start_tv = info.current_time;
+        //         }
+        //         need_send_FCI = 1;
+        //     }
+        //     shm_conn_info->slow_start_prev = shm_conn_info->slow_start;
+        //     shm_conn_info->ssd_pkts_sent = shm_conn_info->seq_counter[1];
+        //     shm_conn_info->ssd_gsq_old = gsq;
+        // }
+        // */
+        // sem_post(&(shm_conn_info->write_buf_sem));
         // <<< END
         
 
@@ -5378,7 +5378,7 @@ int lfd_linker(void)
         if(ping_rcvd == 0) {
             timersub(&info.current_time, &ping_req_tv[0], &tv_tmp);
             int cur_rtt = tv2ms(&tv_tmp);
-            sem_wait(&(shm_conn_info->stats_sem));
+            // sem_wait(&(shm_conn_info->stats_sem));
             //for(int i=0; i<info.channel_amount; i++) { // only chan 0 !
             if(cur_rtt > shm_conn_info->stats[info.process_num].rtt_phys_avg) {
                 shm_conn_info->stats[info.process_num].rtt_phys_avg = cur_rtt;
@@ -5386,16 +5386,16 @@ int lfd_linker(void)
             }
             //}
             // TODO: in case of DDS initiate second ping immediately!!??
-            sem_post(&(shm_conn_info->stats_sem));
+            // sem_post(&(shm_conn_info->stats_sem));
         }
         // <<< END calculate on-line RTT
 
         
         // DEAD DETECT and COPY HEAD from SHM >>>
         // max_chan=-1; // this is bad practice ;-)
-        sem_wait(&(shm_conn_info->AG_flags_sem));
+        // sem_wait(&(shm_conn_info->AG_flags_sem));
         uint32_t chan_mask = shm_conn_info->channels_mask;
-        sem_post(&(shm_conn_info->AG_flags_sem));
+        // sem_post(&(shm_conn_info->AG_flags_sem));
         
         sem_wait(&(shm_conn_info->stats_sem));
         if(info.dropping) { // will ONLY drop if PESO in play. Never as of now...
@@ -5411,32 +5411,32 @@ int lfd_linker(void)
                 shm_conn_info->stats[info.process_num].packet_upload_cnt = 0;
                 shm_conn_info->stats[info.process_num].packet_upload_tv = info.current_time;
                 
-                int max_pups = 0;
-                int max_pups_chan = 0;
-                int min_rtt = INT32_MAX;
-                int min_rtt_chan = 0;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                        if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                            min_rtt = shm_conn_info->stats[i].exact_rtt;
-                            min_rtt_chan = i;
-                        }
-                        if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
-                            max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
-                            max_pups_chan = i;
-                        }
-                    }
-                }
-                if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt) {
-                    shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt;
-                    vlog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
-                        shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
-                    if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
-                        //shm_conn_info->forced_rtt = shm_conn_info->drtt;
-                        //need_send_FCI = 1;
-                        //vlog(LOG_INFO, "WARNING FnLR disabled");
-                    }
-                }
+                // int max_pups = 0;
+                // int max_pups_chan = 0;
+                // int min_rtt = INT32_MAX;
+                // int min_rtt_chan = 0;
+                // for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                //     if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                //         if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                //             min_rtt = shm_conn_info->stats[i].exact_rtt;
+                //             min_rtt_chan = i;
+                //         }
+                //         if(max_pups < shm_conn_info->stats[info.process_num].packet_upload_spd) {
+                //             max_pups = shm_conn_info->stats[info.process_num].packet_upload_spd;
+                //             max_pups_chan = i;
+                //         }
+                //     }
+                // }
+                // if(shm_conn_info->stats[max_pups_chan].exact_rtt > min_rtt) {
+                //     shm_conn_info->drtt = shm_conn_info->stats[max_pups_chan].exact_rtt - min_rtt;
+                //     vlog(LOG_INFO, "WARNING Fastest chan Not Lowest RTT delta %d (FnLR) max_pups %d max_pups_chan %d rtt %d min_rtt %d min_rtt_chan %d", 
+                //         shm_conn_info->drtt, max_pups, max_pups_chan, shm_conn_info->stats[max_pups_chan].exact_rtt, min_rtt, min_rtt_chan);
+                //     if(shm_conn_info->drtt > shm_conn_info->forced_rtt) {
+                //         //shm_conn_info->forced_rtt = shm_conn_info->drtt;
+                //         //need_send_FCI = 1;
+                //         //vlog(LOG_INFO, "WARNING FnLR disabled");
+                //     }
+                // }
             }
         }
 
@@ -5953,27 +5953,27 @@ int lfd_linker(void)
         // if ( (rtt_shift*(max_speed/1000)) > MAX_BYTE_DELIVERY_DIFF) ag_flag_local = R_MODE; // unneeded check due to check_rtt_latency_drop() above
         shm_conn_info->stats[info.process_num].ag_flag_local = ag_flag_local;
         
-        if(0 && ag_flag_local == AG_MODE) {
-            // check our protup against all other chans
-            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                if ((chan_mask & (1 << i)) 
-                    && (!shm_conn_info->stats[i].channel_dead)
-                    && ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec)) 
-                    && ((shm_conn_info->stats[i].ag_flag_local) || (check_delivery_time_path_unsynced(i, 2)))) { // warning! CLD may
-                    info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
-                    if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted * 1000) ) {
-                        if(info.head_channel) {
-                            vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: ertt %d - ertt %d > %u and is head frtt_rem %d rtt2-1 %d rtt2-2 %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[i].exact_rtt, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted, shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2);
-                            redetect_head_unsynced(chan_mask, info.process_num);
-                            // TODO: immediate action required!
-                        } else {
-                            vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
+        // if(0 && ag_flag_local == AG_MODE) {
+        //     // check our protup against all other chans
+        //     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        //         if ((chan_mask & (1 << i)) 
+        //             && (!shm_conn_info->stats[i].channel_dead)
+        //             && ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec)) 
+        //             && ((shm_conn_info->stats[i].ag_flag_local) || (check_delivery_time_path_unsynced(i, 2)))) { // warning! CLD may
+        //             info.frtt_remote_predicted = get_rttlag(shm_conn_info->ag_mask);
+        //             if( ((shm_conn_info->stats[info.process_num].exact_rtt - shm_conn_info->stats[i].exact_rtt)*1000 > ((int)info.max_latency_drop.tv_usec) + info.frtt_remote_predicted * 1000) ) {
+        //                 if(info.head_channel) {
+        //                     vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: ertt %d - ertt %d > %u and is head frtt_rem %d rtt2-1 %d rtt2-2 %d", shm_conn_info->stats[info.process_num].exact_rtt, shm_conn_info->stats[i].exact_rtt, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted, shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2);
+        //                     redetect_head_unsynced(chan_mask, info.process_num);
+        //                     // TODO: immediate action required!
+        //                 } else {
+        //                     vlog(LOG_ERR, "WARNING: PROTUP condition detected on our channel: %d - %d > %u frtt_rem %d", shm_conn_info->stats[info.process_num].rtt2, shm_conn_info->stats[i].rtt2, ((int)info.max_latency_drop.tv_usec), info.frtt_remote_predicted);
 
-                        }
-                    }
-                }
-            }
-        }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
         
         
             CHKCPU(86);
@@ -6297,9 +6297,6 @@ int lfd_linker(void)
             shm_conn_info->stats[info.process_num].ACK_speed_avg = 6 * shm_conn_info->stats[info.process_num].ACK_speed_avg / 7 + max_ACS2 / 7;
             miss_packets_max = shm_conn_info->miss_packets_max;
             sem_post(&(shm_conn_info->stats_sem));
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            uint32_t AG_ready_flags_tmp = shm_conn_info->AG_ready_flag;
-            sem_post(&(shm_conn_info->AG_flags_sem));
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
             
@@ -6506,7 +6503,6 @@ int lfd_linker(void)
 #endif
             int Ch = 0;
             int Cs = 0;
-            sem_wait(&(shm_conn_info->stats_sem));
             max_chan = shm_conn_info->max_chan;
             /*
             if(shm_conn_info->stats[max_chan].srtt2_10 > 0 && shm_conn_info->stats[info.process_num].ACK_speed > 0) {
@@ -6514,7 +6510,6 @@ int lfd_linker(void)
                 Cs = 100*shm_conn_info->stats[max_chan].ACK_speed/shm_conn_info->stats[info.process_num].ACK_speed;
             }
             */
-            sem_post(&(shm_conn_info->stats_sem));
             
             //add_json(js_buf, &js_cur, "Ch", "%d", Ch);
             //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
@@ -6547,39 +6542,7 @@ int lfd_linker(void)
         }
         // <<< END JSON LOGS
         
-        if (info.check_shm) { // impossible to work (remove!?)
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            uint32_t chan_mask = shm_conn_info->channels_mask;
-            if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
-                linker_term = TERM_NONFATAL;
-                vlog(LOG_INFO, "Need to exit by peer");
-            }
-            sem_post(&(shm_conn_info->AG_flags_sem));
-            for (uint32_t i = 0; i < 32; i++) {
-                if (!(chan_mask & (1 << i))) {
-                    if (last_channels_mask & (1 << i)) {
-#ifdef DEBUGG
-                        vlog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
-#endif
-                        uint32_t i_n = htonl(i);
-                        uint16_t flag_n = htons(FRAME_DEAD_CHANNEL);
-                        memcpy(buf, &i_n, sizeof(uint32_t));
-                        memcpy(buf, &flag_n, sizeof(uint16_t));
-                        int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
-                        if (len_ret < 0) {
-                            vlog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
-                            linker_term = TERM_NONFATAL;
-                        }
-                    }
-                }
-            }
-            last_channels_mask = chan_mask;
-            if (shm_conn_info->session_hash_remote != info.session_hash_remote) {
-                vlog(LOG_INFO, "Need to exit by hash compare; exit");
-                linker_term = TERM_NONFATAL;
-            }
-        }
-
+        
 
         // SEND FCI >>>
         int timer_result=0;
@@ -6806,10 +6769,10 @@ int lfd_linker(void)
             }
 
             /* TODO write function for lws sending*/
-            sem_wait(&(shm_conn_info->write_buf_sem));
-            uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
+            // sem_wait(&(shm_conn_info->write_buf_sem));
+            // uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
             uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
-            sem_post(&(shm_conn_info->write_buf_sem));
+            // sem_post(&(shm_conn_info->write_buf_sem));
             if ((last_written_seq_tmp > (last_last_written_seq[i] + LWS_NOTIFY_MAX_SUB_SEQ)) && select_net_write(i) ) {
                 // TODO: DUP code!
                 
@@ -6865,6 +6828,38 @@ int lfd_linker(void)
                 vlog(LOG_INFO, "WARNING Fixing psl %d > lrs %d to last received seq", shm_conn_info->write_buf[1].possible_seq_lost[info.process_num], shm_conn_info->write_buf[1].last_received_seq[info.process_num]);
                 shm_conn_info->write_buf[1].possible_seq_lost[info.process_num] = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
             }
+            if (info.check_shm) { // impossible to work (remove!?)
+                sem_wait(&(shm_conn_info->AG_flags_sem));
+                uint32_t chan_mask = shm_conn_info->channels_mask;
+                if (shm_conn_info->need_to_exit & (1 << info.process_num)) {
+                    linker_term = TERM_NONFATAL;
+                    vlog(LOG_INFO, "Need to exit by peer");
+                }
+                sem_post(&(shm_conn_info->AG_flags_sem));
+                for (uint32_t i = 0; i < 32; i++) {
+                    if (!(chan_mask & (1 << i))) {
+                        if (last_channels_mask & (1 << i)) {
+    #ifdef DEBUGG
+                            vlog(LOG_INFO, "Sending FRAME_DEAD_CHANNEL for %i", i);
+    #endif
+                            uint32_t i_n = htonl(i);
+                            uint16_t flag_n = htons(FRAME_DEAD_CHANNEL);
+                            memcpy(buf, &i_n, sizeof(uint32_t));
+                            memcpy(buf, &flag_n, sizeof(uint16_t));
+                            int len_ret = proto_write(info.channel[0].descriptor, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME));
+                            if (len_ret < 0) {
+                                vlog(LOG_ERR, "Could not send FRAME_DEAD_CHANNEL; exit");
+                                linker_term = TERM_NONFATAL;
+                            }
+                        }
+                    }
+                }
+                last_channels_mask = chan_mask;
+                if (shm_conn_info->session_hash_remote != info.session_hash_remote) {
+                    vlog(LOG_INFO, "Need to exit by hash compare; exit");
+                    linker_term = TERM_NONFATAL;
+                }
+            }
 
             if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
                 vlog(LOG_INFO, "Session %s network timeout", lfd_host->host);
@@ -6918,6 +6913,7 @@ int lfd_linker(void)
                 for (int i = 0; i < info.channel_amount; i++) {
                     // speed(kb/s) calculation
                     sem_wait(&(shm_conn_info->stats_sem));
+                    shm_conn_info->stats[info.process_num].time_lag_remote = time_lag_local.time_lag;
                     shm_conn_info->stats[info.process_num].speed_chan_data[i].up_current_speed =
                             shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt / time_passed;
                     sem_post(&(shm_conn_info->stats_sem));
@@ -6952,9 +6948,6 @@ int lfd_linker(void)
                     }
                 }
                 time_lag_local.time_lag = time_lag_cnt != 0 ? time_lag_sum / time_lag_cnt : 0;
-                sem_wait(&(shm_conn_info->stats_sem));
-                shm_conn_info->stats[info.process_num].time_lag_remote = time_lag_local.time_lag;
-                sem_post(&(shm_conn_info->stats_sem));
 
                 //todo send time_lag for all process(PHYSICAL CHANNELS)
                 uint32_t time_lag_remote;
@@ -6981,10 +6974,10 @@ int lfd_linker(void)
                         tmp_host &= 0xFFFF;
     //vlog(LOG_ERR, "DEBUGG tmp_host %"PRIu32"", tmp_host); //?????
                         sem_post(&(shm_conn_info->stats_sem));
-                        sem_wait(write_buf_sem);
+                        // sem_wait(write_buf_sem);
                         tmp_host |= shm_conn_info->tflush_counter << 16;
                         shm_conn_info->tflush_counter = 0;
-                        sem_post(write_buf_sem);
+                        // sem_post(write_buf_sem);
     //                    vlog(LOG_ERR, "DEBUGG tmp_host packed %"PRIu32"", tmp_host); //?????
                         uint32_t time_lag_remote_h = htonl(time_lag_remote); // we have two values in time_lag_remote(_h)
                         memcpy(buf, &time_lag_remote_h, sizeof(uint32_t));
@@ -7020,10 +7013,10 @@ int lfd_linker(void)
                 delay_cnt = 0;
 
                 for (i = 1; i < info.channel_amount; i++) {
-                    sem_wait(&(shm_conn_info->write_buf_sem));
+                    // sem_wait(&(shm_conn_info->write_buf_sem));
                     uint32_t last_lws_notified_tmp = shm_conn_info->write_buf[i].last_lws_notified;
                     uint32_t last_written_seq_tmp = shm_conn_info->write_buf[i].last_written_seq;
-                    sem_post(&(shm_conn_info->write_buf_sem));
+                    // sem_post(&(shm_conn_info->write_buf_sem));
                     if (((info.current_time.tv_sec - last_lws_notified_tmp) > LWS_NOTIFY_PEROID) && (last_written_seq_tmp > last_last_written_seq[i])) {
                         if(!select_net_write(i)) continue;
                         // TODO: DUP code!
@@ -7056,9 +7049,9 @@ int lfd_linker(void)
             alive_physical_channels = 0;
             int check_result=0;
             
-            sem_wait(&(shm_conn_info->AG_flags_sem));
+            // sem_wait(&(shm_conn_info->AG_flags_sem));
             uint32_t chan_mask = shm_conn_info->channels_mask;
-            sem_post(&(shm_conn_info->AG_flags_sem));
+            // sem_post(&(shm_conn_info->AG_flags_sem));
             
             
             for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) { 
@@ -7181,9 +7174,10 @@ int lfd_linker(void)
                          \/     \/          \/     \/      
                      * Now do a select () from all devices and channels
                      */
-        sem_wait(&shm_conn_info->AG_flags_sem);
+        // sem_wait(&shm_conn_info->AG_flags_sem);
         chan_mask = shm_conn_info->channels_mask;
-        sem_post(&shm_conn_info->AG_flags_sem);
+        // sem_post(&shm_conn_info->AG_flags_sem);
+        FD_ZERO(&fdset_w);
         sem_wait(write_buf_sem);
         /*
         if((shm_conn_info->forced_rtt_recv + MAX_LATENCY_DROP_SHIFT) > (MAX_LATENCY_DROP_USEC/1000)) {
@@ -7197,7 +7191,6 @@ int lfd_linker(void)
         next_token_ms = 0;
         add_tokens(1, &next_token_ms);
 
-        FD_ZERO(&fdset_w);
         if (get_write_buf_wait_data(chan_mask, &next_token_ms) || need_retransmit || check_fast_resend()) { // TODO: need_retransmit here is because we think that it does continue almost immediately on select
             pfdset_w = &fdset_w;
             FD_SET(info.tun_device, pfdset_w);
@@ -7984,9 +7977,7 @@ if(drop_packet_flag) {
                                 info.p_lost++;
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 shm_conn_info->stats[info.process_num].real_loss_time = info.current_time; // received loss event time
-                                sem_post(&(shm_conn_info->stats_sem));
                                 if(info.head_channel) {
-                                    sem_wait(&(shm_conn_info->stats_sem));
                                     if(shm_conn_info->idle) {
                                         // first check if we are really head
                                         // find max ACS 
@@ -8029,8 +8020,8 @@ if(drop_packet_flag) {
                                        // vlog(LOG_INFO, "Head lossing");
                                         shm_conn_info->head_lossing = 1;
                                     }
-                                    sem_post(&(shm_conn_info->stats_sem));
                                 }
+                                sem_post(&(shm_conn_info->stats_sem));
                                 ms2tv(&loss_tv, info.exact_rtt);
                                 timeradd(&info.current_time, &loss_tv, &loss_immune);
                                 if(0 && info.head_channel) {
@@ -8098,16 +8089,7 @@ if(drop_packet_flag) {
                                 t = t / CUBIC_T_DIV;
                                 t = t > cubic_t_max ? cubic_t_max : t; // 200s limit
                             }
-                            sem_wait(&(shm_conn_info->stats_sem));
-                            // set_W_unsync(t); // not required to recalculate here; will be more predictable
-                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q; // never ever used!! TODO remove
-                            sem_post(&(shm_conn_info->stats_sem));
-                            //if (my_max_send_q < info.rsr) {
-                            //    drop_packet_flag = 0;
-                            //}
-                            sem_wait(&(shm_conn_info->stats_sem));
-                            shm_conn_info->stats[info.process_num].my_max_send_q_chan_num = my_max_send_q_chan_num;
-                            sem_post(&(shm_conn_info->stats_sem));
+                            
                             info.max_send_q_avg = (uint32_t) ((int32_t) info.max_send_q_avg  // unused
                                     - ((int32_t) info.max_send_q_avg - (int32_t) my_max_send_q) / 4);
 
@@ -8151,6 +8133,12 @@ if(drop_packet_flag) {
                             //vlog(LOG_INFO, "FCI spd %d %d", info.channel[chan_num].packet_recv_upload, info.channel[chan_num].packet_recv_upload_avg);
                             sem_wait(&(shm_conn_info->stats_sem));
                             /* store in shm */
+                            // set_W_unsync(t); // not required to recalculate here; will be more predictable
+                            shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].send_q_loss = info.channel[chan_num].send_q; // never ever used!! TODO remove
+                            //if (my_max_send_q < info.rsr) {
+                            //    drop_packet_flag = 0;
+                            //}
+                            shm_conn_info->stats[info.process_num].my_max_send_q_chan_num = my_max_send_q_chan_num;
                             shm_conn_info->stats[info.process_num].speed_chan_data[chan_num].up_recv_speed = // TODO: remove! never used
                                     info.channel[chan_num].packet_recv_upload;
                             if (my_max_send_q_chan_num == chan_num) {
@@ -8316,12 +8304,12 @@ if(drop_packet_flag) {
                             //}
 
                             // Now set max_chan -->
-                            sem_wait(&(shm_conn_info->AG_flags_sem));
+                            // sem_wait(&(shm_conn_info->AG_flags_sem));
                             uint32_t chan_mask = shm_conn_info->channels_mask;
-                            sem_post(&(shm_conn_info->AG_flags_sem));
+                            shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
+                            // sem_post(&(shm_conn_info->AG_flags_sem));
                             sem_wait(&(shm_conn_info->stats_sem));
                             //shm_conn_info->bdp1[info.process_num] = info.bdp1;
-                            shm_conn_info->stats[info.process_num].bdp1 = info.bdp1;
                             // now find max_chan
                             set_max_chan(chan_mask);
                             sem_post(&(shm_conn_info->stats_sem));
@@ -8506,6 +8494,8 @@ if(drop_packet_flag) {
                             }
                         }
                     }
+                    struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
+                    int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
                     sem_post(write_buf_sem);
 #ifdef DEBUGG
                     gettimeofday(&work_loop2, NULL );
@@ -8520,9 +8510,6 @@ if(drop_packet_flag) {
                     if(buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) {
                         vlog(LOG_ERR, "WARNING! MAX_ALLOWED_BUF_LEN reached! Flushing... chan %d", chan_num_virt);
                     }
-                    sem_wait(write_buf_sem);
-                    struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
-                    sem_post(write_buf_sem);
 
                     // check for initialization
                     if (!info.just_started_recv) {
@@ -8543,9 +8530,6 @@ if(drop_packet_flag) {
                     }
                     CHKCPU(32);
                     // send lws(last written sequence number) to remote side
-                    sem_wait(write_buf_sem);
-                    int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
-                    sem_post(write_buf_sem);
                     if(cond_flag && select_net_write(chan_num_virt)) {
                         sem_wait(write_buf_sem);
                         if(debug_trace) {
@@ -8721,49 +8705,48 @@ if(drop_packet_flag) {
 
         CHKCPU(5);
         //todo #flood_code need to move
-        int flood_flag = 0;
-        sem_wait(&(shm_conn_info->common_sem));
-        if (shm_conn_info->flood_flag[info.process_num])
-            flood_flag = TRAIN_PKTS;
-        shm_conn_info->flood_flag[info.process_num] = 0;
-//        tmp_seq_counter = shm_conn_info->seq_counter[1];
-        sem_post(&(shm_conn_info->common_sem));
-        uint32_t local_seq_num_p;
-        uint16_t tmp_flag=0, gg1;
-        uint32_t  gg2, gg3;
-        if (flood_flag > 0 && linker_term != TERM_NONFATAL) {
-            gettimeofday(&flood_start_time, NULL );
-            start_of_train = info.channel[1].local_seq_num;
-            end_of_train = start_of_train + flood_flag;
-            sem_wait(&(shm_conn_info->resend_buf_sem));
-            uint32_t seq_tmp;
-            get_last_packet_seq_num(1, &seq_tmp);
-            int sender_pid;
-            char *out;
-            int len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
-            if (len == -1) {
-                len = get_last_packet(1, &last_sent_packet_num[1].seq_num, &out, &sender_pid);
-            }
-            if (len == -1) {
-                vlog(LOG_ERR, "WARNING Cannot send train");
-            } else {
-                memcpy(buf, out, len);
-            }
-            if(len < 900) {
-                vlog(LOG_ERR, "WARNING Train car too small to load track!");
-            }
-            sem_post(&(shm_conn_info->resend_buf_sem));
-            for (; flood_flag > 0; flood_flag--) {
-                len = seqn_break_tail(buf, len, &seq_tmp, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
-                len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num, 0);
-                info.channel[1].packet_recv_counter = 0;
-                // send DATA
-                int len_ret = udp_write(info.channel[1].descriptor, buf, len);
-//                vlog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
-//                        info.channel[1].local_seq_num);
-                info.channel[1].local_seq_num++;
-            }
-        }
+//         int flood_flag = 0;
+//         sem_wait(&(shm_conn_info->common_sem));
+//         if (shm_conn_info->flood_flag[info.process_num])
+//             flood_flag = TRAIN_PKTS;
+//         shm_conn_info->flood_flag[info.process_num] = 0;
+//         sem_post(&(shm_conn_info->common_sem));
+//         uint32_t local_seq_num_p;
+//         uint16_t tmp_flag=0, gg1;
+//         uint32_t  gg2, gg3;
+//         if (flood_flag > 0 && linker_term != TERM_NONFATAL) {
+//             gettimeofday(&flood_start_time, NULL );
+//             start_of_train = info.channel[1].local_seq_num;
+//             end_of_train = start_of_train + flood_flag;
+//             sem_wait(&(shm_conn_info->resend_buf_sem));
+//             uint32_t seq_tmp;
+//             get_last_packet_seq_num(1, &seq_tmp);
+//             int sender_pid;
+//             char *out;
+//             int len = get_resend_frame(1, &seq_tmp, &out, &sender_pid );
+//             if (len == -1) {
+//                 len = get_last_packet(1, &last_sent_packet_num[1].seq_num, &out, &sender_pid);
+//             }
+//             if (len == -1) {
+//                 vlog(LOG_ERR, "WARNING Cannot send train");
+//             } else {
+//                 memcpy(buf, out, len);
+//             }
+//             if(len < 900) {
+//                 vlog(LOG_ERR, "WARNING Train car too small to load track!");
+//             }
+//             sem_post(&(shm_conn_info->resend_buf_sem));
+//             for (; flood_flag > 0; flood_flag--) {
+//                 len = seqn_break_tail(buf, len, &seq_tmp, &tmp_flag, &local_seq_num_p, &gg1, &gg2, &gg3); // last four unused
+//                 len = pack_packet(1, buf, len, seq_tmp, info.channel[1].local_seq_num, 0);
+//                 info.channel[1].packet_recv_counter = 0;
+//                 // send DATA
+//                 int len_ret = udp_write(info.channel[1].descriptor, buf, len);
+// //                vlog(LOG_INFO, "send train process %i packet num %i local_seq %"PRIu32"", info.process_num, flood_flag,
+// //                        info.channel[1].local_seq_num);
+//                 info.channel[1].local_seq_num++;
+//             }
+//         }
         sem_post(&shm_conn_info->hard_sem);
 
             //Check time interval and ping if need.
