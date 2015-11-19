@@ -2665,7 +2665,8 @@ int write_buf_check_n_flush(int logical_channel) {
                         frame_llist_append(&shm_conn_info->wb_free_frames, idx, shm_conn_info->frames_buf);
                         idx = n_idx;
                         if(idx == -1) {
-                            vlog(LOG_ERR, "ERROR: did not find seq_num_unrecoverable_loss in buffer!");
+                            vlog(LOG_ERR, "ASSERT FAILED: did not find seq_num_unrecoverable_loss in buffer! %ld", shm_conn_info->seq_num_unrecoverable_loss);
+                            shm_conn_info->seq_num_unrecoverable_loss = 0;
                             return 0;
                         }
                         sqn = shm_conn_info->frames_buf[idx].seq_num;
@@ -2919,30 +2920,14 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     // place into correct position first..
     int i = shm_conn_info->write_buf[conn_num].frames.rel_head, n;
     int newf;
-    uint32_t istart;
     int j=0;
     shm_conn_info->avg_len_in = EFF_LEN_AVG_N * shm_conn_info->avg_len_in / EFF_LEN_AVG_D + len / EFF_LEN_AVG_D;
-/*  this code moved to upper level a few lines before call
-    if(info.channel[conn_num].local_seq_num_beforeloss == 0) {
-        // TODO: this fix actually not required if we don't mess packets too much -->
-        //if((seq_num - MAX_REORDER_PERPATH) > shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num]) {
-           shm_conn_info->write_buf[conn_num].last_received_seq[info.process_num] = seq_num - MAX_REORDER_PERPATH;
-        //}
-    } else {
-        shm_conn_info->write_buf[conn_num].last_received_seq_shadow[info.process_num] = seq_num;
-    }
-*/
-/*
-    if(conn_num <= 0) { // this is a workaround for some bug... TODO!!
-            vlog(LOG_INFO, "BUG! write_buf_add called with broken chan_num %d: seq_num %"PRIu32" len %d", conn_num, seq_num, len );
-            *succ_flag = -2;
-            return missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-    }
-     */
+
     if (i == -1) {
         shm_conn_info->write_buf[conn_num].last_write_time = info.current_time;
     }
     int tail_idx = shm_conn_info->write_buf[conn_num].frames.rel_tail;
+#ifndef SYSLOG
     if ((tail_idx != -1) && ( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
             (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num ) >= STRANGE_SEQ_FUTURE )) {
         vlog(LOG_INFO, "WARNING! DROP BROKEN PKT SRANGE_SEQ_FUTURE logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000 tail seq %lu", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num), shm_conn_info->frames_buf[tail_idx].seq_num);
@@ -2951,6 +2936,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
               ((shm_conn_info->write_buf[conn_num].last_written_seq - seq_num) >= STRANGE_SEQ_PAST) ) { // this ABS comparison makes checks in MRB unnesesary...
         vlog(LOG_INFO, "WARNING! DROP BROKEN PKT STRANGE_SEQ_PAST logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (shm_conn_info->write_buf[conn_num].last_written_seq - seq_num));
     }
+#endif
 
     if ( (seq_num <= shm_conn_info->write_buf[conn_num].last_written_seq)) {
         //check for oldest dups
@@ -2982,6 +2968,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         *succ_flag = -2;
         return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
     }
+    /*
     unsigned int tcp_seq = getTcpSeq(out);
     unsigned int tcp_seq2 = 0;
     unsigned int hash = get_tcp_hash(out, &tcp_seq2);
@@ -3008,25 +2995,23 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             //seq_num = 0; // to make stub packet support work at flushing? // actually not required since these are OK in seq_num
         }
     }
+    */
 
     // now check if we can find it in write buf current .. inline!
     // TODO: run from BOTTOM! if seq_num[i] < seq_num: break
-    acnt = 0;
+    /*
     if(seq_num <= shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num) {
         while( i > -1 ) {
             if(shm_conn_info->frames_buf[i].seq_num == seq_num) {
 #ifdef DEBUGG
                 vlog(LOG_INFO, "drop exist pkt seq_num %"PRIu32" sitting in write_buf chan %i", seq_num, conn_num);
 #endif
-                //return -3;
-                return 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
+                return 0;
             }
             i = shm_conn_info->frames_buf[i].rel_next;
-#ifdef DEBUGG
-            if(assert_cnt(5)) break;
-#endif
         }
     }
+    */
     shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] = seq_num;
     i = shm_conn_info->write_buf[conn_num].frames.rel_head;
 
@@ -3049,7 +3034,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             return -1;
         }
     }
-    //vlog(LOG_INFO, "TESTT %d lws: %"PRIu32"", 12, shm_conn_info->write_buf.last_written_seq);
     if(seq_num == 0 || len == 0) { // add stub packet counter in case of retransmission packet
         shm_conn_info->write_buf[conn_num].frames.stub_total++;
     }
@@ -3063,7 +3047,8 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     }
         
     shm_conn_info->frames_buf[newf].seq_num = seq_num;
-    memcpy(shm_conn_info->frames_buf[newf].out, out, len);
+    // do not do the copy until written
+    //memcpy(shm_conn_info->frames_buf[newf].out, out, len);
     shm_conn_info->frames_buf[newf].len = len;
     shm_conn_info->frames_buf[newf].sender_pid = mypid;
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
@@ -3102,69 +3087,109 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         //    shm_conn_info->frames_buf[newf].len = 0;
         //}
     }
-    
-    if(i<0) {
-        // expensive op; may be optimized!
+    int written = 0;
+    if(i<0) { // buffer empty.
         shm_conn_info->frames_buf[newf].rel_next = -1;
         shm_conn_info->write_buf[conn_num].frames.rel_head = shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
-        //*buf_len = 1;
-        //return  ((seq_num == (shm_conn_info->write_buf.last_written_seq+1)) ? 0 : 1);
-        mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
-        //vlog(LOG_INFO, "write: add to head!");
+        mlen = 0;
         *succ_flag=0;
+        memcpy(shm_conn_info->frames_buf[newf].out, out, len); // now actually copy the data.. just a tiny optimization
+        unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+        shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
+        shm_conn_info->write_buf_hashtable[hash].n = newf;
         return mlen;
-    } else {
-        //vlog(LOG_INFO, "write: add to tail!");
-        if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
-            vlog(LOG_ERR, "WARNING! added one packet loss! %lu +2= %lu", shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num, seq_num);
-        }
+    } else { // buffer not empty
+        // if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
+        //     vlog(LOG_ERR, "WARNING! added one packet loss! %lu +2= %lu", shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num, seq_num);
+        // }
 
-        istart = shm_conn_info->frames_buf[i].seq_num;
         if( (shm_conn_info->frames_buf[i].seq_num > seq_num) &&
-                (shm_conn_info->frames_buf[i].rel_next > -1)) {
+                (shm_conn_info->frames_buf[i].rel_next > -1)) { // new packet is older (&lt) than all the buffer
             // append to head
+            // no check for dups is required here as we are sure that all the buffer is newer than this packet
             shm_conn_info->write_buf[conn_num].frames.rel_head = newf;
             shm_conn_info->frames_buf[newf].rel_next = i;
+            written = 1;
         } else {
             if(shm_conn_info->frames_buf[i].rel_next > -1) {
-                acnt = 0;
+                // TODO HERE: do extreme optimization: 
+                // 1. always use hashed search first
+                // 2. try c=1 first, then x2, x3, etc.
+                if(shm_conn_info->write_buf[conn_num].frames.length > MAX_WBUF_HASH_DEPTH*2 && seq_num > 0) {
+                    unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+                    int c = 0;
+                    while( (c < MAX_WBUF_HASH_DEPTH) 
+                        && ((seq_num - c*2) > shm_conn_info->write_buf[conn_num].last_written_seq) 
+                        && (shm_conn_info->write_buf_hashtable[hash].seq != (seq_num - c*2))) {
+                        c+=1;
+                        hash = (seq_num - c*2) * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+                    }
+                    if(c >= MAX_WBUF_HASH_DEPTH || (seq_num - c*2) <= shm_conn_info->write_buf[conn_num].last_written_seq) {
+                        hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+                        vlog(LOG_INFO, "Warning! hash lookup failed, falling back to search from top seq %ld hash %d", seq_num, hash);
+                    } else {
+                        hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+                        vlog(LOG_INFO, "New search start %d bl %d seq %ld - found seq %ld hash %d tries %d", shm_conn_info->write_buf_hashtable[hash].n, shm_conn_info->write_buf[conn_num].frames.length, seq_num, seq_num-c*2, hash, c);
+                        i = shm_conn_info->write_buf_hashtable[hash].n;
+                        // TODO: remove this
+                        if(c == 0) {
+                            vlog(LOG_INFO, "zero tries: seq %ld n %d n.seq %ld", seq_num, i, shm_conn_info->frames_buf[i].seq_num);                   
+                        }
+                    }
+                }
+                
                 while( i > -1 ) {
+                    if( shm_conn_info->frames_buf[i].seq_num == seq_num) {
+                        vlog(LOG_INFO, "DUP! %ld", seq_num);
+                        break; // found a dup, not setting written flag
+                    }
                     n = shm_conn_info->frames_buf[i].rel_next;
                     if(n > -1) {
                         if( shm_conn_info->frames_buf[n].seq_num > seq_num) {
                             shm_conn_info->frames_buf[i].rel_next = newf;
                             shm_conn_info->frames_buf[newf].rel_next = n;
+                            written = 1;
                             break;
                         } // else try next...
                     } else {
                         // append to tail
-
                         shm_conn_info->frames_buf[i].rel_next=newf;
                         shm_conn_info->frames_buf[newf].rel_next = -1;
                         shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
-
+                        written = 1;
                         break;
                     }
                     i = n;
-                    istart++;
-#ifdef DEBUGG
-                    if(assert_cnt(6)) break;
-#endif
                 }
 
             } else {
-                if(shm_conn_info->frames_buf[i].seq_num > seq_num) {
-                    shm_conn_info->write_buf[conn_num].frames.rel_head = newf;
-                    shm_conn_info->frames_buf[newf].rel_next = i;
-                } else {
-                    shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
-                    shm_conn_info->frames_buf[i].rel_next = newf;
-                    shm_conn_info->frames_buf[newf].rel_next = -1;
+                if(shm_conn_info->frames_buf[i].seq_num != seq_num) { // dup protect?
+                    if(shm_conn_info->frames_buf[i].seq_num > seq_num) {
+                        shm_conn_info->write_buf[conn_num].frames.rel_head = newf;
+                        shm_conn_info->frames_buf[newf].rel_next = i;
+                    } else {
+                        shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
+                        shm_conn_info->frames_buf[i].rel_next = newf;
+                        shm_conn_info->frames_buf[newf].rel_next = -1;
+                    }
+                    written = 1;
                 }
-
             }
         }
     }
+    
+    if(!written) {
+        // means we were unable to write, put the packet back to free
+        vlog(LOG_INFO, "Unable to find position to add packet! %ld", seq_num); // dup detected
+        shm_conn_info->write_buf[conn_num].frames.length--; // we have not written that packet to buffer...
+        frame_llist_append(&shm_conn_info->wb_free_frames, newf, shm_conn_info->frames_buf);
+        *succ_flag= 0;
+        return 0;
+    }
+    memcpy(shm_conn_info->frames_buf[newf].out, out, len); // now actually copy the data.. just a tiny optimization
+    unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+    shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
+    shm_conn_info->write_buf_hashtable[hash].n = newf;
 
     mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
 
@@ -5437,7 +5462,7 @@ int lfd_linker(void)
             } else {
                 info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
             }
-            if(info.head_send_q_shift != info.head_send_q_shift_old) {
+            if(info.head_send_q_shift != info.head_send_q_shift_old && !shm_conn_info->idle) {
                 info.head_send_q_shift_old = info.head_send_q_shift;
                 info.FCI_send_counter = 0;
             }
@@ -7395,6 +7420,8 @@ if(drop_packet_flag) {
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
+                                    // TODO HERE: REMOVE
+                                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                                     }
                                 }
                             }
@@ -8390,6 +8417,8 @@ if(drop_packet_flag) {
                         newPacket = 1;
                     }
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
+                    // TODO HERE: reMOVE
+                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                     my_miss_packets = buf_len;
                     my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
@@ -8431,6 +8460,8 @@ if(drop_packet_flag) {
                                 write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                         info.pid, &succ_flag);
+                    // TODO HERE: reMOVE
+                                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                             }
                         }
                     }

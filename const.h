@@ -16,5 +16,6 @@
 #define EFF_LEN_AVG_D 8
 #define AVG_LEN_IN_ACK_THRESH 100 /** treat incoming traffic as ACK-only if average incoming packet length is lower than this */
 #define UNRECOVERABLE_LOSS 250 /** amount of packets that we won't even try to retransmit */
-
+#define WBUF_HASH_SIZE 256
+#define MAX_WBUF_HASH_DEPTH 6
 #endif

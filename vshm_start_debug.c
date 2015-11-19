@@ -7,7 +7,8 @@
 
 #include "vtun.h"
 
-#define SHM_TUN_KEY 567888
+// #undef SHM_TUN_KEY
+// #define SHM_TUN_KEY 75675
 
 int main() {
     int key_conn_info = SHM_TUN_KEY, shmid;
