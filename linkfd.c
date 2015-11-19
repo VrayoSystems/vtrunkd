@@ -3600,7 +3600,7 @@ int get_t_loss(struct timeval *loss_tv, int tmax) {
 int cubic_recalculate(int t, int cubic_max, double beta, double c) {
     double K = cbrt((((double) cubic_max) * beta) / c);
     double tp = ((double) (t)) - K;
-    return (uint32_t) (c * tp*tp*tp + cubic_max);
+    return (uint32_t) (c * tp*tp*tp + cubic_max); // TODO: calculate in integers!
 }
 
 int set_W_cubic_unrecoverable(int t) {
@@ -5078,7 +5078,7 @@ int lfd_linker(void)
     info.last_sent_FLLI_idx = shm_conn_info->l_loss_idx;
     //reset FRAME_LOSS_INFO sending
     info.last_sent_FLI_idx = shm_conn_info->loss_idx;
-    struct timeval select_tv_copy;
+    struct timeval select_tv_copy; int alive_physical_channels = 1;
 
     vlog_shm_set(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
 
@@ -5443,7 +5443,135 @@ int lfd_linker(void)
         // AVERAGE (MEAN) SEND_Q_EFF calculation --->>>
         timersub(&info.current_time, &info.tv_sqe_mean_added, &tv_tmp_tmp_tmp);
         if(timercmp(&tv_tmp_tmp_tmp, &((struct timeval) {0, SELECT_SLEEP_USEC }), >=)) {
-            // FAST TIMER HERE: 20 ticks per second
+            // FAST TIMER HERE: 20 ticks per second (50ms)
+            
+            
+            // AG DECISION >>>
+            ag_flag_local = ((    //(!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
+                (shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER))
+                               //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
+                               //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
+                               || shm_conn_info->slow_start
+                               || ( channel_dead )
+                               || ( shm_conn_info->idle )
+                               //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
+                               || ((agag < AGAG_AG_THRESH) && (!mawmar_allowed()))
+                               || (( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached())
+                               //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
+                               || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
+                               //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
+                               /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
+                               ) ? R_MODE : AG_MODE);
+            // logging part
+            //if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
+            if( shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER) ) ag_stat.RT = 1;
+            //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
+            //if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
+            if( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) ag_stat.PL = 1; // pseudo-model cut-off
+            if(channel_dead) ag_stat.D = 1;
+            //if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
+            if(!mawmar_allowed()) ag_stat.CL = 1;
+            if(( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached()) ag_stat.DL = 1;
+            print_ag_drop_reason();
+            if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
+                ag_flag_local = AG_MODE;
+            }
+            if(shm_conn_info->avg_len_out < AVG_LEN_IN_ACK_THRESH) {
+                ag_flag_local = R_MODE; // disable AG if sending small packets
+            }
+            if(ag_flag_local == AG_MODE) {
+                shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
+            } else {
+                shm_conn_info->ag_mask &= ~(1 << info.process_num); // set bin mask to zero
+            }
+            if(ag_flag_local_prev != ag_flag_local) {
+                need_send_FCI = 1; // TODO WARNING FCI may be LOST!! need transport
+            }
+            
+            // now calculate AGAG
+            uint32_t dirty_seq = 0;
+            if(ag_flag_local == AG_MODE) {
+                if(ag_flag_local_prev != ag_flag_local) {
+                    if(agag < 10) { // start from zero
+                        agon_time = info.current_time;
+                        shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                    } else {
+                        // recalculate
+                        struct timeval agtime;
+                        timersub(&info.current_time, &agon_time, &agtime);
+                        ms2tv(&agtime, agag * 10);
+                        timersub(&info.current_time, &agtime, &agon_time);
+                        shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                    }
+                    ag_flag_local_prev = ag_flag_local;
+                }
+                // first calculate agag
+                timersub(&info.current_time, &agon_time, &tv_tmp);
+                //agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
+                agag = tv2ms(&tv_tmp) / 10;
+                if(agag > 0) {
+                    if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
+                    for(int i=0; i<info.channel_amount; i++) {
+                        dirty_seq += info.channel[i].local_seq_num;
+                    }
+                    if(agag < 127) {
+                        ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
+                    } else {
+                        ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+                    }
+                }
+                // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
+            } else {
+                if(ag_flag_local_prev == AG_MODE) {
+                    vlog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
+                    vlog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, -1/*send_q_limit_cubic_apply*/ ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
+                
+                }
+                
+                if(ag_flag_local_prev != ag_flag_local) {
+                    if(agag > 200) { // start from top
+                        agon_time = info.current_time;
+                        shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                    } else {
+                        // recalculate
+                        struct timeval agtime;
+                        timersub(&info.current_time, &agon_time, &agtime);
+                        ms2tv(&agtime, (255 - agag) * 30); 
+                        timersub(&info.current_time, &agtime, &agon_time);
+                        shm_conn_info->stats[info.process_num].agon_time = agon_time;
+                    }
+                    ag_flag_local_prev = ag_flag_local;
+                }
+                // first calculate agag
+                timersub(&info.current_time, &agon_time, &tv_tmp);
+                agag = 255 - tv2ms(&tv_tmp) / 30; // WARNING: overflow may happen here // 3x times slower for NVR to be able to collect CWND before loss
+                // TODO: dup code - may be optimized!
+                if(agag > 0) {
+                    if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
+                    for(int i=0; i<info.channel_amount; i++) {
+                        dirty_seq += info.channel[i].local_seq_num;
+                    }
+                    if(agag < 127) {
+                        ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
+                    } else {
+                        ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
+                    }
+                } else {
+                    agag = 0;
+                    ag_flag = R_MODE;
+                }
+            }
+            // <<< END AG DECISION
+                
+            // now compute W
+            
+            timersub(&(info.current_time), &loss_time, &t_tv);
+            int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
+            t = t / CUBIC_T_DIV;
+            t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
+            set_W_unsync(t);
+            t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
+            shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
             
             // #define SELECT_SLEEP_USEC 50000 // crucial for mean sqe calculation during idle
             /* 
@@ -5799,14 +5927,7 @@ int lfd_linker(void)
         }
         shm_conn_info->stats[info.process_num].rsr = info.rsr;
         
-        // now compute W
-        timersub(&(info.current_time), &loss_time, &t_tv);
-        int t = t_tv.tv_sec * 1000 + t_tv.tv_usec/1000;
-        t = t / CUBIC_T_DIV;
-        t = t > cubic_t_max ? cubic_t_max : t; // 400s limit
-        set_W_unsync(t);
-        t = get_t_loss(&info.u_loss_tv, info.cubic_t_max_u);
-        shm_conn_info->stats[info.process_num].W_cubic_u = cubic_recalculate(t, info.W_u_max, info.Bu, info.Cu);
+        
         
         CHKCPU(84);
         //int send_q_limit_cubic_apply = (info.send_q_limit_cubic > shm_conn_info->stats[info.process_num].W_cubic_u ? info.send_q_limit_cubic : shm_conn_info->stats[info.process_num].W_cubic_u);
@@ -5818,47 +5939,7 @@ int lfd_linker(void)
         // <<< END RSR section here
 
 
-        // AG DECISION >>>
-        ag_flag_local = ((    //(!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)  
-            (shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER))
-                           //|| (send_q_limit_cubic_apply <= info.send_q_limit_threshold) // disabled for #187
-                           //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
-                           || shm_conn_info->slow_start
-                           || ( channel_dead )
-                           || ( shm_conn_info->idle )
-                           //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
-                           || ((agag < AGAG_AG_THRESH) && (!mawmar_allowed()))
-                           || (( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached())
-                           //|| ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) // TODO: TCP model => remove
-                           || ( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) // TODO we assume that local unrecoverable PLP is on-par with tflush PBL
-                           //|| ( !shm_conn_info->stats[info.process_num].brl_ag_enabled ) // TODO: for future TCP model
-                           /*|| (shm_conn_info->stats[max_chan].sqe_mean < SEND_Q_AG_ALLOWED_THRESH)*/ // TODO: use mean_send_q
-                           ) ? R_MODE : AG_MODE);
-        // logging part
-        //if((!info.head_channel) && (info.rsr <= info.send_q_limit_threshold)) ag_stat.RT = 1;
-        if( shm_conn_info->stats[info.process_num].ACK_speed < (shm_conn_info->stats[max_chan].ACK_speed / RATE_THRESHOLD_MULTIPLIER) ) ag_stat.RT = 1;
-        //if(send_q_limit_cubic_apply <= info.send_q_limit_threshold) ag_stat.WT = 1; // disbaled for #187
-        //if ( shm_conn_info->stats[info.process_num].l_pbl < (shm_conn_info->stats[max_chan].l_pbl / 7) ) ag_stat.PL=1;// TODO: TCP model => remove
-        if( plp_avg_pbl_unrecoverable(info.process_num) < PLP_UNRECOVERABLE_CUTOFF ) ag_stat.PL = 1; // pseudo-model cut-off
-        if(channel_dead) ag_stat.D = 1;
-        //if(info.head_change_safe && !check_rtt_latency_drop()) ag_stat.CL = 1;
-        if(!mawmar_allowed()) ag_stat.CL = 1;
-        if(( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached()) ag_stat.DL = 1;
-        print_ag_drop_reason();
-        if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
-            ag_flag_local = AG_MODE;
-        }
-        if(shm_conn_info->avg_len_out < AVG_LEN_IN_ACK_THRESH) {
-            ag_flag_local = R_MODE; // disable AG if sending small packets
-        }
-        if(ag_flag_local == AG_MODE) {
-            shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
-        } else {
-            shm_conn_info->ag_mask &= ~(1 << info.process_num); // set bin mask to zero
-        }
-        if(ag_flag_local_prev != ag_flag_local) {
-            need_send_FCI = 1; // TODO WARNING FCI may be LOST!! need transport
-        }
+
 
             CHKCPU(85);
         // now see if we are actually good enough to kick in AG?
@@ -5896,80 +5977,7 @@ int lfd_linker(void)
         
         
             CHKCPU(86);
-        // now calculate AGAG
-        uint32_t dirty_seq = 0;
-        if(ag_flag_local == AG_MODE) {
-            if(ag_flag_local_prev != ag_flag_local) {
-                if(agag < 10) { // start from zero
-                    agon_time = info.current_time;
-                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
-                } else {
-                    // recalculate
-                    struct timeval agtime;
-                    timersub(&info.current_time, &agon_time, &agtime);
-                    ms2tv(&agtime, agag * 10);
-                    timersub(&info.current_time, &agtime, &agon_time);
-                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
-                }
-                ag_flag_local_prev = ag_flag_local;
-            }
-            // first calculate agag
-            timersub(&info.current_time, &agon_time, &tv_tmp);
-            //agag = (tv2ms(&tv_tmp) - info.exact_rtt * 2)/ 10;
-            agag = tv2ms(&tv_tmp) / 10;
-            if(agag > 0) {
-                if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
-                for(int i=0; i<info.channel_amount; i++) {
-                    dirty_seq += info.channel[i].local_seq_num;
-                }
-                if(agag < 127) {
-                    ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
-                } else {
-                    ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
-                }
-            }
-            // and finally re-set ag_flag_local since send packet part will use it to choose R/AG
-        } else {
-            if(ag_flag_local_prev == AG_MODE) {
-                vlog(LOG_INFO, "Dropping AG on Channel %s (head? %d) (idle? %d) (sqe %d) (rsr %d) (ACS %d) (PCS %d)", lfd_host->host, info.head_channel, shm_conn_info->idle, send_q_eff, info.rsr, shm_conn_info->stats[info.process_num].max_ACS2, shm_conn_info->stats[info.process_num].max_PCS2);
-                vlog(LOG_INFO, "       (rsr=%d)<=(THR=%d) || (W=%d)<=(THR=%d) || DEAD=%d || !CLD=%d || dropping=%d", info.rsr ,info.send_q_limit_threshold, send_q_limit_cubic_apply ,info.send_q_limit_threshold, channel_dead, ( !check_rtt_latency_drop() ), ( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) );
-            
-            }
-            
-            if(ag_flag_local_prev != ag_flag_local) {
-                if(agag > 200) { // start from top
-                    agon_time = info.current_time;
-                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
-                } else {
-                    // recalculate
-                    struct timeval agtime;
-                    timersub(&info.current_time, &agon_time, &agtime);
-                    ms2tv(&agtime, (255 - agag) * 30); 
-                    timersub(&info.current_time, &agtime, &agon_time);
-                    shm_conn_info->stats[info.process_num].agon_time = agon_time;
-                }
-                ag_flag_local_prev = ag_flag_local;
-            }
-            // first calculate agag
-            timersub(&info.current_time, &agon_time, &tv_tmp);
-            agag = 255 - tv2ms(&tv_tmp) / 30; // WARNING: overflow may happen here // 3x times slower for NVR to be able to collect CWND before loss
-            // TODO: dup code - may be optimized!
-            if(agag > 0) {
-                if(agag > AGAG_MAX) agag = AGAG_MAX; // 2555 milliseconds for full AG (~1% not AG)
-                for(int i=0; i<info.channel_amount; i++) {
-                    dirty_seq += info.channel[i].local_seq_num;
-                }
-                if(agag < 127) {
-                    ag_flag = ((dirty_seq % (128 - agag)) == 0) ? AG_MODE : R_MODE;
-                } else {
-                    ag_flag = ((dirty_seq % (agag - 125)) == 0) ? R_MODE : AG_MODE;
-                }
-            } else {
-                agag = 0;
-                ag_flag = R_MODE;
-            }
-        }
-        // <<< END AG DECISION
+
 
         CHKCPU(80);
 
@@ -6171,6 +6179,18 @@ int lfd_linker(void)
                 shm_conn_info->stats[info.process_num].loss_send_q = LOSS_SEND_Q_UNKNOWN;
                 //info.W_cubic_copy = info.send_q_limit_cubic;
             }
+            
+            // expensive thing: recalculate minimal rtt channel
+            int min_rtt = INT32_MAX;
+            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
+                    if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                        min_rtt = shm_conn_info->stats[i].exact_rtt;
+                        info.min_rtt_chan = i;
+                    }
+                }
+            }
+            
             /*
             if(shm_conn_info->drtt < shm_conn_info->forced_rtt) { // WTF??
                 shm_conn_info->forced_rtt = shm_conn_info->drtt;
@@ -7033,7 +7053,7 @@ int lfd_linker(void)
             
              // do llist checks
             
-            int alive_physical_channels = 0;
+            alive_physical_channels = 0;
             int check_result=0;
             
             sem_wait(&(shm_conn_info->AG_flags_sem));
@@ -7320,21 +7340,21 @@ if(drop_packet_flag) {
              *
              *
              * */
-        int alive_physical_channels = 0;
-        if (FD_ISSET(info.tun_device, &fdset_w)) {
-            sem_wait(&(shm_conn_info->AG_flags_sem));
-            uint32_t chan_mask = shm_conn_info->channels_mask;
-            sem_post(&(shm_conn_info->AG_flags_sem));
-            for (int i = 0; i < 32; i++) {
-                if (chan_mask & (1 << i)) {
-                    alive_physical_channels++;
-                }
-            }
-            if (alive_physical_channels == 0) {
-                vlog(LOG_ERR, "ASSERT All physical channels dead!!!");
-                alive_physical_channels = 1;
-            }
-        }
+        // int alive_physical_channels = 0;
+        // if (FD_ISSET(info.tun_device, &fdset_w)) {
+        //     sem_wait(&(shm_conn_info->AG_flags_sem));
+        //     uint32_t chan_mask = shm_conn_info->channels_mask;
+        //     sem_post(&(shm_conn_info->AG_flags_sem));
+        //     for (int i = 0; i < 32; i++) {
+        //         if (chan_mask & (1 << i)) {
+        //             alive_physical_channels++;
+        //         }
+        //     }
+        //     if (alive_physical_channels == 0) {
+        //         vlog(LOG_ERR, "ASSERT All physical channels dead!!!");
+        //         alive_physical_channels = 1;
+        //     }
+        // }
         CHKCPU(11);
         //check all chans for being set..
         for (chan_num = 0; chan_num < info.channel_amount; chan_num++) {
@@ -7777,18 +7797,7 @@ if(drop_packet_flag) {
                                 }
                                 sem_post(&(shm_conn_info->stats_sem));
                                 if( psl <= UNRECOVERABLE_LOSS && who_lost > -1) {
-                                    // now find chan with smallest RTT
-                                    int min_rtt = INT32_MAX;
-                                    int min_rtt_chan = 0;
-                                    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
-                                            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                                                min_rtt = shm_conn_info->stats[i].exact_rtt;
-                                                min_rtt_chan = i;
-                                            }
-                                        }
-                                    }
-                                    if(min_rtt_chan == info.process_num) {
+                                    if(info.min_rtt_chan == info.process_num) {
                                         // now do retransmit
                                         int mypid;
                                         uint32_t seqn;
@@ -8589,12 +8598,15 @@ if(drop_packet_flag) {
         /* Pass data from write_buff to TUN device */
 
         // I suspect write_buf_sem race condition here... double-check!
+#ifdef SYSLOG
+        // expensive..
         int wbs_val;
         sem_getvalue(write_buf_sem, &wbs_val);
         if ( wbs_val > 1 ) {
             sem_wait(write_buf_sem);
             vlog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
         }
+#endif
 
         CHKCPU(4);
         } // for chans..
