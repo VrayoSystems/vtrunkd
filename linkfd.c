@@ -2737,18 +2737,18 @@ int write_buf_check_n_flush(int logical_channel) {
                 }
             }
             // mean latency experiment
-            int lat=0;
-            struct timeval tv_tmp_tmp_tmp;
-            if(timercmp(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, <=)) {
-               //lat = 0; 
-            } else {
-                timersub(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp_tmp_tmp);
-                lat = tv2ms(&tv_tmp_tmp_tmp);
-               if(lat > 200)  { // packet lag no more than 200 ms allowed in stats
-                //lat = 0; 
-               }
-            }
-            shm_conn_info->frtt_ms = lat;
+            // int lat=0;
+            // struct timeval tv_tmp_tmp_tmp;
+            // if(timercmp(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, <=)) {
+            //   //lat = 0; 
+            // } else {
+            //     timersub(&shm_conn_info->last_written_recv_ts, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp_tmp_tmp);
+            //     lat = tv2ms(&tv_tmp_tmp_tmp);
+            //   if(lat > 200)  { // packet lag no more than 200 ms allowed in stats
+            //     //lat = 0; 
+            //   }
+            // }
+            // shm_conn_info->frtt_ms = lat;
             /*
             if(lat > shm_conn_info->frtt_ms) {
                 shm_conn_info->frtt_ms += (lat - shm_conn_info->frtt_ms)/3;
@@ -2845,13 +2845,13 @@ int write_buf_check_n_flush(int logical_channel) {
                 frame_llist_append(&shm_conn_info->wb_free_frames, frame_index, shm_conn_info->frames_buf);
             }
        //     vlog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
-            for (int i = shm_conn_info->wb_just_write_frames[logical_channel].rel_head;; i = shm_conn_info->frames_buf[i].rel_next) {
+            // for (int i = shm_conn_info->wb_just_write_frames[logical_channel].rel_head;; i = shm_conn_info->frames_buf[i].rel_next) {
 
-                //print_head_of_packet(shm_conn_info->frames_buf[i].out, "wb_just_write_frames", shm_conn_info->frames_buf[i].seq_num, shm_conn_info->frames_buf[i].len);
+            //     //print_head_of_packet(shm_conn_info->frames_buf[i].out, "wb_just_write_frames", shm_conn_info->frames_buf[i].seq_num, shm_conn_info->frames_buf[i].len);
 
-                if (shm_conn_info->frames_buf[i].rel_next == -1)
-                    break;
-            }
+            //     if (shm_conn_info->frames_buf[i].rel_next == -1)
+            //         break;
+            // }
 
 
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
