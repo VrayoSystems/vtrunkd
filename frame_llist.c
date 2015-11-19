@@ -82,6 +82,17 @@ void frame_llist_append(struct frame_llist *l, int f, struct frame_seq buf[]) {
 }
 
 
+void frame_llist_prepend(struct frame_llist *l, int f, struct frame_seq buf[]) {
+    if(l->rel_head > -1) {
+          buf[f].rel_next = l->rel_head;
+          l->rel_head = f;
+    } else {
+          l->rel_tail = l->rel_head = f;
+          buf[f].rel_next = -1;
+    }
+    l->length++;
+}
+
 
 /* free a frame into free list */
 int frame_llist_free(struct frame_llist *l, struct frame_llist *lfree, struct frame_seq flist[], int f)

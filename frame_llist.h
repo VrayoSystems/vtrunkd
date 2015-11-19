@@ -60,7 +60,7 @@ int frame_llist_empty(struct frame_llist *l);
 int frame_llist_free(struct frame_llist *l, struct frame_llist *lfree, struct frame_seq flist[], int f);
 int frame_llist_pull(struct frame_llist *lfree, struct frame_seq flist[], int *f);
 void frame_llist_append(struct frame_llist *l, int f, struct frame_seq buf[]);
-
+void frame_llist_prepend(struct frame_llist *l, int f, struct frame_seq buf[]);
 
 
 #endif /* _VTUN_FRAME_LLIST_H */

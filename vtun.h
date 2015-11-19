@@ -669,9 +669,7 @@ struct conn_info {
     struct frame_seq fast_resend_buf[FAST_RESEND_BUF_SIZE];
     int fast_resend_buf_idx; // how many packets in fast_resend_buf
     struct _write_buf write_buf[MAX_TCP_LOGICAL_CHANNELS]; // input todo need to synchronize
-    char bzone[100];
     struct frame_hash write_buf_hashtable[WBUF_HASH_SIZE];
-    char bzone2[100];
     int write_sequential; // PBL sync by write_buf_sem
     int prev_flushed; // PBL/PSL flagsync by write_buf_sem
     struct frame_llist wb_just_write_frames[MAX_TCP_LOGICAL_CHANNELS];

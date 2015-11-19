@@ -584,7 +584,7 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
     if(l->rel_tail > max) {
         return -4;
     }
-    
+    int tail = -1;
     for (int i = l->rel_head; i != -1; i = flist[i].rel_next) {
         if(flist[i].rel_next < -1) {
             vlog(LOG_ERR, "ASSERT FAILED! frame[%d]->rel_next=%d,seq_num=%"PRIu32",len=%d,chan_num=%d", i, flist[i].rel_next, flist[i].seq_num, flist[i].len, flist[i].chan_num);
@@ -593,7 +593,13 @@ int frame_llist_getSize_asserted(int max, struct frame_llist *l, struct frame_se
         if(flist[i].rel_next > max) {
             return -6;
         }
+        if(i>-1) {
+            tail = i;
+        }
         len++;
+    }
+    if(tail != l->rel_tail) {
+        return -10;
     }
     *size = len;
     return 0;
@@ -705,13 +711,23 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
     
     for(int i=0; i < llist_amt; i++) {
         result = frame_llist_getSize_asserted(framebuf_size, &wb[i].frames, flist, &size);
-        if (result < 0) return result;
+        if (result < 0) {
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted 1 return %d", result);
+            return result;
+        }
         size_total += size;
         result = frame_llist_getSize_asserted(framebuf_size, &shm_conn_info->wb_just_write_frames[i], flist, &size);
+        if (result < 0) {
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted 2 return %d", result);
+            return result;
+        }
         size_total += size;
     }
     
     result = frame_llist_getSize_asserted(framebuf_size, lfree, flist, &size);
+    if (result < 0) {
+        vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted 3 return %d", result);
+    }
     if (result < 0) return result-100;
     if(size_total + size != framebuf_size) {
         vlog(LOG_ERR, "ASSERT FAILED! total used in write_buf: %d, free: %d, sum: %d, total: %d", size_total, size, (size_total+size), framebuf_size);
@@ -1295,8 +1311,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         } else {
             if(shm_conn_info->write_buf[i].frames.length != 0) {
-                vlog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0. FIXED", shm_conn_info->write_buf[i].frames.length);
-                shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
+                vlog(LOG_ERR, "ASSERT FAILED: get_write_buf_wait_data() detected length incosistency %d should be 0.", shm_conn_info->write_buf[i].frames.length);
+                //shm_conn_info->write_buf[i].frames.length = 0; // fix if it becomes broken for any reason
             }
         }
     }
@@ -2666,7 +2682,7 @@ int write_buf_check_n_flush(int logical_channel) {
                         idx = n_idx;
                         if(idx == -1) {
                             vlog(LOG_ERR, "ASSERT FAILED: did not find seq_num_unrecoverable_loss in buffer! %ld", shm_conn_info->seq_num_unrecoverable_loss);
-                            shm_conn_info->seq_num_unrecoverable_loss = 0;
+                            shm_conn_info->seq_num_unrecoverable_loss = 1;
                             return 0;
                         }
                         sqn = shm_conn_info->frames_buf[idx].seq_num;
@@ -3115,32 +3131,42 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                 // TODO HERE: do extreme optimization: 
                 // 1. always use hashed search first
                 // 2. try c=1 first, then x2, x3, etc.
-                if(shm_conn_info->write_buf[conn_num].frames.length > MAX_WBUF_HASH_DEPTH*2 && seq_num > 0) {
+                if(shm_conn_info->write_buf[conn_num].frames.length > MAX_WBUF_HASH_DEPTH && seq_num > 0) {
                     unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
                     int c = 0;
                     while( (c < MAX_WBUF_HASH_DEPTH) 
-                        && ((seq_num - c*2) > shm_conn_info->write_buf[conn_num].last_written_seq) 
-                        && (shm_conn_info->write_buf_hashtable[hash].seq != (seq_num - c*2))) {
+                        && ((seq_num - c) > shm_conn_info->write_buf[conn_num].last_written_seq) 
+                        && (shm_conn_info->write_buf_hashtable[hash].seq != (seq_num - c))) {
                         c+=1;
-                        hash = (seq_num - c*2) * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
+                        hash = (seq_num - c) * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
                     }
-                    if(c >= MAX_WBUF_HASH_DEPTH || (seq_num - c*2) <= shm_conn_info->write_buf[conn_num].last_written_seq) {
+                    if(c >= MAX_WBUF_HASH_DEPTH || (seq_num - c) <= shm_conn_info->write_buf[conn_num].last_written_seq) {
+                        /*
                         hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
                         vlog(LOG_INFO, "Warning! hash lookup failed, falling back to search from top seq %ld hash %d", seq_num, hash);
+                        */
                     } else {
-                        hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
-                        vlog(LOG_INFO, "New search start %d bl %d seq %ld - found seq %ld hash %d tries %d", shm_conn_info->write_buf_hashtable[hash].n, shm_conn_info->write_buf[conn_num].frames.length, seq_num, seq_num-c*2, hash, c);
+                        //vlog(LOG_INFO, "New search start %d bl %d seq %ld (new hash %d) - found seq %ld hash %d tries %d", shm_conn_info->write_buf_hashtable[hash].n, shm_conn_info->write_buf[conn_num].frames.length, seq_num, seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE, seq_num-c, hash, c);
                         i = shm_conn_info->write_buf_hashtable[hash].n;
+                        /*
                         // TODO: remove this
                         if(c == 0) {
                             vlog(LOG_INFO, "zero tries: seq %ld n %d n.seq %ld", seq_num, i, shm_conn_info->frames_buf[i].seq_num);                   
                         }
+                        // now make sure that the entry point we have found is actually found inside the wb
+                        int k;
+                        for (k = shm_conn_info->write_buf[conn_num].frames.rel_head; k != -1; k = shm_conn_info->frames_buf[k].rel_next) {
+                            if(k == i) break;
+                        }
+                        if(k == -1) {
+                            vlog(LOG_ERR, "ASSERT FAILED! entry point is outside the write_buf!");
+                        }
+                        */
                     }
                 }
                 
                 while( i > -1 ) {
                     if( shm_conn_info->frames_buf[i].seq_num == seq_num) {
-                        vlog(LOG_INFO, "DUP! %ld", seq_num);
                         break; // found a dup, not setting written flag
                     }
                     n = shm_conn_info->frames_buf[i].rel_next;
@@ -3153,6 +3179,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
                         } // else try next...
                     } else {
                         // append to tail
+                        #ifdef SYSLOG
+                        if(i != shm_conn_info->write_buf[conn_num].frames.rel_tail) {
+                            vlog(LOG_ERR, "ASSERT FAILED! i!=tail: sqn %ld, %d %d: wb: %d, jwb: %d, fr: %d, lws: %ld", shm_conn_info->frames_buf[i].seq_num, i, shm_conn_info->write_buf[conn_num].frames.rel_tail, shm_conn_info->write_buf[conn_num].frames.rel_tail, shm_conn_info->wb_just_write_frames[conn_num].rel_tail, shm_conn_info->wb_free_frames.rel_tail, shm_conn_info->write_buf[conn_num].last_written_seq);
+                        }
+                        #endif
                         shm_conn_info->frames_buf[i].rel_next=newf;
                         shm_conn_info->frames_buf[newf].rel_next = -1;
                         shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
@@ -3180,9 +3211,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     
     if(!written) {
         // means we were unable to write, put the packet back to free
-        vlog(LOG_INFO, "Unable to find position to add packet! %ld", seq_num); // dup detected
+        // vlog(LOG_INFO, "Unable to find position to add packet! %ld", seq_num); // dup detected
         shm_conn_info->write_buf[conn_num].frames.length--; // we have not written that packet to buffer...
-        frame_llist_append(&shm_conn_info->wb_free_frames, newf, shm_conn_info->frames_buf);
+        frame_llist_prepend(&shm_conn_info->wb_free_frames, newf, shm_conn_info->frames_buf);
         *succ_flag= 0;
         return 0;
     }
@@ -3899,6 +3930,7 @@ int lossed_latency_drop(unsigned int *last_received_seq) {
     int loss = lossed_count();
     msbl_push_up_loss_unsync();
     if(loss > UNRECOVERABLE_LOSS) {
+        vlog(LOG_ERR, "Detected unrecoverable loss of %d packets", loss);
         shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
     }
     info.lossed_complete_received = info.lossed_last_received;
@@ -3961,6 +3993,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
+        vlog(LOG_ERR, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
         shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         msbl_push_up_loss_unsync();
         info.lossed_complete_received = 0;
@@ -3976,6 +4009,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
+        vlog(LOG_ERR, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
         shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         msbl_push_up_loss_unsync();
         info.lossed_complete_received = new_idx;
@@ -4030,6 +4064,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         int loss_calc = lossed_count();
         vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         if(loss_calc > UNRECOVERABLE_LOSS) {
+            vlog(LOG_ERR, "Detected unrecoverable loss of %d packets", loss_calc);
             shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         }
         info.lossed_complete_received = new_idx;
@@ -7420,8 +7455,6 @@ if(drop_packet_flag) {
                                     write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                             shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                             info.pid, &succ_flag);
-                                    // TODO HERE: REMOVE
-                                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                                     }
                                 }
                             }
@@ -7467,6 +7500,7 @@ if(drop_packet_flag) {
                                 }
                                 memset(shm_conn_info->resend_frames_buf, 0, sizeof(struct frame_seq) * RESEND_BUF_SIZE);
                                 memset(shm_conn_info->fast_resend_buf, 0, sizeof(struct frame_seq) * MAX_TCP_PHYSICAL_CHANNELS);
+                                memset(shm_conn_info->write_buf_hashtable, 0, sizeof(shm_conn_info->write_buf_hashtable));
                                 shm_conn_info->resend_buf_idx = 0;
                                 shm_conn_info->fast_resend_buf_idx = 0;
                                 shm_conn_info->latest_la_sqn = 0;
@@ -8368,6 +8402,7 @@ if(drop_packet_flag) {
                     // this is loss detection -->
                     if(shm_conn_info->seq_num_unrecoverable_loss == 0 && seq_num != 0) { 
                             // prevent unrecoverable loss from being set to 0 by lossed_consume
+                        vlog(LOG_ERR, "WARNING! detected unrecoverable loss of 0 packets, fixing to seq %ld", seq_num);
                         shm_conn_info->seq_num_unrecoverable_loss = seq_num;
                     }
                     unsigned int lrs;
@@ -8417,8 +8452,6 @@ if(drop_packet_flag) {
                         newPacket = 1;
                     }
                     incomplete_seq_len = write_buf_add(chan_num_virt, out, len, seq_num, incomplete_seq_buf, &buf_len, info.pid, &succ_flag);
-                    // TODO HERE: reMOVE
-                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                     my_miss_packets = buf_len;
                     my_miss_packets_max = my_miss_packets_max < buf_len ? buf_len : my_miss_packets_max;
                     if(succ_flag == -2) statb.pkts_dropped++; // TODO: optimize out to wba
@@ -8460,8 +8493,6 @@ if(drop_packet_flag) {
                                 write_buf_add(chan_num, shm_conn_info->packet_code_recived[chan_num][packet_index].sum,
                                         shm_conn_info->packet_code_recived[chan_num][packet_index].len_sum, lostSeq, incomplete_seq_buf, &buf_len,
                                         info.pid, &succ_flag);
-                    // TODO HERE: reMOVE
-                                    check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
                             }
                         }
                     }
