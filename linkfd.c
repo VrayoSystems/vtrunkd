@@ -5284,9 +5284,9 @@ int lfd_linker(void)
                 + (((int64_t)t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
-        sem_wait(&shm_conn_info->common_sem);
+        // sem_wait(&shm_conn_info->common_sem);
         info.eff_len = shm_conn_info->eff_len.sum;
-        sem_post(&shm_conn_info->common_sem);
+        // sem_post(&shm_conn_info->common_sem);
         send_q_eff = //my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * 1000;
             (my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len) > bytes_pass ?
                     my_max_send_q + info.channel[my_max_send_q_chan_num].bytes_put * info.eff_len - bytes_pass : 0;
@@ -7071,13 +7071,14 @@ int lfd_linker(void)
                 alive_physical_channels = 1;
             }
             
-            
+#ifdef SYSLOG
             sem_wait(&(shm_conn_info->write_buf_sem));
             check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
             }
+#endif
             
                last_timing.tv_sec = info.current_time.tv_sec;
                last_timing.tv_usec = info.current_time.tv_usec;
