@@ -2766,7 +2766,7 @@ int write_buf_check_n_flush(int logical_channel) {
             shm_conn_info->prev_flushed = 0;
             shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
 
-            struct frame_seq frame_seq_tmp = shm_conn_info->frames_buf[fprev];
+            struct frame_seq *frame_seq_tmp = &shm_conn_info->frames_buf[fprev];
 #ifdef DEBUGG
             struct timeval work_loop1, work_loop2;
             gettimeofday(&work_loop1, NULL );
@@ -2777,16 +2777,16 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif            
             // calculate this stream TCP_seq_nums etc.
             unsigned int tcp_seq2 = 0;
-            unsigned int hash = get_tcp_hash(frame_seq_tmp.out, &tcp_seq2);
-            unsigned int tcp_seq = getTcpSeq(frame_seq_tmp.out);
+            unsigned int hash = get_tcp_hash(frame_seq_tmp->out, &tcp_seq2);
+            unsigned int tcp_seq = getTcpSeq(frame_seq_tmp->out);
             shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
             if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
                 shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             }
             // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
             int need_drop = (shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync();
-            if(frame_seq_tmp.len > 0 && !need_drop) {
-                if ((len = dev_write(info.tun_device, frame_seq_tmp.out, frame_seq_tmp.len)) < 0) {
+            if(frame_seq_tmp->len > 0 && !need_drop) {
+                if ((len = dev_write(info.tun_device, frame_seq_tmp->out, frame_seq_tmp->len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
                     if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
                         vlog(LOG_ERR, "dev write not EAGAIN or EINTR");
@@ -2796,7 +2796,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     }
     
                 } else {
-                    if (len < frame_seq_tmp.len) {
+                    if (len < frame_seq_tmp->len) {
                         vlog(LOG_ERR, "ASSERT FAILED! could not write to device immediately; dunno what to do!! bw: %d; b rqd: %d", len,
                                 shm_conn_info->frames_buf[fprev].len);
                     }
@@ -2826,7 +2826,7 @@ int write_buf_check_n_flush(int logical_channel) {
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
             shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
             shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
-            assert_packet_ipv4("writing to dev", frame_seq_tmp.out, frame_seq_tmp.len);
+            assert_packet_ipv4("writing to dev", frame_seq_tmp->out, frame_seq_tmp->len);
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
@@ -7819,12 +7819,12 @@ if(drop_packet_flag) {
                             add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
                             add_json(lossLog, &lossLog_cur, "i_sstrm", "%d", shm_conn_info->single_stream);
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
-                            int ch=0;
-                            for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                                if (chan_mask & (1 << i)){
-                                        ch++;
-                                }
-                            }
+                            int ch=NumberOfSetBits(chan_mask);
+                            // for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                            //     if (chan_mask & (1 << i)){
+                            //             ch++;
+                            //     }
+                            // }
                             add_json(lossLog, &lossLog_cur, "pamt", "%d", ch);
 
                             print_json(lossLog, &lossLog_cur);
