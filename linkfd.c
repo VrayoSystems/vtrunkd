@@ -214,7 +214,9 @@ int js_cur, js_cur_fl;
 
 
 #define PUSH_TO_TOP 2 // push Nth packet, 0 to disable
+#ifdef SYSLOG
 #define SEND_Q_LOG
+#endif
 #define BUF_LEN_LOG
 
 #ifdef SEND_Q_LOG
@@ -1812,7 +1814,7 @@ int send_packet(int chan_num, char *buf, int len) {
 /**
  * Function for trying resend
  */ 
-int retransmit_send(char *out2, int n_to_send) {
+int retransmit_send(char *out2) {
     if (drop_packet_flag) {
         return LASTPACKETMY_NOTIFY; // go dropping
     } else if (drop_counter > 0) {
@@ -2363,7 +2365,7 @@ int select_devread_send(char *buf, char *out2) {
         vlog(LOG_INFO, "error write to socket chan %d! reason: %s (%d)", chan_num, strerror(errno), errno);
         return BREAK_ERROR;
     }
-    sem_wait(&shm_conn_info->common_sem);
+    // sem_wait(&shm_conn_info->common_sem);
     if (shm_conn_info->eff_len.warming_up < EFF_LEN_BUFF) {
         shm_conn_info->eff_len.warming_up++;
     }
@@ -2378,7 +2380,7 @@ int select_devread_send(char *buf, char *out2) {
     shm_conn_info->eff_len.sum /= shm_conn_info->eff_len.warming_up;
     if (shm_conn_info->eff_len.sum <= 0)
         shm_conn_info->eff_len.sum = 1;
-    sem_post(&shm_conn_info->common_sem);
+    // sem_post(&shm_conn_info->common_sem);
     gettimeofday(&send2, NULL );
     if (tmp_seq_counter) { // this is not sum packet
         if(resend_frame_idx != -1) {
@@ -2943,7 +2945,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->write_buf[conn_num].last_write_time = info.current_time;
     }
     int tail_idx = shm_conn_info->write_buf[conn_num].frames.rel_tail;
-#ifndef SYSLOG
+#ifdef SYSLOG
     if ((tail_idx != -1) && ( (seq_num > shm_conn_info->frames_buf[tail_idx].seq_num ) &&
             (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num ) >= STRANGE_SEQ_FUTURE )) {
         vlog(LOG_INFO, "WARNING! DROP BROKEN PKT SRANGE_SEQ_FUTURE logical channel %i seq_num %"PRIu32" lws %"PRIu32"; diff is: %d >= 1000 tail seq %lu", conn_num, seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, (seq_num - shm_conn_info->frames_buf[tail_idx].seq_num), shm_conn_info->frames_buf[tail_idx].seq_num);
@@ -5108,6 +5110,7 @@ int lfd_linker(void)
         super++;
         plp_avg_pbl(info.process_num);
         gettimeofday(&info.current_time, NULL);
+#ifdef TRACE_BUF_LEN
         timersub(&info.current_time, &wb_1ms_timer, &tv_tmp);
         if (timercmp(&tv_tmp, &wb_1ms_time, >)) {
             wb_1ms_timer = info.current_time;
@@ -5123,6 +5126,7 @@ int lfd_linker(void)
             }
             wb_1ms[wb_1ms_idx] = shm_conn_info->write_buf[1].frames.length;
         }
+#endif
         sem_wait(&shm_conn_info->write_buf_sem);
         for (;;)
             if (info.last_sent_FLI_idx != shm_conn_info->loss_idx) {
@@ -6300,6 +6304,37 @@ int lfd_linker(void)
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
             
+            //Check time interval and ping if need.
+            if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) ) {
+    				// ping ALL channels! this is required due to 120-sec limitation on some NATs
+                for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
+                    if(!select_net_write(i)) continue;
+    				last_ping = info.current_time.tv_sec;
+    				ping_rcvd = 0;
+                    ping_req_tv[i] = info.current_time;
+                    int len_ret;
+                    if (i == 0) {
+                        len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        if(debug_trace) {
+                            vlog(LOG_INFO, "PING2 chan_num %d", i);
+                        }
+                    } else {
+                        // send ping request - 2
+                        len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
+                        if(debug_trace) {
+                            vlog(LOG_INFO, "PING2 chan_num %d", i);
+                        }
+                    }
+                    if (len_ret < 0) {
+    						vlog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
+    						break;
+    					}
+    				shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
+                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
+    				info.channel[i].up_len += len_ret;
+    			}
+    		}
+
 #if !defined(DEBUGG) && defined(JSON)
             start_json(js_buf, &js_cur);
             add_json(js_buf, &js_cur, "name", "\"%s\"", lfd_host->host);
@@ -6555,7 +6590,9 @@ int lfd_linker(void)
             timersub(&info.current_time, &(recv_n_loss_send_timer->start_time), &(recv_n_loss_send_timer->tmp));
             timer_result = timercmp(&(recv_n_loss_send_timer->tmp), &((struct timeval) {60, 0}), >=); // send each 60 seconds?
         }
-        for (i = 1; i < info.channel_amount; i++) {
+        // for (i = 1; i < info.channel_amount; i++) {
+        {
+            i=1;
             uint32_t tmp32_n;
             uint16_t tmp16_n;
             // split LOSS event generation and bytes-in-flight (LLRS)
@@ -7093,7 +7130,7 @@ int lfd_linker(void)
         if( (ag_flag == R_MODE) && (hold_mode == 0) ) { // WARNING: if AG_MODE? or of DROP mode?
             sem_wait(&(shm_conn_info->common_sem));
             for (int i = 1; i < info.channel_amount; i++) {
-                if(shm_conn_info->seq_counter[i] > last_sent_packet_num[i].seq_num) {
+                if(shm_conn_info->seq_counter[1] > last_sent_packet_num[1].seq_num) {
                     // WARNING! disabled push-to-top policy!
                     if( !((!info.head_channel) && PUSH_TO_TOP && ptt_allow_once && (shm_conn_info->dropping || shm_conn_info->head_lossing)) && !check_delivery_time(SKIP_SENDING_CLD_DIV)) {
                         // noop?
@@ -7112,7 +7149,9 @@ int lfd_linker(void)
         //check redundancy code packet's timer
 #ifdef SUM_SEND
         gettimeofday(&info.current_time, NULL );
-        for (int i = 1; i <= info.channel_amount; i++) {
+        // for (int i = 1; i <= info.channel_amount; i++) {
+        {
+            int i = 1;
             for (int selection = 0; selection < SELECTION_NUM; selection++) {
                 int flag = 0, len_sum;
                 //int tmp = shm_conn_info->t_model_rtt100;
@@ -7226,14 +7265,18 @@ int lfd_linker(void)
             vlog(LOG_INFO, "debug: HOLD_MODE");
 #endif
         }
-        for (i = 0; i < info.channel_amount; i++) {
-            FD_SET(info.channel[i].descriptor, &fdset);
-        }
+        // for (i = 0; i < info.channel_amount; i++) {
+        //     FD_SET(info.channel[i].descriptor, &fdset);
+        // }
+        
+        FD_SET(info.channel[0].descriptor, &fdset);
+        FD_SET(info.channel[1].descriptor, &fdset);
 
 #ifdef DEBUGG
         struct timeval work_loop1, work_loop2;
         gettimeofday(&work_loop1, NULL );
 #endif
+#ifdef SYSLOG
         // CPU LAG >>>
         gettimeofday(&cpulag, NULL);
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
@@ -7241,6 +7284,7 @@ int lfd_linker(void)
             vlog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
         // <<< END CPU_LAG
+#endif
 main_select:
         select_tv_copy = tv;
         const struct timespec *sel_tvp = &sel_tv;
@@ -8622,12 +8666,12 @@ if(drop_packet_flag) {
       //  if (hold_mode) continue;
         sem_wait(&shm_conn_info->hard_sem);
         if (ag_flag == R_MODE) {
-            int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
-            int n_to_send = (lim - send_q_eff) / 1000;
-            if(n_to_send < 0) {
-                n_to_send = 0;
-            }
-            len = retransmit_send(out2, n_to_send);
+            // int lim = ((info.rsr < info.send_q_limit_cubic) ? info.rsr : info.send_q_limit_cubic);
+            // int n_to_send = (lim - send_q_eff) / 1000;
+            // if(n_to_send < 0) {
+            //     n_to_send = 0;
+            // }
+            len = retransmit_send(out2);
         CHKCPU(41);
             if (len == CONTINUE_ERROR) {
 #ifdef DEBUGG
@@ -8749,44 +8793,12 @@ if(drop_packet_flag) {
 //         }
         sem_post(&shm_conn_info->hard_sem);
 
-            //Check time interval and ping if need.
-        if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) ) {
-				gettimeofday(&info.current_time, NULL); // WTF?
 
-				// ping ALL channels! this is required due to 120-sec limitation on some NATs
-            for (i = 0; i < info.channel_amount; i++) { // TODO: remove ping DUP code
-                if(!select_net_write(i)) continue;
-				last_ping = info.current_time.tv_sec;
-				ping_rcvd = 0;
-                ping_req_tv[i] = info.current_time;
-                int len_ret;
-                if (i == 0) {
-                    len_ret = proto_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
-                    if(debug_trace) {
-                        vlog(LOG_INFO, "PING2 chan_num %d", i);
-                    }
-                } else {
-                    // send ping request - 2
-                    len_ret = udp_write(info.channel[i].descriptor, buf, VTUN_ECHO_REQ);
-                    if(debug_trace) {
-                        vlog(LOG_INFO, "PING2 chan_num %d", i);
-                    }
-                }
-                if (len_ret < 0) {
-						vlog(LOG_ERR, "Could not send echo request 2 chan %d reason %s (%d)", i, strerror(errno), errno);
-						break;
-					}
-					shm_conn_info->stats[info.process_num].speed_chan_data[i].up_data_len_amt += len_ret;
-                    shm_conn_info->stats[info.process_num].packet_upload_cnt++;
-					info.channel[i].up_len += len_ret;
-				}
-			}
-
-            gettimeofday(&info.current_time, NULL);
-            last_action = info.current_time.tv_sec;
-            lfd_host->stat.comp_out += len;
-            
-            CHKCPU(6);
+        gettimeofday(&info.current_time, NULL);
+        last_action = info.current_time.tv_sec;
+        lfd_host->stat.comp_out += len;
+        
+        CHKCPU(6);
     }
 
     free_timer(recv_n_loss_send_timer);
