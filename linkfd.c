@@ -1108,7 +1108,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     }
     */
     
-    int APCS = shm_conn_info->APCS * 5 / 10; // 0.7 of APCS to add to tokenbuf
+    int APCS = shm_conn_info->APCS * 8 / 10; // 0.7 of APCS to add to tokenbuf
     
     // now do add some tokens ?
     
@@ -1123,10 +1123,10 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
         shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     }
-    //if(shm_conn_info->slow_start_recv) {
-    //    ms_for_token = 1;
-    //    *next_token_ms = 1;
-    //}
+    if(shm_conn_info->slow_start_recv) {
+        ms_for_token = 1;
+        *next_token_ms = 1;
+    }
     if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
         return 1;
     } else {
@@ -1148,14 +1148,14 @@ int check_tokens(int chan_num) {
         shm_conn_info->max_stuck_buf_len = 0;
         return 1; 
     }
-    if(shm_conn_info->slow_start_recv) {
-        return 1; // the hope that this will actually help gain back ss
-        //struct timeval since_write_tv;
-        //timersub(&info.current_time, &shm_conn_info->write_buf[chan_num].last_write_time, &since_write_tv);
-        //if(since_write_tv.tv_usec < 1000) {
-        //    return 0;
-        //}
-    }
+    // if(shm_conn_info->slow_start_recv) {
+    //     return 1; // the hope that this will actually help gain back ss
+    //     //struct timeval since_write_tv;
+    //     //timersub(&info.current_time, &shm_conn_info->write_buf[chan_num].last_write_time, &since_write_tv);
+    //     //if(since_write_tv.tv_usec < 1000) {
+    //     //    return 0;
+    //     //}
+    // }
         
     if(shm_conn_info->tokens > 0) return 1;
     int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
@@ -3052,17 +3052,17 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             return -1;
         }
     }
-    if(seq_num == 0 || len == 0) { // add stub packet counter in case of retransmission packet
-        shm_conn_info->write_buf[conn_num].frames.stub_total++;
-    }
+    // if(seq_num == 0 || len == 0) { // add stub packet counter in case of retransmission packet
+    //     shm_conn_info->write_buf[conn_num].frames.stub_total++;
+    // }
     // now add stubs, if any
-    if(shm_conn_info->tokenbuf > MAX_STUB_JITTER) {
-        shm_conn_info->frames_buf[newf].stub_counter = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
-        shm_conn_info->write_buf[conn_num].frames.stub_total += shm_conn_info->frames_buf[newf].stub_counter;
-        shm_conn_info->tokenbuf = MAX_STUB_JITTER;
-    } else {
-        shm_conn_info->frames_buf[newf].stub_counter = 0;
-    }
+    // if(shm_conn_info->tokenbuf > MAX_STUB_JITTER) {
+    //     shm_conn_info->frames_buf[newf].stub_counter = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
+    //     shm_conn_info->write_buf[conn_num].frames.stub_total += shm_conn_info->frames_buf[newf].stub_counter;
+    //     shm_conn_info->tokenbuf = MAX_STUB_JITTER;
+    // } else {
+    //     shm_conn_info->frames_buf[newf].stub_counter = 0;
+    // }
         
     shm_conn_info->frames_buf[newf].seq_num = seq_num;
     // do not do the copy until written
@@ -3087,7 +3087,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 //    vlog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
         buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
-    shm_conn_info->APCS_cnt++;
     if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
     int buf_len_real = shm_conn_info->write_buf[conn_num].frames.length;
     int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
@@ -3115,6 +3114,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
         shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
         shm_conn_info->write_buf_hashtable[hash].n = newf;
+        shm_conn_info->APCS_cnt++;
         return mlen;
     } else { // buffer not empty
         // if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
@@ -3223,6 +3223,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
     shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
     shm_conn_info->write_buf_hashtable[hash].n = newf;
+    shm_conn_info->APCS_cnt++;
 
     mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
 
