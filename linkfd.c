@@ -6777,7 +6777,7 @@ int lfd_linker(void)
                     memcpy(buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp16_n, sizeof(uint16_t)); //lbuf_len
                     tmp32_n = htonl(shm_conn_info->write_buf[i].last_received_seq[info.process_num]); // global seq_num
                     memcpy(buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
-                    tmp32_n = htons(shm_conn_info->seq_counter[1]); 
+                    tmp32_n = htonl(shm_conn_info->seq_counter[1]); 
                     //tmp16_n = htons(shm_conn_info->slow_start); 
                     //tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
