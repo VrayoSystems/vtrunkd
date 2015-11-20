@@ -1108,7 +1108,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     }
     */
     
-    int APCS = shm_conn_info->APCS * 7 / 10; // 0.7 of APCS to add to tokenbuf
+    int APCS = shm_conn_info->APCS * 5 / 10; // 0.7 of APCS to add to tokenbuf
     
     // now do add some tokens ?
     
@@ -5734,18 +5734,18 @@ int lfd_linker(void)
                 info.max_send_q_u = send_q_eff_mean;
             }
             info.tv_sqe_mean_added = info.current_time;
-            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                // TODO: write averaged data ? more points -> more avg!
-                if(last_smalldata_ACS != info.packet_recv_upload_avg) {
-                    smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
-                    smalldata.rtt[s_q_idx] = info.rtt2;
-                    smalldata.ts[s_q_idx] = info.current_time;
-                    last_smalldata_ACS = info.packet_recv_upload_avg;
-                }
-            } else {
-                vlog(LOG_ERR, "WARNING! send_q too big!");
-            }
+            // int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
+            // if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+            //     // TODO: write averaged data ? more points -> more avg!
+            //     if(last_smalldata_ACS != info.packet_recv_upload_avg) {
+            //         smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
+            //         smalldata.rtt[s_q_idx] = info.rtt2;
+            //         smalldata.ts[s_q_idx] = info.current_time;
+            //         last_smalldata_ACS = info.packet_recv_upload_avg;
+            //     }
+            // } else {
+            //     vlog(LOG_ERR, "WARNING! send_q too big!");
+            // }
             
             
             timersub(&info.current_time, &info.head_change_tv, &tv_tmp_tmp_tmp);
@@ -5900,7 +5900,7 @@ int lfd_linker(void)
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
                 vlog(LOG_ERR, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
-                        d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
+                                                      d_rsr,    d_ACS_h,    d_ACS,    d_rsr_top,    d_rtt_h,    d_rtt_h_var,    d_rtt,    d_rtt_var,    d_frtt,    d_sql,    d_rtt_diff,0.0/*d_mld_ms*/, 0.0/*d_pump_adj*/,  d_rtt_shift, info.rsr);
             }
            
            /*
@@ -8378,22 +8378,22 @@ if(drop_packet_flag) {
                     //if(info.max_send_q < info.channel[chan_num].send_q) {
                     //    info.max_send_q = info.channel[chan_num].send_q;
                     //}
-                    if( (last_recv_lsn - peso_old_last_recv_lsn) > PESO_STAT_PKTS) {
-                        // TODO: multi-channels broken here!
-                        timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
-                        // TODO: check for overflow here? -->
-                        if(tv2ms(&tv_tmp) > 3) { // TODO: what to do if < 3ms?? 3ms is 333p/s
-                            int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
-                            int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-                            if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                                smalldata.ACS[s_q_idx] = ACS2;
-                                smalldata.rtt[s_q_idx] = info.rtt2;
-                                smalldata.ts[s_q_idx] = info.current_time;
-                            }
-                        }
-                        peso_lrl_ts = info.current_time;
-                        peso_old_last_recv_lsn = last_recv_lsn;
-                    }
+                    // if( (last_recv_lsn - peso_old_last_recv_lsn) > PESO_STAT_PKTS) {
+                    //     // TODO: multi-channels broken here!
+                    //     timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
+                    //     // TODO: check for overflow here? -->
+                    //     if(tv2ms(&tv_tmp) > 3) { // TODO: what to do if < 3ms?? 3ms is 333p/s
+                    //         int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
+                    //         int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
+                    //         if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
+                    //             smalldata.ACS[s_q_idx] = ACS2;
+                    //             smalldata.rtt[s_q_idx] = info.rtt2;
+                    //             smalldata.ts[s_q_idx] = info.current_time;
+                    //         }
+                    //     }
+                    //     peso_lrl_ts = info.current_time;
+                    //     peso_old_last_recv_lsn = last_recv_lsn;
+                    // }
 #ifdef DEBUGG
 if(drop_packet_flag) {
                     vlog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
