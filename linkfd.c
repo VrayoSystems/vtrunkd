@@ -5478,6 +5478,7 @@ int lfd_linker(void)
                                //|| (send_q_limit_cubic_apply < info.rsr) // better w/o this one?!? // may re-introduce due to PESO!
                                || shm_conn_info->slow_start
                                || ( channel_dead )
+                               || (shm_conn_info->avg_len_out < AVG_LEN_IN_ACK_THRESH) // ACK/telemetry mode
                                || ( shm_conn_info->idle )
                                //|| ( info.head_change_safe && !check_rtt_latency_drop() ) // replace by MAWMAR
                                || ((agag < AGAG_AG_THRESH) && (!mawmar_allowed()))
@@ -5500,9 +5501,6 @@ int lfd_linker(void)
             print_ag_drop_reason();
             if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
                 ag_flag_local = AG_MODE;
-            }
-            if(shm_conn_info->avg_len_out < AVG_LEN_IN_ACK_THRESH) {
-                ag_flag_local = R_MODE; // disable AG if sending small packets
             }
             if(ag_flag_local == AG_MODE) {
                 shm_conn_info->ag_mask |= (1 << info.process_num); // set bin mask to 1
