@@ -1052,7 +1052,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     //int buf_len = shm_conn_info->write_buf[chan_num].last_received_seq[shm_conn_info->remote_head_pnum] - shm_conn_info->write_buf[chan_num].last_written_seq;
     //int tokens_above_thresh = shm_conn_info->tokenbuf - MAX_STUB_JITTER;
     //if(tokens_above_thresh < 0) tokens_above_thresh = 0;
-    //int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length + shm_conn_info->write_buf[chan_num].frames.stub_total + tokens_above_thresh;
+    int buf_len_real = shm_conn_info->write_buf[chan_num].frames.length + shm_conn_info->write_buf[chan_num].frames.stub_total;
     //buf_len = buf_len_real; 
     //struct timeval packet_dtv;
     //int BPCS = 0;
@@ -1116,25 +1116,36 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     timersub(&info.current_time, &shm_conn_info->tokens_lastadd_tv, &passed_tv);
     int ms_passed = tv2ms(&passed_tv);
     int tokens_to_add = APCS * ms_passed / 1000;
-    if(tokens_to_add > TOKENBUF_ADD_BURST) {
-        shm_conn_info->tokens_lastadd_tv = info.current_time; // negative values: fix lastadd init probelms
-        shm_conn_info->tokenbuf += tokens_to_add;
+    // if(buf_len_real > 0 && tokens_to_add > TOKENBUF_ADD_BURST) {
+    //     shm_conn_info->tokens_lastadd_tv = info.current_time;
+    //     shm_conn_info->tokenbuf += tokens_to_add;
+    // }
+    if(buf_len_real == 0) {
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+    } else if (tokens_to_add > TOKENBUF_ADD_BURST) { // TODO: prevent too high jitter by limiting available tokens?
+        shm_conn_info->tokens += tokens_to_add;
+        shm_conn_info->tokens_lastadd_tv = info.current_time;
+    } // else wait ...
+    // if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
+    //     shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
+    // }
+    if(shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
+        shm_conn_info->tokens = shm_conn_info->max_stuck_buf_len;
     }
-    if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
-        shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
-    }
-    if(shm_conn_info->slow_start_recv) {
-        ms_for_token = 1;
-        *next_token_ms = 1;
-    }
-    if(shm_conn_info->tokens > 0) { // we are not syncing so it is important not to rely on being zero
+ 
+    // if(shm_conn_info->slow_start_recv) {
+    //     ms_for_token = 1;
+    //     *next_token_ms = 1;
+    // }
+    if(shm_conn_info->tokens > 0) {
+        // no need to set ms_for_token as get_write_buf_wait_data will shoot anyways
         return 1;
     } else {
         //if(!shm_conn_info->slow_start_recv) {
         if(APCS == 0) { // i=n caseof ss
             ms_for_token = 50; // ms before packet drop? (zero speed)
         } else {
-            ms_for_token = 1000 / APCS;
+            ms_for_token = 1000 / APCS * TOKENBUF_ADD_BURST;
         }
         //}
         if(ms_for_token < 1) ms_for_token = 1; // TODO: is this correct?
@@ -2806,7 +2817,8 @@ int write_buf_check_n_flush(int logical_channel) {
             } else {
                 vlog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
                 drop_counter++;
-                shm_conn_info->write_buf[logical_channel].frames.stub_total--;
+                // shm_conn_info->write_buf[logical_channel].frames.stub_total--;
+                
                 if(need_drop) {
                     shm_conn_info->drop_time = info.current_time;
                 }
@@ -2913,7 +2925,15 @@ void msbl_push_up_loss_unsync() {
         ms2tv(&loss_tv, info.exact_rtt);
         timeradd(&info.current_time, &loss_tv, &info.recv_loss_immune);
     }
-}
+} 
+
+// void msbl_push_down_drop_unsync() {
+//     struct timeval loss_tv;
+//         shm_conn_info->max_stuck_buf_len -= shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt - (int) ((double)shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt * (2.0 - info.B) / 2.0);
+//         ms2tv(&loss_tv, info.exact_rtt);
+//         timeradd(&info.current_time, &loss_tv, &info.recv_loss_immune);
+// }
+
 
 /*
                _ _             _            __               _     _ 
@@ -3087,7 +3107,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
 //    vlog(LOG_ERR, "FRAME_CHANNEL_INFO update buf_len %d was %d",shm_conn_info->write_buf[1].frames.length,shm_conn_info->buf_len);
         buf_len_real = shm_conn_info->write_buf[1].frames.length;
         }
-    if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
+    // if(shm_conn_info->tokenbuf > 0) shm_conn_info->tokenbuf--;
     int buf_len_real = shm_conn_info->write_buf[conn_num].frames.length;
     int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
     if(tokens_in_out > 0) {
