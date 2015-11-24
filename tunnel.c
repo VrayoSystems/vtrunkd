@@ -254,7 +254,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         FD_ZERO(&fdset);
         FD_SET(s, &fdset);
         tv.tv_sec  = 0;
-        tv.tv_usec = 100;
+        tv.tv_usec = 500000;
 
 
         shm_conn_info->rdy = 1;
