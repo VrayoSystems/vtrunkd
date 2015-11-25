@@ -2282,7 +2282,7 @@ int select_devread_send(char *buf, char *out2) {
         if (packet_code_ready) {
             len_sum = pack_redundancy_packet_code(buf2, &shm_conn_info->packet_code[current_selection][chan_num], tmp_seq_counter, current_selection,
                     FRAME_REDUNDANCY_CODE);
-            update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer);
+            fast_update_timer(&shm_conn_info->packet_code[current_selection][chan_num].timer, &info.current_time);
             sem_post(&(shm_conn_info->common_sem));
         } else {
             sem_post(&(shm_conn_info->common_sem));
@@ -2366,9 +2366,11 @@ int select_devread_send(char *buf, char *out2) {
         
     }
     assert_packet_ipv4("writing to net", buf, len);
+#ifdef DEBUGG
     struct timeval send1; // need for mean_delay calculation (legacy)
     struct timeval send2; // need for mean_delay calculation (legacy)
     gettimeofday(&send1, NULL );
+#endif
     // send DATA
     int len_ret = udp_write(info.channel[chan_num].descriptor, buf, len);
     info.channel[chan_num].packet_recv_counter = 0;
@@ -2392,7 +2394,9 @@ int select_devread_send(char *buf, char *out2) {
     if (shm_conn_info->eff_len.sum <= 0)
         shm_conn_info->eff_len.sum = 1;
     // sem_post(&shm_conn_info->common_sem);
+#ifdef DEBUGG
     gettimeofday(&send2, NULL );
+#endif
     if (tmp_seq_counter) { // this is not sum packet
         if(resend_frame_idx != -1) {
             shm_conn_info->resend_frames_buf[resend_frame_idx].local_seq_num[info.process_num] = info.channel[chan_num].local_seq_num;
@@ -2403,9 +2407,9 @@ int select_devread_send(char *buf, char *out2) {
             info.channel[chan_num].local_seq_num = 0; // TODO: 1. not required; 2. disaster at CLI-side! 3. max. ~4TB of data
         }
 
+#ifdef DEBUGG
         delay_acc += (int) ((send2.tv_sec - send1.tv_sec) * 1000000 + (send2.tv_usec - send1.tv_usec)); // need for mean_delay calculation (legacy)
         delay_cnt++; // need for mean_delay calculation (legacy)
-#ifdef DEBUGG
         if((delay_acc/delay_cnt) > 100) vlog(LOG_INFO, "SEND DELAY: %u us", (delay_acc/delay_cnt));
 #endif
 
@@ -2738,7 +2742,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                         shm_conn_info->loss_idx = 0;
                     }
-                    gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
+                    shm_conn_info->loss[shm_conn_info->loss_idx].timestamp = info.current_time;
                     shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
                     shm_conn_info->loss[shm_conn_info->loss_idx].psl = info.flush_sequential;
                     if(who_lost_pnum != -1) {
@@ -2981,10 +2985,10 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         if (shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] != seq_num) {
             shm_conn_info->flushed_packet[seq_num % FLUSHED_PACKET_ARRAY_SIZE] = seq_num;
             struct timeval work_loop1, work_loop2, tmp_tv;
-            gettimeofday(&work_loop1, NULL );
+            //gettimeofday(&work_loop1, NULL );
             int len_ret = dev_write(info.tun_device, out, len);
-            gettimeofday(&work_loop2, NULL );
-            timersub(&work_loop2, &work_loop1, &tmp_tv);
+            //gettimeofday(&work_loop2, NULL );
+            //timersub(&work_loop2, &work_loop1, &tmp_tv);
             vlog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
@@ -4320,7 +4324,7 @@ int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
             if (shm_conn_info->loss_idx == LOSS_ARRAY) {
                 shm_conn_info->loss_idx = 0;
             }
-            gettimeofday(&shm_conn_info->loss[shm_conn_info->loss_idx].timestamp, NULL );
+            shm_conn_info->loss[shm_conn_info->loss_idx].timestamp = info.current_time;
             shm_conn_info->loss[shm_conn_info->loss_idx].pbl = shm_conn_info->write_sequential;
             shm_conn_info->loss[shm_conn_info->loss_idx].psl = 1;
             // TODO: who_lost
@@ -5130,7 +5134,12 @@ int lfd_linker(void)
         errno = 0;
         super++;
         plp_avg_pbl(info.process_num);
+        
         gettimeofday(&info.current_time, NULL);
+        // struct timespec ts_f;
+        // clock_gettime(CLOCK_MONOTONIC, &ts_f);
+        // TIMESPEC_TO_TIMEVAL(&info.current_time, &ts_f);
+        
 #ifdef TRACE_BUF_LEN
         timersub(&info.current_time, &wb_1ms_timer, &tv_tmp);
         if (timercmp(&tv_tmp, &wb_1ms_time, >)) {
