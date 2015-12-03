@@ -5599,6 +5599,20 @@ int lfd_linker(void)
                 if(shm_conn_info->max_stuck_buf_len > MSBL_LIMIT) {
                     shm_conn_info->max_stuck_buf_len = MSBL_LIMIT;
                 }
+                // now fix msbl to 0 as an implementation of #77 workaround
+                // warning! this is a temporary workaround and should be removed
+                int max_rtt = 0;
+                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { 
+                        if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                            max_rtt = shm_conn_info->stats[i].exact_rtt;
+                        }
+                    }
+                }
+                if((max_rtt * shm_conn_info->APCS)/1000 < 80) {
+                    shm_conn_info->max_stuck_buf_len = 0;
+                }
+                // <-- end workaround
                 shm_conn_info->msbl_tick = info.current_time;
             }
             
@@ -6037,11 +6051,11 @@ int lfd_linker(void)
         //         sig_send1(); // notify head (all) about our new condition
         //     }
         // }
-        if(info.head_channel) {
-            if(hold_mode_previous == 1 && hold_mode == 0) {
-                vlog(LOG_INFO, "HEAD unhold.");
-            }
-        }
+        // if(info.head_channel) {
+        //     if(hold_mode_previous == 1 && hold_mode == 0) {
+        //         vlog(LOG_INFO, "HEAD unhold.");
+        //     }
+        // }
         //vlog(LOG_INFO, "debug0: HOLD_MODE - %i just_started_recv - %i", hold_mode, info.just_started_recv);
         if(hold_mode == 1) {
             was_hold_mode = 1; // for JSON ONLY!
@@ -6165,7 +6179,7 @@ int lfd_linker(void)
             }
             
             timersub(&info.current_time, &shm_conn_info->APCS_tick_tv, &tv_tmp);
-            if(timercmp(&tv_tmp, &((struct timeval) {0, 350000}), >=) && (shm_conn_info->APCS_cnt > 150)) {
+            if(timercmp(&tv_tmp, &((struct timeval) {1, 350000}), >=) || (shm_conn_info->APCS_cnt > 500)) {
                 int new_APCS = shm_conn_info->APCS_cnt * 1000 / tv2ms(&tv_tmp);
                 shm_conn_info->APCS = 6 * shm_conn_info->APCS / 7 + new_APCS / 7;
                 shm_conn_info->APCS_cnt = 0;
