@@ -308,7 +308,7 @@ struct vtun_host * auth_server(int fd, int *reason)
 
         set_title("authentication");
 
-    print_p(fd, "VTRUNKD server ver %s\n", VTUN_VER);
+    print_p(fd, "VTRUNKD server ver %s\n", VERSION);
 
 	stage = ST_HOST;
     *reason = D_NOREAD;
