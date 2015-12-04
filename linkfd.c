@@ -3450,7 +3450,7 @@ int redetect_head_unsynced(int32_t chan_mask, int exclude) { // TODO: exclude is
         // TODO: what to do if these two methods disagree? Is it possible?
         
         for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) && check_plp_ok(i, chan_mask)) {
+            if ( (chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (i != shm_conn_info->max_chan) && (i != exclude) /* && check_plp_ok(i, chan_mask)*/) {
                 if( !percent_delta_equal(shm_conn_info->stats[i].ACK_speed_avg, shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg, 10)
                          && ( shm_conn_info->stats[i].ACK_speed_avg > shm_conn_info->stats[shm_conn_info->max_chan].ACK_speed_avg )) { // 15% corridor to consider speeds the same
                     max_chan_H = i;
