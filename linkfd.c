@@ -620,6 +620,20 @@ void profexit(int sig)
 }
 #endif
 
+#define IF_WRITE_CONDITION timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].time_stamp, &packet_wait_tv); \
+        timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv); \
+        forced_rtt_reached=check_tokens(logical_channel); \
+        cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
+        buf_len = shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_tail].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq; \
+        if (forced_rtt_reached && ( \
+                        cond_flag \
+                      || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) \
+                      || (    timercmp(&packet_wait_tv, &max_latency_drop, >=) \
+                           && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=) ) \
+                      || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num < shm_conn_info->seq_num_unrecoverable_loss) \
+                ) \
+           )
+
 int update_prev_flushed(int logical_channel, int fprev) {
     if(shm_conn_info->prev_flushed) {
         info.flush_sequential += 
@@ -1209,14 +1223,17 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     // TODO WARNING i do not know why we are still checking packets if we see no rel_head
     
     int buf_latency_ms;
+    int buf_len;
+    int cond_flag;
     struct timeval max_latency_drop;
     int rtou = get_rto_usec();
     max_latency_drop.tv_sec = rtou / 1000000;
     max_latency_drop.tv_usec = rtou % 1000000;
     struct timeval tv_tmp;
     int head_lrx = 0, seq_loss = 0;
-    struct timeval packet_wait_tv;
+    struct timeval packet_wait_tv, since_write_tv;
     info.ploss_event_flag = 0; // TODO: remove ploss event check
+    int logical_channel = 1; // warning! fixed stream/channel here for IF_WRITE_CONDITION
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
     #ifdef FRTTDBG
                 vlog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
@@ -1291,36 +1308,10 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             */
         }
         if (shm_conn_info->write_buf[i].frames.rel_head != -1) {
-            // no sync is needed: already has sync at the toplevel
-            forced_rtt_reached=check_tokens(i);
-    #ifdef FRTTDBG
-                vlog(LOG_ERR, "get_write_buf_wait_data(), forced reached: %d", forced_rtt_reached);
-    #endif
-
-            timersub(&info.current_time, &shm_conn_info->write_buf[i].last_write_time, &tv_tmp);
-            timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].time_stamp, &packet_wait_tv);
-            
-            //if (forced_rtt_reached && (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
-            //        != (shm_conn_info->write_buf[i].last_written_seq + 1))) {
-            //}
-            
-            if ((shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num
-                    == (shm_conn_info->write_buf[i].last_written_seq + 1)) 
-                    // || (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num == 0) // stub packet support
-                    ) {
-#ifdef DEBUGG
-                vlog(LOG_ERR, "get_write_buf_wait_data(), next seq");
-#endif
-                return forced_rtt_reached;
-            } else if (timercmp(&tv_tmp, &((struct timeval) MAX_NETWORK_STALL), >=) && timercmp(&packet_wait_tv, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
-               //&& (shm_conn_info->frames_buf[shm_conn_info->write_buf[i].frames.rel_head].seq_num <= shm_conn_info->write_buf[i].last_received_seq[shm_conn_info->remote_head_pnum])
-            ) {
-#ifdef DEBUGG
-                vlog(LOG_ERR, "get_write_buf_wait_data(), latency drop %ld.%06ld", tv_tmp.tv_sec, tv_tmp.tv_usec);
-#endif
-                return forced_rtt_reached;
-            } else if (shm_conn_info->write_buf[i].last_written_seq < info.least_rx_seq[i]) { // this is required to flush pkt in case of LOSS
-                return forced_rtt_reached; // do NOT add any other if's here - it SHOULD drop immediately!
+            // check if we can write these packets
+            IF_WRITE_CONDITION 
+            {
+                return 1;
             }
         } else {
             if(shm_conn_info->write_buf[i].frames.length != 0) {
@@ -2489,13 +2480,13 @@ int write_buf_check_n_flush(int logical_channel) {
     int rtt_fix; //in ms
     struct timeval tv_tmp, rtt_fix_tv;
     struct timeval tv;
-    struct timeval since_write_tv;
+    struct timeval since_write_tv, packet_wait_tv;
     int ts;
     fprev = shm_conn_info->write_buf[logical_channel].frames.rel_head;
     shm_conn_info->write_buf[logical_channel].complete_seq_quantity = 0;
     //int buf_len = shm_conn_info->write_buf[logical_channel].frames.len; // disabled for #400
-    int tail_idx = shm_conn_info->write_buf[logical_channel].frames.rel_tail;
-    int buf_len = shm_conn_info->frames_buf[tail_idx].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq;
+    //int tail_idx = shm_conn_info->write_buf[logical_channel].frames.rel_tail;
+    int buf_len;
 /*
     //another len assert
     int sizeF, size1, sizeJW;
@@ -2534,15 +2525,12 @@ int write_buf_check_n_flush(int logical_channel) {
 #endif
     acnt = 0;
     if (fprev > -1) {
-        forced_rtt_reached=check_tokens(logical_channel);
         #ifdef FRTTDBG
         vlog(LOG_ERR, "WBF forced reached: %d", forced_rtt_reached);
         #endif
         if(info.least_rx_seq[logical_channel] == UINT32_MAX) {
             info.least_rx_seq[logical_channel] = 0; // protect us from possible failures to calculate LRS in get_write_buf_wait_data()
         }
-        timersub(&info.current_time, &shm_conn_info->frames_buf[fprev].time_stamp, &tv_tmp);
-        timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv);
         if(shm_conn_info->frames_buf[fprev].stub_counter) {
             shm_conn_info->frames_buf[fprev].stub_counter--;
             shm_conn_info->write_buf[logical_channel].frames.stub_total--;
@@ -2556,27 +2544,16 @@ int write_buf_check_n_flush(int logical_channel) {
             shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
             return 0;
         }
-        int cond_flag = ((shm_conn_info->frames_buf[fprev].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; // stub packet support may beadded here
         if(shm_conn_info->frames_buf[fprev].seq_num == shm_conn_info->write_buf[logical_channel].last_written_seq) {
             vlog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
         }
         if(shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->write_buf[logical_channel].last_written_seq) {
             vlog(LOG_ERR, "ASSERT FAILED! Negative packet seq_num diff in WB! seq %lu < lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
         }
-    #ifdef FRTTDBG
-        vlog(LOG_INFO, "cond_flag %d, fr %d, loss %d, seq %lu, lws %lu", cond_flag, forced_rtt_reached, (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]), shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
-    #endif
-        if (forced_rtt_reached && ( // smoothed buffer - allowed to write
-                        cond_flag // normal write
-                      || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) // MABL immediate drop
-                      || (    timercmp(&tv_tmp, &max_latency_drop, >=) // TODO: fix MLD for channel being ahead! #636
-                      //     && (shm_conn_info->frames_buf[fprev].seq_num <= shm_conn_info->write_buf[logical_channel].last_received_seq[shm_conn_info->remote_head_pnum])
-                           && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=)
-                         )                                          // MLD several checks passed
-                      //|| (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel]) // can drop due to loss?
-                      || (shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->seq_num_unrecoverable_loss) // can drop due to unrecoverable loss!
-                )
-           ) {
+        int cond_flag;
+        
+        IF_WRITE_CONDITION 
+        {
             if (!cond_flag) {
                 char lag_pname[SESSION_NAME_SIZE] = "E\0";
                 int r_amt = 0;
