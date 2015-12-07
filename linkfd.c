@@ -4252,7 +4252,7 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
     }
 }
 
-int set_rttlag_total() { 
+int set_rttlag_total() {  // unused TODO REMOVE
     uint32_t chan_mask = shm_conn_info->channels_mask;
     int min_rtt = INT32_MAX;
     int min_rtt_var = INT32_MAX;
@@ -4281,7 +4281,7 @@ int set_rttlag_total() {
     shm_conn_info->total_min_rtt_var = min_rtt_var;
     shm_conn_info->total_max_rtt = max_rtt;
     shm_conn_info->total_max_rtt_var = max_rtt_var;
-    vlog(LOG_INFO, "computed max_rtt: %d, max_rtt_var: %d, min_rtt %d, min_rtt_var: %d", max_rtt, max_rtt_var, min_rtt, min_rtt_var);
+    //vlog(LOG_INFO, "computed max_rtt: %d, max_rtt_var: %d, min_rtt %d, min_rtt_var: %d", max_rtt, max_rtt_var, min_rtt, min_rtt_var);
 }
 
 int infer_lost_seq_num(uint32_t *incomplete_seq_buf) {
@@ -5083,6 +5083,7 @@ int lfd_linker(void)
     //reset FRAME_LOSS_INFO sending
     info.last_sent_FLI_idx = shm_conn_info->loss_idx;
     struct timeval select_tv_copy; int alive_physical_channels = 1;
+    info.idle_enter = info.current_time;
 
     vlog_shm_set(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
 
@@ -5149,6 +5150,7 @@ int lfd_linker(void)
         }
         if(shm_conn_info->idle && !info.previous_idle) {
             vlog(LOG_INFO, "Entering IDLE");
+            info.idle_enter = info.current_time;
         }
         info.previous_idle = shm_conn_info->idle;
         // <<< END IDLE EXIT
@@ -6216,7 +6218,10 @@ int lfd_linker(void)
                 info.channel[1].packet_download = PCS * 2;
                 info.pcs_sent_old = info.channel[1].packet_download;
             }
-            need_send_FCI = 1;
+            timersub(&info.current_time, &info.idle_enter, &tv_tmp);
+            if(timercmp(&tv_tmp, &((struct timeval) {2, 0}), <=)) {
+                need_send_FCI = 1;
+            }
             //max_ACS2 = (max_ACS2 < (info.PCS2_recv * info.eff_len) ? max_ACS2 : (info.PCS2_recv * info.eff_len)); // disabled for future fix
             shm_conn_info->stats[info.process_num].max_ACS2 = max_ACS2;
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
@@ -6472,9 +6477,9 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "Cs", "%d", Cs);
 
             skip=0;
-            if(PCS == 0 && PCS_aux != 0) {
-                vlog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
-            }
+            // if(PCS == 0 && PCS_aux != 0) {
+            //     vlog(LOG_ERR, "WARNING! PCS==0 && PCS_aux!=0 (%d) !! No data is sent by peer", PCS_aux);
+            // }
             PCS = 0; // WARNING! chan amt=1 hard-coded here!
             PCS_aux = 0; // WARNING! chan amt=1 hard-coded here!
             info.fast_pcs_old=0;

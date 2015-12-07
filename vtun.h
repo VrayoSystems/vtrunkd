@@ -623,6 +623,7 @@ struct phisical_status { // A.K.A. "info"
     int head_send_q_shift_old;
     int FCI_send_counter;
     struct timeval recv_loss_immune;
+    struct timeval idle_enter;
 };
 
 #define LOSS_ARRAY 80
