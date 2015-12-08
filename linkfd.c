@@ -5196,9 +5196,12 @@ int lfd_linker(void)
         timersub(&info.current_time, &info.channel[my_max_send_q_chan_num].send_q_time, &t_tv);
         int64_t upload_eff = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         if(upload_eff < 10) upload_eff = 100000; // 1000kpkts default start speed
-        
-        bytes_pass = (((int64_t)t_tv.tv_sec * upload_eff
-                + (((int64_t)t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
+        if((t_tv.tv_sec == 0) && (t_tv.tv_usec < info.exact_rtt * 1000)) {
+            bytes_pass = (((int64_t)t_tv.tv_sec * upload_eff
+                    + (((int64_t)t_tv.tv_usec/10) * upload_eff) / 100000)*3)/10;
+        } else {
+            bytes_pass = 0;
+        }
 
         uint32_t speed_log = info.channel[my_max_send_q_chan_num].packet_recv_upload_avg;
         // removed semaphore here: exact value not required
@@ -5474,6 +5477,9 @@ int lfd_linker(void)
                     agag = 0;
                     ag_flag = R_MODE;
                 }
+            }
+            if(shm_conn_info->stats[info.process_num].channel_dead) {
+                agag = 0; // protect in case we suddenly died
             }
             // <<< END AG DECISION
                 
