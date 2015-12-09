@@ -897,6 +897,32 @@ int missing_resend_buffer (int chan_num, uint32_t buf[], int *buf_len, uint32_t 
     return idx;
 }
 
+int discard_packets(int chan_num, uint32_t stop_sqn) {
+    int fprev = shm_conn_info->write_buf[chan_num].frames.rel_head;
+    uint32_t sqn = shm_conn_info->frames_buf[fprev].seq_num;
+    int idx = fprev;
+    int n_idx, cnt=0;
+    while(sqn < stop_sqn) {
+        // now jsut discard the packet
+        cnt++;
+        vlog(LOG_INFO, "Discarding seq_num %ld cnt %d", sqn, cnt);
+        n_idx = shm_conn_info->frames_buf[idx].rel_next;
+        if(frame_llist_pull(&shm_conn_info->write_buf[chan_num].frames, shm_conn_info->frames_buf, &idx) < 0) {
+            vlog(LOG_ERR, "WARNING! discard_packets tried to pull from empty write_buf 2!");
+            return -1;
+        }
+        frame_llist_append(&shm_conn_info->wb_free_frames, idx, shm_conn_info->frames_buf);
+        idx = n_idx;
+        if(idx == -1) {
+            vlog(LOG_ERR, "ASSERT FAILED: discard_packets did not find stop_sqn in buffer! %ld", stop_sqn);
+            return -2;
+        }
+        sqn = shm_conn_info->frames_buf[idx].seq_num;
+    }
+    return 0;
+}
+
+
 /**
  * get how many percent to push every 50ms
  * 
@@ -2478,6 +2504,7 @@ int write_buf_check_n_flush(int logical_channel) {
     int len;
     //struct timeval max_latency_drop = MAX_LATENCY_DROP;
     struct timeval max_latency_drop;
+    uint32_t incomplete_seq_buf[FRAME_BUF_SIZE];
     int rtou = get_rto_usec();
     max_latency_drop.tv_sec = rtou / 1000000;
     max_latency_drop.tv_usec = rtou % 1000000;
@@ -2600,6 +2627,15 @@ int write_buf_check_n_flush(int logical_channel) {
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, tv2ms(&tv_tmp), tv2ms(&since_write_tv), info.current_time, js_buf_fl);
                     loss_flag = 1;
+                    if(info.least_rx_seq[logical_channel] > 0 && info.least_rx_seq[logical_channel] != UINT32_MAX) {
+                        // now drop everything suspicious
+                        int last_idx = missing_resend_buffer(logical_channel, incomplete_seq_buf, &buf_len, info.least_rx_seq[logical_channel]) - 1;
+                        uint32_t last_loss_sqn = incomplete_seq_buf[last_idx];
+                        if(discard_packets(logical_channel, last_loss_sqn) < 0) {
+                            vlog(LOG_ERR, "ERROR merging loss");
+                            return 0;
+                        }
+                    }
 
                 } else if (info.ploss_event_flag && (shm_conn_info->frames_buf[fprev].seq_num < info.least_rx_seq[logical_channel])) {
                     update_prev_flushed(logical_channel, fprev);
@@ -2664,26 +2700,10 @@ int write_buf_check_n_flush(int logical_channel) {
                             info.flush_sequential, shm_conn_info->write_sequential, lag_pname, (r_amt - 1), shm_conn_info->tflush_counter, incomplete_seq_len,
                             shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq,
                             info.least_rx_seq[logical_channel], buf_len, shm_conn_info->write_buf[logical_channel].frames.length, size1, shm_conn_info->wb_free_frames.length, sizeF, shm_conn_info->wb_just_write_frames[logical_channel].length, sizeJW, tv2ms(&tv_tmp), tv2ms(&since_write_tv), info.current_time, js_buf_fl);
-                    uint32_t sqn = shm_conn_info->frames_buf[fprev].seq_num;
-                    int idx = fprev;
-                    int n_idx, cnt=0;
-                    while(sqn < shm_conn_info->seq_num_unrecoverable_loss) {
-                        // now jsut discard the packet
-                        cnt++;
-                        vlog(LOG_INFO, "Discarding seq_num %ld cnt %d", sqn, cnt);
-                        n_idx = shm_conn_info->frames_buf[idx].rel_next;
-                        if(frame_llist_pull(&shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf, &idx) < 0) {
-                            vlog(LOG_ERR, "WARNING! tried to pull from empty write_buf 2!");
-                            return 0;
-                        }
-                        frame_llist_append(&shm_conn_info->wb_free_frames, idx, shm_conn_info->frames_buf);
-                        idx = n_idx;
-                        if(idx == -1) {
-                            vlog(LOG_ERR, "ASSERT FAILED: did not find seq_num_unrecoverable_loss in buffer! %ld", shm_conn_info->seq_num_unrecoverable_loss);
-                            shm_conn_info->seq_num_unrecoverable_loss = 1;
-                            return 0;
-                        }
-                        sqn = shm_conn_info->frames_buf[idx].seq_num;
+                    int r = discard_packets(logical_channel, shm_conn_info->seq_num_unrecoverable_loss);
+                    if(r < 0) {
+                        if(r == -2) shm_conn_info->seq_num_unrecoverable_loss = 1;
+                        return 0;
                     }
                     loss_flag = 1;
                 } else {
