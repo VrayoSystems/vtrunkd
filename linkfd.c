@@ -132,7 +132,8 @@ struct my_ip {
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
-#define MAX_NETWORK_STALL { 0, 250000 } // 50ms maximum network stall
+#define MAX_NETWORK_STALL_MS 250 // 50ms maximum network stall
+#define MAX_NETWORK_STALL { 0, MAX_NETWORK_STALL_MS*1000 } // 50ms maximum network stall
 #define MAX_LATENCY_DROP_USEC 200000 // typ. is 204-250 upto 450 max RTO at CUBIC
 #define MAX_LATENCY_DROP_SHIFT 100 // ms. to add to forced_rtt - or use above
 //#define MAX_REORDER_LATENCY { 0, 50000 } // is rtt * 2 actually, default. ACTUALLY this should be in compliance with TCP RTO
@@ -230,6 +231,9 @@ int jsBL_cur;
 char *jsAC_buf; // for APCS_cnt compressor
 int jsAC_cur;
 #endif
+
+#define get_ds_ts(x) ((x.tv_sec - x.tv_sec / 10000000 * 10000000) * 100 + x.tv_usec / 10000)
+
 
 #ifdef CPULAGCHK
     #define CHKCPU(x) gettimeofday(&cpulag_tmp, NULL);timersub(&cpulag_tmp, &old_time, &tv_tmp_tmp_tmp);if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) vlog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld place %d", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec, x);
@@ -4564,7 +4568,7 @@ int lfd_linker(void)
         gettimeofday(&ping_req_tv[i], NULL);
     }
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
-    long int last_net_read = 0; // for timeout;
+    long int last_net_read_ds = 0; // for timeout;
 
     struct resent_chk sq_rq_buf[RESENT_MEM]; // for check_sent
     int sq_rq_pos = 0; // for check_sent
@@ -4921,7 +4925,7 @@ int lfd_linker(void)
     
     gettimeofday(&info.current_time, NULL);
     last_action = info.current_time.tv_sec;
-    last_net_read = info.current_time.tv_sec;
+    last_net_read_ds = get_ds_ts(info.current_time); 
     shm_conn_info->lock_time = info.current_time.tv_sec;
     net_model_start = info.current_time;
     
@@ -5105,6 +5109,9 @@ int lfd_linker(void)
         //    vlog(LOG_ERR, "ASSERT FAILED! all channels in HOLD! %d", shm_conn_info->hold_mask);
         //    sig_send1();
         //}
+        if(shm_conn_info->last_net_read_ds < last_net_read_ds) {
+            shm_conn_info->last_net_read_ds = last_net_read_ds;
+        }
         if(statb.tokens_max < shm_conn_info->tokens) {
             statb.tokens_max = shm_conn_info->tokens; // TODO: for debug only - remove!
         }
@@ -5697,6 +5704,10 @@ int lfd_linker(void)
         } else {
             // TODO: what if info.rsr is ~ 0 ??
             channel_dead = (percent_delta_equal(send_q_eff, info.rsr, DEAD_RSR_USG) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0)));
+            if((shm_conn_info->last_net_read_ds - last_net_read_ds) > (MAX_NETWORK_STALL_MS / 10 + info.rtt2 + info.srtt2var)) {
+                vlog(LOG_ERR, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
+                channel_dead = 1;
+            }
         }
 
         if(channel_dead == 1 && channel_dead != shm_conn_info->stats[info.process_num].channel_dead) {
@@ -6831,7 +6842,7 @@ int lfd_linker(void)
                 }
             }
 
-            if ((info.current_time.tv_sec - last_net_read) > lfd_host->MAX_IDLE_TIMEOUT) {
+            if ((get_ds_ts(info.current_time) - last_net_read_ds) > lfd_host->MAX_IDLE_TIMEOUT*100) {
                 vlog(LOG_INFO, "Session %s network timeout", lfd_host->host);
                 break;
             }
@@ -8235,7 +8246,7 @@ if(drop_packet_flag) {
                             vlog(LOG_ERR, "Could not send echo reply due to net not selecting");
                             continue;
                         }
-                        last_net_read = info.current_time.tv_sec;
+                        last_net_read_ds = get_ds_ts(info.current_time); 
                         if(debug_trace) {
                             vlog(LOG_INFO, "sending PONG...");
                         }
@@ -8264,7 +8275,7 @@ if(drop_packet_flag) {
                         }
                         
                         if(chan_num == 0) ping_rcvd = 1;
-                        last_net_read = info.current_time.tv_sec;
+                        last_net_read_ds = get_ds_ts(info.current_time); 
                         gettimeofday(&info.current_time, NULL);
 
                         if (chan_num == my_max_send_q_chan_num) {
@@ -8322,7 +8333,7 @@ if(drop_packet_flag) {
                     info.channel[chan_num].down_packets++; // accumulate number of packets
                     PCS++; // TODO: PCS is sent and then becomes ACS. it is calculated above. This is DUP for local use. Need to refine PCS/ACS calcs!
                     shm_conn_info->stats[info.process_num].pbl_lossed_cnt++;
-                    last_net_read = info.current_time.tv_sec;
+                    last_net_read_ds = get_ds_ts(info.current_time); 
                     statb.bytes_rcvd_norm+=len;
                     statb.bytes_rcvd_chan[chan_num] += len;
                     out = buf; // wtf?
