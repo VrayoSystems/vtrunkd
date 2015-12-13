@@ -1312,8 +1312,8 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
                     //        || ((shm_conn_info->stats[p].recv_mode == 0)
                     //        && timercmp(&info.current_time, &shm_conn_info->stats[p].agoff_immunity_tv, >=))
                     //  ) { 
-                        vlog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel dead %d, p %d - ertt %d rhd %d - ertt %d, blm %d mld %d",
-                                        shm_conn_info->stats[p].channel_dead, p, shm_conn_info->stats[p].exact_rtt, shm_conn_info->remote_head_pnum, shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt, buf_latency_ms, (MAX_LATENCY_DROP_USEC / 1000));
+                        // vlog(LOG_ERR, "get_write_buf_wait_data(), detected dead channel dead %d, p %d - ertt %d rhd %d - ertt %d, blm %d mld %d",
+                        //                 shm_conn_info->stats[p].channel_dead, p, shm_conn_info->stats[p].exact_rtt, shm_conn_info->remote_head_pnum, shm_conn_info->stats[shm_conn_info->remote_head_pnum].exact_rtt, buf_latency_ms, (MAX_LATENCY_DROP_USEC / 1000));
                         continue;
                     }
                     if (shm_conn_info->write_buf[i].last_received_seq[p] < info.least_rx_seq[i]) {
@@ -4588,7 +4588,6 @@ int lfd_linker(void)
         gettimeofday(&ping_req_tv[i], NULL);
     }
     long int last_action = 0; // for ping; TODO: too many vars... this even has clone ->
-    long int last_net_read_ds = 0; // for timeout;
 
     struct resent_chk sq_rq_buf[RESENT_MEM]; // for check_sent
     int sq_rq_pos = 0; // for check_sent
@@ -4945,7 +4944,7 @@ int lfd_linker(void)
     
     gettimeofday(&info.current_time, NULL);
     last_action = info.current_time.tv_sec;
-    last_net_read_ds = get_ds_ts(info.current_time); 
+    long int last_net_read_ds = get_ds_ts(info.current_time); 
     shm_conn_info->lock_time = info.current_time.tv_sec;
     net_model_start = info.current_time;
     
@@ -5725,7 +5724,7 @@ int lfd_linker(void)
             // TODO: what if info.rsr is ~ 0 ??
             channel_dead = (percent_delta_equal(send_q_eff, info.rsr, DEAD_RSR_USG) && ((shm_conn_info->stats[info.process_num].max_ACS2 == 0) || (shm_conn_info->stats[info.process_num].max_PCS2 == 0)));
             if((shm_conn_info->last_net_read_ds - last_net_read_ds) > (MAX_NETWORK_STALL_MS / 10 + info.rtt2 + info.srtt2var)) {
-                vlog(LOG_ERR, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
+                // vlog(LOG_ERR, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
                 channel_dead = 1;
             }
         }
@@ -6120,6 +6119,15 @@ int lfd_linker(void)
                 shm_conn_info->frtt_local_applied = (5 * shm_conn_info->frtt_local_applied + shm_conn_info->max_rtt_lag) / 6;
                 int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
                 info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC + full_rtt * 1000;
+            }
+            
+            
+            if(channel_dead && (shm_conn_info->last_net_read_ds - last_net_read_ds) > (MAX_NETWORK_STALL_MS / 10 + info.rtt2 + info.srtt2var)) {
+                vlog(LOG_ERR, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
+            }
+            if((shm_conn_info->last_net_read_ds - last_net_read_ds) > 100000) {
+                vlog(LOG_ERR, "ASSERT FAILED! fixing impossible last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
+                shm_conn_info->last_net_read_ds = last_net_read_ds;
             }
             
             struct timeval min_tv, max_pkt_lag, max_lag = {1, 800000}, since_write_tv;
