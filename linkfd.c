@@ -735,6 +735,11 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
             vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted 1 return %d", result);
             return result;
         }
+        if(result != wb[i].frames.length) {
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter %d - %d FIXED", result, wb[i].frames.length);
+            wb[i].frames.length = result;
+        }
+            
         size_total += size;
         result = frame_llist_getSize_asserted(framebuf_size, &shm_conn_info->wb_just_write_frames[i], flist, &size);
         if (result < 0) {
