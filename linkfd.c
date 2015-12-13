@@ -8021,7 +8021,7 @@ if(drop_packet_flag) {
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t)); 
                             uint32_t remote_seq = ntohl(tmp32_n);
-                            vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %ld > %ld ", remote_seq, shm_conn_info->latest_la_sqn);
+                            // vlog(LOG_ERR, "FRAME_CHANNEL_INFO testing lasqn %ld > %ld ", remote_seq, shm_conn_info->latest_la_sqn);
                             
                             if(remote_seq > shm_conn_info->latest_la_sqn) {
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
