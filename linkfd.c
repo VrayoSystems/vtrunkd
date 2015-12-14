@@ -7084,6 +7084,9 @@ int lfd_linker(void)
 #ifdef SYSLOG
             sem_wait(&(shm_conn_info->write_buf_sem));
             check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
+            if(shm_conn_info->write_buf[1].frames.length < 0) {
+                vlog(LOG_ERR, "ASSERT FAILED: write_buf length < 0: %d", shm_conn_info->write_buf[1].frames.length);
+            }
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
