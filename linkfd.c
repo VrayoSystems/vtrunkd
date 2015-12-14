@@ -736,8 +736,8 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
             return result;
         }
         if(result != wb[i].frames.length) {
-            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter %d - %d FIXED", result, wb[i].frames.length);
-            wb[i].frames.length = result;
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter %d - %d", result, wb[i].frames.length);
+            //wb[i].frames.length = result;
         }
             
         size_total += size;
@@ -5852,6 +5852,9 @@ int lfd_linker(void)
             //d_sql += d_pump_adj;
             d_sql += ((double)(shm_conn_info->buf_len_recv / 3) + d_msbl_overdrive) * (double)info.eff_len;
             temp_sql_copy2 = (int) d_sql; 
+            if(d_sql > RSR_TOP) {
+                d_sql = RSR_TOP;
+            }
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
             int32_t ms_passed = tv2ms(&t_tv);
@@ -7084,6 +7087,12 @@ int lfd_linker(void)
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
+            }
+            int wbs_val;
+            sem_getvalue(write_buf_sem, &wbs_val);
+            if ( wbs_val > 1 ) {
+                sem_wait(write_buf_sem);
+                vlog(LOG_INFO, "ASSERT FAILED! write_buf_sem value is %d! fixed.", wbs_val);
             }
 #endif
             
