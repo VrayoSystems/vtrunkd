@@ -736,7 +736,7 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
             return result;
         }
         if(result != wb[i].frames.length) {
-            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter %d - %d", result, wb[i].frames.length);
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter calculated: %d, wb.length: %d chan %d", result, wb[i].frames.length, i);
             //wb[i].frames.length = result;
         }
             
@@ -5424,7 +5424,7 @@ int lfd_linker(void)
             if(!mawmar_allowed()) ag_stat.CL = 1;
             if(( !shm_conn_info->dropping && !shm_conn_info->head_lossing ) && !is_happiness_reached()) ag_stat.DL = 1;
             print_ag_drop_reason();
-            if(info.head_channel && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
+            if(info.head_channel && (shm_conn_info->avg_len_out >= AVG_LEN_IN_ACK_THRESH) && !shm_conn_info->idle && !shm_conn_info->slow_start) {// TODO HERE: add RTT/BW decision here
                 ag_flag_local = AG_MODE;
             }
             if(ag_flag_local == AG_MODE) {
