@@ -128,7 +128,7 @@ struct my_ip {
 #define ACS_NOT_IDLE 50000 // ~50pkts/sec ~= 20ms rtt2 accuracy
 #define LOSS_SEND_Q_MAX 1000 // maximum send_q allowed is now 1000 (for head?)
 #define LOSS_SEND_Q_UNKNOWN -1 // unknown value
-#define LOSS_SEND_Q_BESTGUESS_3G 150 // 300 packets best-guess for 3G
+#define MIN_SEND_Q_BESTGUESS_3G 150 // packets best-guess for 3G
 // TODO: use mean send_q value for the following def
 #define SEND_Q_AG_ALLOWED_THRESH 25000 // depends on RSR_TOP and chan speed. TODO: refine, Q: understand if we're using more B/W than 1 chan has?
 //#define MAX_LATENCY_DROP { 0, 550000 }
@@ -2046,6 +2046,29 @@ int retransmit_send(char *out2) {
     }
         
     return 1;
+}
+
+/**
+ * calculate total send_q_eff_mean
+ * 
+ */
+ 
+int get_total_sqe_mean_pkt(int *aavg) {
+    int sqe_tot = 0;
+    int sqe_pkt;
+    *aavg = 1;
+    uint32_t chan_mask = shm_conn_info->channels_mask;
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        // waring: ag_mask depends only on ag_flag_local, not on agag value so it may not be correct
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask & (1 << i))) { // hope this works..
+            sqe_pkt = shm_conn_info->stats[i].sqe_mean / info.eff_len;
+            sqe_tot += sqe_pkt;
+            if(sqe_pkt > 0) {
+                *aavg += shm_conn_info->stats[i].ACK_speed_avg / sqe_pkt;
+            }
+        }
+    }
+    return sqe_tot;
 }
 
 /**
@@ -5114,6 +5137,7 @@ int lfd_linker(void)
     info.idle_enter = info.current_time;
 
     vlog_shm_set(1, &shm_conn_info->syslog.logSem, shm_conn_info->syslog.log, &shm_conn_info->syslog.counter, SHM_SYSLOG);
+    int max_send_q_available = MIN_SEND_Q_BESTGUESS_3G;
 
 /**
  *
@@ -5574,7 +5598,7 @@ int lfd_linker(void)
                     info.head_send_q_shift = 0; // this one is actually not required
                 }
             } else {
-                info.head_send_q_shift = LOSS_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
+                info.head_send_q_shift = MIN_SEND_Q_BESTGUESS_3G - shm_conn_info->stats[max_chan].sqe_mean / info.eff_len / MSBL_PUSHUP_K;
             }
             if(info.head_send_q_shift != info.head_send_q_shift_old && !shm_conn_info->idle) {
                 info.head_send_q_shift_old = info.head_send_q_shift;
@@ -5794,6 +5818,7 @@ int lfd_linker(void)
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
+            max_send_q_available = info.rsr;
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
         } else {
@@ -5854,6 +5879,22 @@ int lfd_linker(void)
             temp_sql_copy2 = (int) d_sql; 
             if(d_sql > RSR_TOP) {
                 d_sql = RSR_TOP;
+            }
+            
+            // now calculate max RSR limit in case of CWND deficiency
+            int sum_aer;
+            int total_sq = get_total_sqe_mean_pkt(&sum_aer);
+            int total_sq_avail = rsr_top > (MIN_SEND_Q_BESTGUESS_3G * info.eff_len) ? (total_sq - MIN_SEND_Q_BESTGUESS_3G) : (total_sq - rsr_top / info.eff_len);
+            int sqe_pkt = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len;
+            if(sqe_pkt > 0) {
+                int aer = shm_conn_info->stats[info.process_num].ACK_speed_avg / sqe_pkt;
+                if(aer > 0) {
+                    max_send_q_available = (total_sq_avail * aer) / sum_aer * info.eff_len;
+                } else {
+                    max_send_q_available = SEND_Q_AG_ALLOWED_THRESH; // what to do if our ACS == 0? we're R_MODE probably..
+                }
+            } else {
+                max_send_q_available = MIN_SEND_Q_BESTGUESS_3G; // in case we have zero sqe we just dont care
             }
             
             timersub(&(info.current_time), &info.cycle_last, &t_tv);
@@ -5985,7 +6026,7 @@ int lfd_linker(void)
                 }
             } else {
                 drop_packet_flag = 0;
-                if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply)) {
+                if ( (send_q_eff > info.rsr) || (send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > max_send_q_available)) {
                     //vlog(LOG_INFO, "hold_mode!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d", send_q_eff, rsr, send_q_limit_cubic_apply);
                     hold_mode = 1;
                 } else {
@@ -6398,6 +6439,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "tbf", "%d", shm_conn_info->tokenbuf);
             add_json(js_buf, &js_cur, "stt", "%d", shm_conn_info->write_buf[1].frames.stub_total);
             add_json(js_buf, &js_cur, "tks", "%d", statb.tokens_max);
+            add_json(js_buf, &js_cur, "msqa", "%d", max_send_q_available);
             statb.tokens_max = 0;
             
 #ifndef CLIENTONLY
