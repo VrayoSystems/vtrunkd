@@ -4436,8 +4436,8 @@ int get_cwnd() {
         }
     }
     // TODO: possible problem here: the channel may be in AG mode but head will resend all its packets anyway if it is not in AG itself
-    if(shm_conn_info->lbuf_len_recv > 0) {
-        full_cwnd = min_gsend_q + shm_conn_info->lbuf_len_recv;
+    if(shm_conn_info->msbl_recv > 0) {
+        full_cwnd = min_gsend_q + shm_conn_info->msbl_recv;
     } else {
         full_cwnd = max_gsend_q;
     }
@@ -4467,7 +4467,7 @@ int is_happiness_reached() {
 
 int mawmar_allowed() {
     if(info.head_channel) return 1;
-    int BL = (int)shm_conn_info->lbuf_len_recv;
+    int BL = (int)shm_conn_info->msbl_recv;
     /*
     int sql;
     // count all RSR/cubics?
@@ -5883,7 +5883,7 @@ int lfd_linker(void)
             
             // now calculate max RSR limit in case of CWND deficiency
             int sum_aer;
-            int total_sq = get_total_sqe_mean_pkt(&sum_aer);
+            int total_sq = get_total_sqe_mean_pkt(&sum_aer) + shm_conn_info->msbl_recv - MSBL_RESERV;
             int total_sq_avail = rsr_top > (MIN_SEND_Q_BESTGUESS_3G * info.eff_len) ? (total_sq - MIN_SEND_Q_BESTGUESS_3G) : (total_sq - rsr_top / info.eff_len);
             int sqe_pkt = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len;
             if(sqe_pkt > 0) {
@@ -6005,7 +6005,7 @@ int lfd_linker(void)
                 //if (send_q_eff > info.rsr) {
                 if (send_q_eff > send_q_limit_cubic_apply) {
                         // #876
-                        //if(is_a_hold() && (shm_conn_info->lbuf_len_recv > (MSBL_LIMIT - MSBL_RESERV))) drop_packet_flag = 1;
+                        //if(is_a_hold() && (shm_conn_info->msbl_recv > (MSBL_LIMIT - MSBL_RESERV))) drop_packet_flag = 1;
                         //else {
                             hold_mode = 1;
                         //}
@@ -6468,7 +6468,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "cwnd", "%d", shm_conn_info->full_cwnd);
             add_json(js_buf, &js_cur, "cwnd2", "%d",  get_cwnd2());
             add_json(js_buf, &js_cur, "nMAR", "%d", new_mar);
-            add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->lbuf_len_recv); 
+            add_json(js_buf, &js_cur, "rbl", "%d", shm_conn_info->msbl_recv); 
             add_json(js_buf, &js_cur, "tpps", "%d", shm_conn_info->tpps);
             add_json(js_buf, &js_cur, "tx_a", "%d", statb.byte_sent_ag_full/1024); // byte transmit in ag mode
             add_json(js_buf, &js_cur, "tx_r", "%d", statb.byte_sent_rmit_full/1024); // byte transmit in retransmit mode
@@ -8070,7 +8070,7 @@ if(drop_packet_flag) {
                             int buf_len_recv = (int)ntohs(tmp32_n);
                             
                             memcpy(&tmp16_n, buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); 
-                            shm_conn_info->lbuf_len_recv = ntohs(tmp16_n);
+                            shm_conn_info->msbl_recv = ntohs(tmp16_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t)); 
                             shm_conn_info->stats[info.process_num].la_sqn = ntohl(tmp32_n);
                             memcpy(&tmp32_n, buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), sizeof(uint32_t)); 

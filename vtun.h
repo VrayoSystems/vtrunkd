@@ -775,7 +775,7 @@ struct conn_info {
     int max_rtt_pnum;
     int max_stuck_buf_len;
     int max_stuck_rtt;
-    int lbuf_len_recv; // received lbuf_len
+    int msbl_recv;
     int total_max_rtt;
     int total_max_rtt_var;
     int total_min_rtt;
