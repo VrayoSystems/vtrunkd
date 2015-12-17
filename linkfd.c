@@ -735,8 +735,8 @@ int check_consistency_free(int framebuf_size, int llist_amt, struct _write_buf w
             vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted 1 return %d", result);
             return result;
         }
-        if(result != wb[i].frames.length) {
-            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter calculated: %d, wb.length: %d chan %d", result, wb[i].frames.length, i);
+        if(size != wb[i].frames.length) {
+            vlog(LOG_ERR, "ASSERT FAILED - frame_llist_getSize_asserted real wb size does not comply with counter calculated: %d, wb.length: %d chan %d", size, wb[i].frames.length, i);
             //wb[i].frames.length = result;
         }
             
