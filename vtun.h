@@ -602,7 +602,6 @@ struct phisical_status { // A.K.A. "info"
     struct timeval last_sent_FLI;
     int last_sent_FLI_idx;
     int last_sent_FLLI_idx;
-    int tpps_old;
     int32_t encap_streams_bitcnt;
     int encap_streams;
     int W_cubic_copy;
@@ -785,6 +784,7 @@ struct conn_info {
     struct timeval msrt_tick;
     int tokens_in_out;
     int ssd_gsq_old;
+    int tpps_old; /** holding old global seq_coutner[1] value */
     int ssd_pkts_sent;
     int slow_start;
     int slow_start_recv;

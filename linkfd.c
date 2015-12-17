@@ -6258,15 +6258,7 @@ int lfd_linker(void)
                 shm_conn_info->APCS_cnt = 0;
                 shm_conn_info->APCS_tick_tv = info.current_time;
             }
-            
-            timersub(&info.current_time, &shm_conn_info->tpps_tick_tv, &tv_tmp);
-            if ((timercmp(&tv_tmp, &((struct timeval) {0, 800000}), >=) && ((shm_conn_info->seq_counter[1] - info.tpps_old) > 150))
-                    || (timercmp(&tv_tmp, &((struct timeval) {5, 0}), >=))) {
-                tpps = (shm_conn_info->seq_counter[1] - info.tpps_old) * 1000 / tv2ms(&tv_tmp);
-                shm_conn_info->tpps = tpps;
-                info.tpps_old = shm_conn_info->seq_counter[1];
-                shm_conn_info->tpps_tick_tv = info.current_time;
-            }
+           
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp; // absolutely unnessessary (done at loop )
             //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl
             shm_conn_info->stats[info.process_num].packet_speed_ag = statb.packet_sent_ag / json_ms;
@@ -6321,6 +6313,16 @@ int lfd_linker(void)
             shm_conn_info->stats[info.process_num].ACK_speed= max_ACS2; // !
             shm_conn_info->stats[info.process_num].ACK_speed_avg = 6 * shm_conn_info->stats[info.process_num].ACK_speed_avg / 7 + max_ACS2 / 7;
             miss_packets_max = shm_conn_info->miss_packets_max;
+             
+            timersub(&info.current_time, &shm_conn_info->tpps_tick_tv, &tv_tmp);
+            if ((timercmp(&tv_tmp, &((struct timeval) {0, 400000}), >=) && ((shm_conn_info->seq_counter[1] - shm_conn_info->tpps_old) > 150))
+                    || (timercmp(&tv_tmp, &((struct timeval) {5, 0}), >=))) {
+                tpps = (shm_conn_info->seq_counter[1] - shm_conn_info->tpps_old) * 1000 / tv2ms(&tv_tmp);
+                shm_conn_info->tpps = tpps;
+                shm_conn_info->tpps_old = shm_conn_info->seq_counter[1];
+                shm_conn_info->tpps_tick_tv = info.current_time;
+            }
+            
             sem_post(&(shm_conn_info->stats_sem));
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
