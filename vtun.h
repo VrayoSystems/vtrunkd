@@ -796,6 +796,7 @@ struct conn_info {
     struct timeval slow_start_tv;
     struct streams_seq w_streams[W_STREAMS_AMT];
     struct timeval cwr_tv; // for CWND Reserve 1s
+    struct timeval max_network_stall; /** drop packets if this value is exceeded */
     int head_send_q_shift_recv; 
     struct timeval head_change_htime_tv;
     int head_change_htime;

@@ -633,7 +633,7 @@ void profexit(int sig)
                         cond_flag \
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) \
                       || (    timercmp(&packet_wait_tv, &max_latency_drop, >=) \
-                           && timercmp(&since_write_tv, &((struct timeval) MAX_NETWORK_STALL), >=) ) \
+                           && timercmp(&since_write_tv, &shm_conn_info->max_network_stall, >=) ) \
                       || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num < shm_conn_info->seq_num_unrecoverable_loss) \
                 ) \
            )
@@ -2296,7 +2296,9 @@ int select_devread_send(char *buf, char *out2) {
         if (shm_conn_info->streams[hash % 31] < 255)
             shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
         sem_wait(&(shm_conn_info->common_sem));
-        shm_conn_info->t_model_rtt100 = ((TMRTTA - 1) * shm_conn_info->t_model_rtt100 + info.exact_rtt * 100) / TMRTTA; // RFC6298 compliant
+        if(shm_conn_info->ag_mask_recv & (1 << info.process_num)) {
+            shm_conn_info->t_model_rtt100 = ((TMRTTA - 1) * shm_conn_info->t_model_rtt100 + info.exact_rtt * 100) / TMRTTA; // RFC6298 compliant
+        }
         (shm_conn_info->seq_counter[chan_num])++;
         tmp_seq_counter = shm_conn_info->seq_counter[chan_num];
 
@@ -6399,7 +6401,7 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "mld", "%d", tv2ms(&info.max_latency_drop));
             //add_json(js_buf, &js_cur, "rtt2_lsn[1]", "%u", (unsigned int)info.rtt2_lsn[1]);
             add_json(js_buf, &js_cur, "ertt", "%d", shm_conn_info->stats[info.process_num].exact_rtt);
-            //add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100); // TCP modle RTT?
+            add_json(js_buf, &js_cur, "tmrtt", "%d", shm_conn_info->t_model_rtt100/100); // TCP modle RTT?
             add_json(js_buf, &js_cur, "buf_len_remote", "%d", (int)buf_len_real);
             add_json(js_buf, &js_cur, "drp", "%d", drop_counter);
             drop_counter=0;
@@ -7124,6 +7126,16 @@ int lfd_linker(void)
                 vlog(LOG_ERR, "ASSERT All physical channels dead!!!");
                 alive_physical_channels = 1;
             }
+            if(shm_conn_info->t_model_rtt100 > MAX_NETWORK_STALL_MS * 100) {
+                ms2tv(&tv_tmp, shm_conn_info->t_model_rtt100 / 100);
+                sem_wait(&(shm_conn_info->write_buf_sem));
+                shm_conn_info->max_network_stall = tv_tmp;
+                sem_post(&(shm_conn_info->write_buf_sem));
+            } else {
+                sem_wait(&(shm_conn_info->write_buf_sem));
+                shm_conn_info->max_network_stall = (struct timeval) MAX_NETWORK_STALL;
+                sem_post(&(shm_conn_info->write_buf_sem));
+            }
             
 #ifdef SYSLOG
             sem_wait(&(shm_conn_info->write_buf_sem));
@@ -7670,6 +7682,7 @@ if(drop_packet_flag) {
                                     frame_llist_init(&shm_conn_info->wb_just_write_frames[i]);
                                     frame_llist_fill(&(shm_conn_info->wb_free_frames), shm_conn_info->frames_buf, FRAME_BUF_SIZE);
                                 }
+                                shm_conn_info->max_network_stall = (struct timeval) MAX_NETWORK_STALL;
                                 sem_post(&(shm_conn_info->write_buf_sem));
                                 sem_wait(&(shm_conn_info->resend_buf_sem));
                                 for (i = 0; i < RESEND_BUF_SIZE; i++) {
