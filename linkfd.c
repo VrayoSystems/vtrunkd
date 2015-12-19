@@ -6793,8 +6793,8 @@ int lfd_linker(void)
 
 //                    vlog(LOG_ERR,"FRAME_CHANNEL_INFO send buf_len %d counter %d current buf_len %d",buf_len_real, shm_conn_info->buf_len_send_counter,shm_conn_info->write_buf[1].frames.length);
                     memcpy(buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len counter
-                    tmp32_n = htons(buf_len_real);
                     buf_len_real = shm_conn_info->write_buf[1].frames.length;
+                    tmp32_n = htons(buf_len_real);
                     memcpy(buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), &tmp32_n, sizeof(uint16_t)); //buf_len
                     //tmp16_n = htons(get_lbuf_len());
                     tmp16_n = htons(shm_conn_info->max_stuck_buf_len);
