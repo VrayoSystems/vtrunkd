@@ -8081,8 +8081,8 @@ if(drop_packet_flag) {
                             memcpy(&tmp16_n, buf + 5 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); // sqe_mean
                             shm_conn_info->stats[info.process_num].remote_sqe_mean_pkt = ntohs(tmp16_n);
                             
-                            memcpy(&tmp32_n, buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len
-                            int buf_len_recv = (int)ntohs(tmp32_n);
+                            memcpy(&tmp16_n, buf + 6 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); //buf_len
+                            int buf_len_recv = (int)ntohs(tmp16_n);
                             
                             memcpy(&tmp16_n, buf + 7 * sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint16_t)); 
                             shm_conn_info->msbl_recv = ntohs(tmp16_n);
