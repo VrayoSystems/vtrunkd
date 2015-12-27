@@ -82,8 +82,6 @@
 #define P_WEIGHT_SAW_STEP_DN_DIV 5 // (1/s)
 // sets control delay (and granularity)
 #define P_WEIGHT_MSEC_DELAY 2000 // micro(!!)seconds
-// can not add weight penalty (increase weight units) faster than this
-#define P_PEN_USEC_IMMUNE 500000 // microseconds
 
 // this actually affects how much resends will occur, milliseconds
 #define P_MAX_LATENCY 2000 // milliseconds
@@ -223,7 +221,7 @@ struct vtun_host {
    int WEIGHT_SAW_STEP_UP_MIN_STEP;
    int WEIGHT_SAW_STEP_DN_DIV;
    int WEIGHT_MSEC_DELAY;
-   int PEN_USEC_IMMUNE;
+   int MAX_WINDOW;
    int MAX_LATENCY;
    int MAX_LATENCY_DROP;
    int MAX_ALLOWED_BUF_LEN;
@@ -664,6 +662,7 @@ struct conn_info {
     //sem_t frtt; // for frtt calculations and tokens
     sem_t tun_device_sem;
     int packet_debug_enabled;
+    int is_single_channel;
     struct frame_seq frames_buf[FRAME_BUF_SIZE];			// memory for write_buf
     struct frame_seq resend_frames_buf[RESEND_BUF_SIZE];	// memory for resend_buf
     int resend_buf_idx;

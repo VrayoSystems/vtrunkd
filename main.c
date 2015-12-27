@@ -113,7 +113,7 @@ int main(int argc, char *argv[], char *env[])
     default_host.WEIGHT_SAW_STEP_UP_MIN_STEP = P_WEIGHT_SAW_STEP_UP_MIN_STEP;
     default_host.WEIGHT_SAW_STEP_DN_DIV = P_WEIGHT_SAW_STEP_DN_DIV;
     default_host.WEIGHT_MSEC_DELAY = P_WEIGHT_MSEC_DELAY;
-    default_host.PEN_USEC_IMMUNE = P_PEN_USEC_IMMUNE;
+    default_host.MAX_WINDOW = RSR_TOP;
     default_host.MAX_LATENCY = P_MAX_LATENCY;
     default_host.MAX_LATENCY_DROP = P_MAX_LATENCY_DROP;
     default_host.MAX_ALLOWED_BUF_LEN = P_MAX_ALLOWED_BUF_LEN;

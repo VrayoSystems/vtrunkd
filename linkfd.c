@@ -140,7 +140,6 @@ struct my_ip {
 #define MAX_REORDER_LATENCY_MAX 499999 // usec
 #define MAX_REORDER_LATENCY_MIN 200 // usec
 #define MAX_REORDER_PERPATH 8// was 4
-#define RSR_TOP 2990000 // now infinity...
 // TODO HERE: TCP Model requried ---vvv
 #define PLP_UNRECOVERABLE_CUTOFF 10000 // in theory about 50 mbit/s at 20ms  // was 1000 - 1000 is okay for like rtt 20ms but not for 100ms
 #define PSL_RECOVERABLE 2 // we can recover this amount of loss
@@ -629,13 +628,14 @@ void profexit(int sig)
         forced_rtt_reached=check_tokens(logical_channel); \
         cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
         buf_len = shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_tail].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq; \
-        if (forced_rtt_reached && ( \
+        if ( shm_conn_info->is_single_channel \
+             || (forced_rtt_reached && ( \
                         cond_flag \
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) \
                       || (    timercmp(&packet_wait_tv, &max_latency_drop, >=) \
                            && timercmp(&since_write_tv, &shm_conn_info->max_network_stall, >=) ) \
                       || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num < shm_conn_info->seq_num_unrecoverable_loss) \
-                ) \
+                )) \
            )
 
 int update_prev_flushed(int logical_channel, int fprev) {
@@ -1814,6 +1814,13 @@ int check_fast_resend() {
         return 0; // buffer is blank
     }
     return 1;
+}
+
+int is_single() {
+    if(NumberOfSetBits(shm_conn_info->channels_mask) == 1) {
+        return 1;
+    }
+    return 0;
 }
 
 int send_packet(int chan_num, char *buf, int len) {
@@ -5635,7 +5642,7 @@ int lfd_linker(void)
                 if(!((shm_conn_info->head_send_q_shift_recv == 10000) && (shm_conn_info->slow_start_recv))) {
                     shm_conn_info->max_stuck_buf_len -= msbl_K;
                 }
-                if(shm_conn_info->max_stuck_buf_len < 0) { 
+                if(shm_conn_info->max_stuck_buf_len < 0 || shm_conn_info->is_single_channel) { 
                     shm_conn_info->max_stuck_buf_len = 0;
                 }
                 if(shm_conn_info->max_stuck_buf_len > MSBL_LIMIT) {
@@ -5820,6 +5827,9 @@ int lfd_linker(void)
         if (info.head_channel) {
             //info.rsr = RSR_TOP;
             info.rsr = info.send_q_limit_cubic;
+            if(shm_conn_info->is_single_channel) {
+                info.send_q_limit_cubic = lfd_host->MAX_WINDOW;
+            }
             max_send_q_available = info.rsr;
             temp_sql_copy = info.send_q_limit; 
             temp_acs_copy = shm_conn_info->stats[info.process_num].ACK_speed ; 
@@ -6040,14 +6050,20 @@ int lfd_linker(void)
             drop_packet_flag = 0;
             if(info.head_channel) {
                 //if(send_q_eff > info.rsr) { // no cubic control on max speed chan!
-                if (send_q_eff > send_q_limit_cubic_apply/2) {
-                        // #876
-                    //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
-                        //drop_packet_flag = 1; // no drop in retransmit? TODO HERE
-                        set_W_to(send_q_eff*2, 1, &loss_time);
-                        set_Wu_to(send_q_eff*2);
+                if(shm_conn_info->is_single_channel) {
+                    if (send_q_eff > send_q_limit_cubic_apply) {
+                        hold_mode = 1;
+                    }
                 } else {
-                    //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    if (send_q_eff > send_q_limit_cubic_apply/2) {
+                            // #876
+                        //vlog(LOG_INFO, "R_MODE DROP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                            //drop_packet_flag = 1; // no drop in retransmit? TODO HERE
+                            set_W_to(send_q_eff*2, 1, &loss_time);
+                            set_Wu_to(send_q_eff*2);
+                    } else {
+                        //vlog(LOG_INFO, "R_MODE NOOP HD!!! send_q_eff=%d, rsr=%d, send_q_limit_cubic_apply=%d ( %d )", send_q_eff, info.rsr, send_q_limit_cubic_apply, info.send_q_limit_cubic);
+                    }
                 }
             } else {
                 if((send_q_eff > send_q_limit_cubic_apply) || (send_q_eff > info.rsr)) {
@@ -6324,6 +6340,7 @@ int lfd_linker(void)
                 shm_conn_info->tpps_old = shm_conn_info->seq_counter[1];
                 shm_conn_info->tpps_tick_tv = info.current_time;
             }
+            shm_conn_info->is_single_channel = is_single();
             
             sem_post(&(shm_conn_info->stats_sem));
             statb.packet_sent_ag = 0;
@@ -7967,7 +7984,7 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 sem_post(&(shm_conn_info->stats_sem));
-                                if( psl <= UNRECOVERABLE_LOSS && who_lost > -1) {
+                                if( psl <= UNRECOVERABLE_LOSS && who_lost > -1 && !shm_conn_info->is_single_channel) {
                                     if(info.min_rtt_chan == info.process_num) {
                                         // now do retransmit
                                         int mypid;

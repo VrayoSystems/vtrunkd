@@ -18,4 +18,5 @@
 #define UNRECOVERABLE_LOSS 250 /** amount of packets that we won't even try to retransmit */
 #define WBUF_HASH_SIZE 256
 #define MAX_WBUF_HASH_DEPTH 6
+#define RSR_TOP 2990000 // now infinity...
 #endif
