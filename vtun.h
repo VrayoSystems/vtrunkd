@@ -287,9 +287,7 @@ struct vtun_host {
 #define TERM_NONFATAL 1000
 #define TERM_FATAL 1001
 
-#define C_LOW 0.1
-#define C_MED 0.2
-#define C_HI 0.5
+#define CUBIC_C 0.2
 
 #define AG_MODE 1
 #define R_MODE 0

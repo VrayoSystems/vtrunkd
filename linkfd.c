@@ -5026,17 +5026,8 @@ int lfd_linker(void)
     last_channels_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
     drop_packet_flag = 0;
-    /*
-    if (info.process_num == 0) {
-        info.head_channel = 1;
-        info.C = C_HI;
-    } else {
-        info.head_channel = 0;
-        info.C = C_LOW/2;
-    }*/
-    //info.C = C_LOW;
-    info.Cu = C_LOW/8.0; // x lower
-    info.C = C_LOW/3.0; // x lower
+    info.Cu = CUBIC_C/8.0; // x lower
+    info.C = CUBIC_C/3.0; // x lower
     //info.C = 0.9; // VERY FAST!
     info.max_send_q = 0;
     info.max_send_q_u = 0;
