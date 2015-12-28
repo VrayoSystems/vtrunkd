@@ -125,11 +125,11 @@ void connection(int sock)
         sigaction(SIGHUP, &sa, NULL);
 
         sprintf(process_string, "vtrunkd %s", host->host);
-        vlog(LOG_ERR, "Change title with: %s", process_string);
+        vlog(LOG_INFO, "Change title with: %s", process_string);
         vlog_close();
 
         vlog_open(host->host, LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
-        vlog(LOG_INFO, "Session %s[%s:%d] opened (build %s)", host->host, ip, ntohs(cl_addr.sin_port), BUILD_DATE);
+        vlog(LOG_ERR, "Session %s[%s:%d] opened (build %s)", host->host, ip, ntohs(cl_addr.sin_port), BUILD_DATE);
 
         host->rmt_fd = sock;
 

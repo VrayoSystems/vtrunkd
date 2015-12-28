@@ -1037,7 +1037,7 @@ int check_delivery_time_path_unsynced(int pnum, int mld_divider) {
     }
     // TODO: re-think this!
     if( ( (info.rsr < info.send_q_limit_threshold) || (info.send_q_limit_cubic < info.send_q_limit_threshold)) && (shm_conn_info->max_chan != pnum)) {
-        vlog(LOG_ERR, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
+        vlog(LOG_INFO, "WARNING check_delivery_time RSR %d < THR || CUBIC %d < THR=%d", info.rsr, (int32_t)info.send_q_limit_cubic, info.send_q_limit_threshold);
         return 0;
     }
     if( ((shm_conn_info->stats[pnum].exact_rtt + shm_conn_info->stats[pnum].rttvar) - shm_conn_info->stats[shm_conn_info->max_chan].exact_rtt) > ((int32_t)(tv2ms(&max_latency_drop)/mld_divider + shm_conn_info->forced_rtt)) ) {
@@ -1271,7 +1271,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
     int logical_channel = 1; // warning! fixed stream/channel here for IF_WRITE_CONDITION
     for (int i = 1; i < info.channel_amount; i++) { // chan 0 is service only
     #ifdef FRTTDBG
-                vlog(LOG_ERR, "get_write_buf_wait_data(), for chan: %d", i);
+                vlog(LOG_INFO, "get_write_buf_wait_data(), for chan: %d", i);
     #endif
         info.least_rx_seq[i] = UINT32_MAX;
         timersub(   
@@ -1944,15 +1944,15 @@ int retransmit_send(char *out2) {
             if (len == -1) {
                 if (check_delivery_time(1)) { // TODO: head channel will always pass this test
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vlog(LOG_ERR, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
+                    vlog(LOG_INFO, "WARNING no packets found in RB on head_channel and we can deliver new in time; sending new");
                     statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
                 len = get_last_packet(i, &last_sent_packet_num[i].seq_num, &out2, &mypid);
-                vlog(LOG_ERR, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
+                vlog(LOG_INFO, "WARNING all RB packets expired on head_channel!!! & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vlog(LOG_ERR, "WARNING no packets found in RB; HEAD sending new");
+                    vlog(LOG_INFO, "WARNING no packets found in RB; HEAD sending new");
                     statb.skip_new_d++;
                     continue;
                 }
@@ -1967,7 +1967,7 @@ int retransmit_send(char *out2) {
                 if (check_delivery_time(2)  && !shm_conn_info->slow_start) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
                     // TODO: disable AG in case of this event!
-                    vlog(LOG_ERR, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
+                    vlog(LOG_INFO, "WARNING all packets in RB are sent AND we can deliver new in time; sending new");
                     statb.skip_new_d++;
                     continue; // ok to send new packet
                 } 
@@ -1977,7 +1977,7 @@ int retransmit_send(char *out2) {
                 //vlog(LOG_ERR, "WARNING all RB packets expired & can not deliver new packet in time; getting newest packet from RB... seq_num %"PRIu32" top %d", last_sent_packet_num[i].seq_num, top_seq_num);
                 if(len == -1) {
                     sem_post(&(shm_conn_info->resend_buf_sem));
-                    vlog(LOG_ERR, "WARNING no packets found in RB; hd==0 sending new!!!");
+                    vlog(LOG_INFO, "WARNING no packets found in RB; hd==0 sending new!!!");
                     statb.skip_new_d++;
                     continue;
                 }
@@ -1986,7 +1986,7 @@ int retransmit_send(char *out2) {
         }
         if(last_sent_packet_num[i].seq_num != seq_num_tmp) {
             if(info.head_channel == 1) {
-                vlog(LOG_ERR, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
+                vlog(LOG_INFO, "WARNING retransmit_send on head channel skippig seq's from %"PRIu32" to %"PRIu32" chan %d len %d", seq_num_tmp, last_sent_packet_num[i].seq_num, i, len);
             }
             statb.skip_r++;
         }
@@ -2992,7 +2992,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
             int len_ret = dev_write(info.tun_device, out, len);
             //gettimeofday(&work_loop2, NULL );
             //timersub(&work_loop2, &work_loop1, &tmp_tv);
-            vlog(LOG_ERR, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
+            vlog(LOG_INFO, "latecomer seq_num %u lws %u time write %"PRIu64" ts %ld.%06ld", seq_num, shm_conn_info->write_buf[conn_num].last_written_seq, tv2ms(&tmp_tv), info.current_time.tv_sec, info.current_time.tv_usec);
             if (len_ret < 0) {
                 vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), conn_num);
                 if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
@@ -3119,11 +3119,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     int tokens_in_out = buf_len_real - shm_conn_info->max_stuck_buf_len;
     if(tokens_in_out > 0) {
         #ifdef FRTTDBG
-        vlog(LOG_ERR, "adding token+1");
+        vlog(LOG_INFO, "adding token+1");
         #endif
         shm_conn_info->tokens++;
         if( ((shm_conn_info->head_send_q_shift_recv == 10000) || (shm_conn_info->slow_start_recv)) && ((seq_num % SLOW_START_INCINT) == 0)) {
-            vlog(LOG_ERR, "FAST PUSHING MSBL UP ???????");
+            vlog(LOG_INFO, "FAST PUSHING MSBL UP ???????");
            shm_conn_info->max_stuck_buf_len += 1;
         }
         //if(shm_conn_info->max_stuck_buf_len == 950) {
@@ -3955,12 +3955,12 @@ int lossed_latency_drop(unsigned int *last_received_seq) {
     if(!lossed_count()) {
         vlog(LOG_ERR, "ASSERT FAILED: lossed_latency_drop called with no loss!");
     }
-    vlog(LOG_ERR, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+    vlog(LOG_INFO, "Registering loss +%d by LATENCY lsn: %d; last lsn: %d, sqn: %d, last ok lsn: %d", lossed_count(), info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, info.lossed_loop_data[info.lossed_last_received].seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
     //lossed_print_debug();
     int loss = lossed_count();
     msbl_push_up_loss_unsync();
     if(loss > UNRECOVERABLE_LOSS) {
-        vlog(LOG_ERR, "Detected unrecoverable loss of %d packets", loss);
+        vlog(LOG_INFO, "Detected unrecoverable loss of %d packets", loss);
         shm_conn_info->seq_num_unrecoverable_loss = shm_conn_info->write_buf[1].last_received_seq[info.process_num];
     }
     info.lossed_complete_received = info.lossed_last_received;
@@ -4023,7 +4023,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reorder buffer overflow LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
-        vlog(LOG_ERR, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
+        vlog(LOG_INFO, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
         shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         msbl_push_up_loss_unsync();
         info.lossed_complete_received = 0;
@@ -4039,7 +4039,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         //lossed_print_debug();
         vlog(LOG_ERR, "Warning! Reordering (or loss) is larger than LOSSED_BACKLOG_SIZE=%d; lsn: %d; last lsn: %d, sqn: %d", LOSSED_BACKLOG_SIZE, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
         need_send_loss_FCI_flag = LOSSED_BACKLOG_SIZE;
-        vlog(LOG_ERR, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
+        vlog(LOG_INFO, "Detected unrecoverable loss of at least %d packets", LOSSED_BACKLOG_SIZE);
         shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         msbl_push_up_loss_unsync();
         info.lossed_complete_received = new_idx;
@@ -4092,9 +4092,9 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
         info.lossed_loop_data[new_idx].seq_num = seq_num;
         info.lossed_last_received = new_idx;
         int loss_calc = lossed_count();
-        vlog(LOG_ERR, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
+        vlog(LOG_INFO, "Detected loss +%d by REORDER lsn: %d; last lsn: %d, sqn: %d, lsq before loss %d", loss_calc, local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num, info.lossed_loop_data[info.lossed_complete_received].local_seq_num);
         if(loss_calc > UNRECOVERABLE_LOSS) {
-            vlog(LOG_ERR, "Detected unrecoverable loss of %d packets", loss_calc);
+            vlog(LOG_INFO, "Detected unrecoverable loss of %d packets", loss_calc);
             shm_conn_info->seq_num_unrecoverable_loss = seq_num;
         }
         info.lossed_complete_received = new_idx;
@@ -4205,7 +4205,7 @@ int get_rttlag(uint32_t ag_mask) {
         if(chamt > 1) {
             // now check that max_rtt_lag is adequate
             if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vlog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                vlog(LOG_INFO, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
                 max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
             }
             return max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
@@ -4266,7 +4266,7 @@ int set_rttlag() { // TODO: rewrite using get_rttlag
         if(chamt > 1) {
             // now check that max_rtt_lag is adequate
             if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vlog(LOG_ERR, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+                vlog(LOG_INFO, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
                 max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
             }
             shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
@@ -4910,7 +4910,7 @@ int lfd_linker(void)
  		shm_conn_info->stats[info.process_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = shm_conn_info->stats[info.process_num].pid_remote;
  		sem_post(&(shm_conn_info->stats_sem));
- 		vlog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
+ 		vlog(LOG_INFO,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 
  		len = read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
         vlog(LOG_INFO, "remote ports len %d", len);
@@ -5873,10 +5873,10 @@ int lfd_linker(void)
             }
             
             if(d_rsr < 0) {
-                vlog(LOG_ERR, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
+                vlog(LOG_INFO, "ASSERT FAILED! d_rsr < 0: %f, d_ACS_h %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d", 
                         d_rsr, d_ACS_h, d_ACS, d_rsr_top, d_rtt_h, d_rtt_h_var, d_rtt, d_rtt_var, d_frtt, d_sql, d_rtt_diff, 0/*d_mld_ms*/, 0/*d_pump_adj*/, d_rtt_shift, info.rsr);
             } else if (d_rsr > RSR_TOP && (d_ACS_h > 3000.0 && d_ACS > 3000.0)) {
-                vlog(LOG_ERR, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
+                vlog(LOG_INFO, "WARNING! d_rsr > RSR_TOP: %f, d_ACS_h %f, d_ACS %f, d_rsr_top %f, d_rtt_h %f, d_rtt_h_var %f, d_rtt %f, d_rtt_var %f, d_frtt %f, d_sql %f, d_rtt_diff %f, d_mld_ms %f, d_pump_adj %f, d_rtt_shift %f, info.rsr %d",
                                                       d_rsr,    d_ACS_h,    d_ACS,    d_rsr_top,    d_rtt_h,    d_rtt_h_var,    d_rtt,    d_rtt_var,    d_frtt,    d_sql,    d_rtt_diff,0.0/*d_mld_ms*/, 0.0/*d_pump_adj*/,  d_rtt_shift, info.rsr);
             }
            
@@ -6146,7 +6146,7 @@ int lfd_linker(void)
             
             
             if(channel_dead && (shm_conn_info->last_net_read_ds - last_net_read_ds) > (MAX_NETWORK_STALL_MS / 10 + info.rtt2 + info.srtt2var)) {
-                vlog(LOG_ERR, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
+                vlog(LOG_INFO, "WARNING! detecting dead channel by last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
             }
             if((shm_conn_info->last_net_read_ds - last_net_read_ds) > 100000) {
                 vlog(LOG_ERR, "ASSERT FAILED! fixing impossible last_net_read_ds: %d, %d", shm_conn_info->last_net_read_ds, last_net_read_ds);
@@ -6781,7 +6781,7 @@ int lfd_linker(void)
                     //tmp16_n = 0;
                     memcpy(buf + 8 * sizeof(uint16_t) + 5 * sizeof(uint32_t), &tmp32_n, sizeof(uint32_t)); //global seq_num
                         if(debug_trace) {
-                    vlog(LOG_ERR,
+                    vlog(LOG_INFO,
                             "FRAME_CHANNEL_INFO send chan_num %d packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" ",
                             i, info.channel[i].packet_recv_counter, info.channel[i].packet_loss_counter,
                             (int16_t)info.channel[i].local_seq_num_recv, (uint32_t) (tv_tmp.tv_sec * 1000000 + tv_tmp.tv_usec));
@@ -6813,7 +6813,7 @@ int lfd_linker(void)
                 // TODO: DUP code!
                 
                 if(debug_trace) {
-                    vlog(LOG_ERR, "Sending LWS...");
+                    vlog(LOG_INFO, "Sending LWS...");
                 }
                 sem_wait(&(shm_conn_info->write_buf_sem));
                 *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
@@ -7057,7 +7057,7 @@ int lfd_linker(void)
                         if(!select_net_write(i)) continue;
                         // TODO: DUP code!
                         if(debug_trace) {
-                            vlog(LOG_ERR, "Sending LWS...");
+                            vlog(LOG_INFO, "Sending LWS...");
                         }
                         sem_wait(&(shm_conn_info->write_buf_sem));
                         *((uint32_t *) buf) = htonl(shm_conn_info->write_buf[i].last_written_seq);
@@ -7384,7 +7384,7 @@ int lfd_linker(void)
         gettimeofday(&cpulag, NULL);
         timersub(&cpulag, &old_time, &tv_tmp_tmp_tmp);
         if(tv_tmp_tmp_tmp.tv_usec > SUPERLOOP_MAX_LAG_USEC) {
-            vlog(LOG_ERR,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
+            vlog(LOG_INFO,"WARNING! CPU deficiency detected! Cycle lag: %ld.%06ld", tv_tmp_tmp_tmp.tv_sec, tv_tmp_tmp_tmp.tv_usec);
         }
         // <<< END CPU_LAG
 #endif
@@ -7877,7 +7877,7 @@ if(drop_packet_flag) {
                                 int hsnum = (int)ntohs(tmp_s);
                                 int who_lost = -1;
                                 if(hsnum == -1) {
-                                    vlog(LOG_ERR, "WARNING could not detect who lost %lu - sending unconditionally", sqn);
+                                    vlog(LOG_INFO, "WARNING could not detect who lost %lu - sending unconditionally", sqn);
                                 } else {
                                     who_lost = hsnum2pnum(hsnum);
                                 }
@@ -7901,7 +7901,7 @@ if(drop_packet_flag) {
                                 int hsnum = (int)ntohs(tmp_s);
                                 int who_lost = -1;
                                 if(hsnum == -1) {
-                                    vlog(LOG_ERR, "WARNING could not detect who lost %lu - not resending", sqn);
+                                    vlog(LOG_INFO, "WARNING could not detect who lost %lu - not resending", sqn);
                                 } else {
                                     who_lost = hsnum2pnum(hsnum);
                                     if(who_lost == -1) {
@@ -7958,7 +7958,7 @@ if(drop_packet_flag) {
                                             int lidx = -1;
                                             len = get_resend_frame_local_sqn(1, who_lost ,sqn_s, &seqn, &out2, &mypid, &lidx);
                                             if (len == -1) {
-                                                vlog(LOG_ERR, "WARNING could not retransmit packet 2 %lu - not found", sqn_s);
+                                                vlog(LOG_INFO, "WARNING could not retransmit packet 2 %lu - not found", sqn_s);
                                                 sem_post(&(shm_conn_info->resend_buf_sem));
                                             } else {
                                                 memcpy(out_buf, out2, len);
@@ -8077,7 +8077,7 @@ if(drop_packet_flag) {
                                 memcpy(&tmp16_n, buf + 4 * sizeof(uint16_t) + 3 * sizeof(uint32_t), sizeof(uint16_t)); // hsqs
                                 shm_conn_info->head_send_q_shift_recv = (int16_t) ntohs(tmp16_n); // TODO parse hsqs here
                                 shm_conn_info->buf_len_recv = buf_len_recv;
-                                vlog(LOG_ERR, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
+                                vlog(LOG_INFO, "Setting hsqs %d", (int16_t) ntohs(tmp16_n));
                                 shm_conn_info->latest_la_sqn = remote_seq; 
                             }
                             
@@ -8093,7 +8093,7 @@ if(drop_packet_flag) {
                             //    vlog(LOG_INFO, "channel %d mad_send_q %"PRIu32" local_seq_num %"PRIu32" packet_seq_num_acked %"PRIu32"",chan_num, info.channel[chan_num].send_q,info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);
 
                             if(debug_trace) {
-                                vlog(LOG_ERR, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
+                                vlog(LOG_INFO, "FCI local seq %"PRIu32" recv seq %"PRIu32" chan_num %d ",info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked, chan_num);
                             }
                             //vlog(LOG_INFO, "FRAME_CHANNEL_INFO: Calculated send_q: %d, chan %d, pkt %d, drops: %d", info.channel[chan_num].send_q, chan_num, info.channel[chan_num].packet_seq_num_acked, drop_counter);
                             uint32_t my_max_send_q = 0;
@@ -8129,7 +8129,7 @@ if(drop_packet_flag) {
                             //Для чего нужен подсчет значения потерь через info.channel[chan_num].packet_loss ( возможно ложное срабатывание в дальнейшем
                             if (info.channel[chan_num].packet_loss > 0 && timercmp(&loss_immune, &info.current_time, <=)) { // 2 pkts loss THR is prep for loss recovery
                                 // TODO: need to get L_PBL somehow here - see dumbass method at FCI send
-                                vlog(LOG_ERR, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
+                                vlog(LOG_INFO, "RECEIVED approved loss %"PRId16" chan_num %d send_q %"PRIu32"", info.channel[chan_num].packet_loss, chan_num,
                                         info.channel[chan_num].send_q);
                                 loss_time = info.current_time; // received loss event time
                                 info.p_lost++;
@@ -8308,7 +8308,7 @@ if(drop_packet_flag) {
                             sem_post(&(shm_conn_info->stats_sem));
                             info.channel[chan_num].bytes_put = 0; // bytes_put reset for modeling
 #ifdef DEBUGG
-                            vlog(LOG_ERR,
+                            vlog(LOG_INFO,
                                     "FRAME_CHANNEL_INFO recv chan_num %d send_q %"PRIu32" packet_recv %"PRIu16" packet_loss %"PRId16" packet_seq_num_acked %"PRIu32" packet_recv_period %"PRIu32" recv upload %"PRIu32" send_q %"PRIu32"",
                                     chan_num, info.channel[chan_num].send_q, info.channel[chan_num].packet_recv, (int16_t)info.channel[chan_num].packet_loss,
                                     info.channel[chan_num].packet_seq_num_acked, info.channel[chan_num].packet_recv_period, info.channel[chan_num].packet_recv_upload, info.channel[chan_num].send_q);
