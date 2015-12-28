@@ -2912,46 +2912,11 @@ int write_buf_check_n_flush(int logical_channel) {
 
 //            frame_llist_free(&shm_conn_info->write_buf[logical_channel].frames, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, fold);
             return 1;
-        } else {
-            return 0;
-            int packet_index = check_n_repair_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0],
-                    &shm_conn_info->wb_just_write_frames[logical_channel], &shm_conn_info->write_buf[logical_channel].frames, shm_conn_info->frames_buf,
-                    shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-//            vlog(LOG_ERR, "calculated packet stored in %i", packet_index);
-            if (packet_index != -1) {
-                vlog(LOG_INFO, "{\"name\":\"%s\",\"repaired_seq_num\":%"PRIu32", \"place\": 3}", lfd_host->host,
-                        shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-
-                //    vlog(LOG_ERR, "can't calc packet %"PRIu32"", shm_conn_info->write_buf[logical_channel].last_written_seq + 1);
-                //  else
-//                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calculated packet",
-//                        shm_conn_info->write_buf[logical_channel].last_written_seq + 1,
-//                        shm_conn_info->packet_code_recived[logical_channel][packet_index].len_sum);
-//            }
-
-            //    return 0;
-//            if (packet_index >= 0) {
-//                print_head_of_packet(shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, "calced packet",shm_conn_info->write_buf[logical_channel].last_written_seq + 1, 70);
-                if (dev_write(info.tun_device, shm_conn_info->packet_code_recived[logical_channel][packet_index].sum, REDUNDANCY_CODE_SIZE) < 0) {
-                    vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
-                    if (errno != EAGAIN && errno != EINTR) { // TODO: WTF???????
-                        vlog(LOG_ERR, "dev write not EAGAIN or EINTR");
-                    } else {
-                        vlog(LOG_ERR, "dev write intr - need cont");
-                        return 1;
-                    }
-
-                }
-                shm_conn_info->write_buf[logical_channel].last_written_seq++;
-                del_packet_code(&shm_conn_info->packet_code_recived[logical_channel][0], packet_index);
-                return 1;
-            } else {
-                return 0;
-            }
-        }
+        } 
     } else {
         return 0;
     }
+    return 0;
 }
 
 /**
@@ -7612,6 +7577,7 @@ if(drop_packet_flag) {
                             vlog(LOG_INFO, "FRAME_REDUNDANCY_CODE on net... chan %d len %i array index %i start_seq %"PRIu32"", chan_num, len, shm_conn_info->packet_code_bulk_counter,ntohl(*((uint32_t *)(buf))));
                             print_head_of_packet(buf + sizeof(uint32_t) + sizeof(uint16_t), "recv redund code",0, len - (sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint16_t)));
 #endif
+#ifdef SUM_SEND
                             uint32_t local_seq_num, last_recv_lsn, packet_recv_spd;
                             uint16_t mini_sum;
                             len = seqn_break_tail(buf, len, NULL, &flag_var, &local_seq_num, NULL, &last_recv_lsn, &packet_recv_spd);
@@ -7657,6 +7623,7 @@ if(drop_packet_flag) {
                                 }
                             }
                             sem_post(write_buf_sem);
+#endif
                             continue;
                         } else if (flag_var == FRAME_MODE_RXMIT) {
                             // okay
@@ -8642,6 +8609,7 @@ if(drop_packet_flag) {
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_sec = info.current_time.tv_sec;
                          shm_conn_info->write_buf[chan_num_virt].last_write_time.tv_usec = info.current_time.tv_usec;
                     }
+#ifdef SUM_SEND
                     int sumIndex = get_packet_code(&shm_conn_info->packet_code_recived[chan_num][0], &shm_conn_info->packet_code_bulk_counter, seq_num);
                     if (sumIndex != -1) {
                         if (newPacket) {
@@ -8679,6 +8647,7 @@ if(drop_packet_flag) {
                             }
                         }
                     }
+#endif
                     struct timeval last_write_time_tmp = shm_conn_info->write_buf[chan_num_virt].last_write_time;
                     int cond_flag = shm_conn_info->write_buf[chan_num_virt].last_written_seq > (last_last_written_seq[chan_num_virt] + lfd_host->FRAME_COUNT_SEND_LWS) ? 1 : 0;
                     if(cond_flag) {

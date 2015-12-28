@@ -23,9 +23,9 @@ AC_ARG_ENABLE(o3,
 )
 
 AC_ARG_ENABLE(sum-send,
-   --disable-sum-send      Disable redundancy code sending,
+   --enable-sum-send      Enable redundancy code sending,
    SUM_SEND=$enableval,
-   SUM_SEND=yes
+   SUM_SEND=no
 )
 
 AC_ARG_ENABLE(mark,
