@@ -7947,7 +7947,13 @@ if(drop_packet_flag) {
                                         // now do retransmit
                                         int mypid;
                                         uint32_t seqn;
+                                        int cnt = 0;
                                         for(uint32_t sqn_s = sqn; sqn_s < sqn + psl; sqn_s++) {
+                                            if(cnt > UNRECOVERABLE_LOSS) {
+                                                vlog(LOG_ERR, "ASSERT FAILED!: looping at resend packet > UNRECOVERABLE_LOSS! sqn %lu sqn_s %lu psl %d", sqn, sqn_s, psl);
+                                                break;
+                                            }
+                                            cnt++;
                                             sem_wait(&(shm_conn_info->resend_buf_sem));
                                             int lidx = -1;
                                             len = get_resend_frame_local_sqn(1, who_lost ,sqn_s, &seqn, &out2, &mypid, &lidx);
