@@ -91,6 +91,7 @@ int main(int argc, char *argv[], char *env[])
     vtun.start_port = 0;
     vtun.end_port = 0;
     vtun.svr_type = -1;
+    vtun.quiet = 0;
     vtun.syslog   = LOG_DAEMON;
     vtun.shm_key = SHM_TUN_KEY;
 
@@ -130,7 +131,7 @@ int main(int argc, char *argv[], char *env[])
     /* Start logging to syslog and stderr */
     vlog_open("vtrunkd", LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 
-    while ((opt = getopt(argc, argv, "S:R:mDisf:P:L:t:M:npvh?")) != EOF) {
+    while ((opt = getopt(argc, argv, "S:R:mDisf:P:L:t:M:nQpvh?")) != EOF) {
         switch (opt) {
         case 'S':
             vtun.shm_key = atoi(optarg);
@@ -174,6 +175,9 @@ int main(int argc, char *argv[], char *env[])
             break;
         case 'n':
             daemon = 0;
+            break;
+        case 'Q':
+            vtun.quiet = 1;
             break;
         case 'p':
             vtun.persist = 1;
@@ -322,12 +326,12 @@ void usage(void)
     printf("vtrunkd version %s\n", VERSION); // new versioning
     printf("Usage: \n");
     printf("  Server:\n");
-    printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)]\n");
+    printf("\tvtrunkd <-s> [-f file] [-P port] [-L local address] [-S SHM key] [-D (enable packet debug)] [-Q]\n");
     printf("  Client:\n");
     /* I don't think these work. I'm disabling the suggestion - bish 20050601*/
     /* these actually do work. At least given in config file -- grandrew 20110507*/
     printf("\tvtrunkd [-f file] " /* [-P port] [-L local address] */
-           "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)]\n");
+           "[-p] [-m] [-t timeout] <host profile> <server address> [-S SHM key] [-D (enable packet debug)] [-Q]\n");
 }
 
 void version() {

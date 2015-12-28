@@ -144,6 +144,7 @@ void vlog_close() {
 
 void vlog(int priority, char *format, ...) {
 #ifdef SYSLOG
+    if(vtun.quiet) return;
     static volatile sig_atomic_t in_syslog = 0;
     char buf[JS_MAX];
     va_list ap;

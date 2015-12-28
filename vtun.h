@@ -916,6 +916,7 @@ extern llist host_list;
 struct vtun_opts {
    int  timeout;
    int  persist;
+   int quiet;
    int MAX_TUNNELS_NUM;
 
    char *cfg_file;
