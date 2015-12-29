@@ -19,4 +19,5 @@
 #define WBUF_HASH_SIZE 256
 #define MAX_WBUF_HASH_DEPTH 6
 #define RSR_TOP 2990000 // now infinity...
+#define DEAD_PNUM_TIMEOUT 10 // after 10 sec of inactivity we will assume that process is dead and is an emergency situation
 #endif

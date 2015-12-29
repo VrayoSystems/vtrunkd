@@ -749,13 +749,23 @@ int tunnel(struct vtun_host *host, int srv)
     }
     if (srv) shm_conn_info[connid].usecount++;
 
+    struct timeval cur_time;
 // finally, choose my conn number in stats block
     for (i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (shm_conn_info[connid].stats[i].pid == 0) {
             if (my_conn_num == -1) my_conn_num = i;
         } else {
+            gettimeofday(&cur_time, NULL);
             if ( kill(shm_conn_info[connid].stats[i].pid, 0) < 0 ) {
 // okay no proc found, use it
+                vlog(LOG_ERR, "ASSERT FAILED! detected dead process by nonexistent pid %d", shm_conn_info[connid].stats[i].pid);
+
+                if (my_conn_num == -1) my_conn_num = i;
+                shm_conn_info[connid].stats[i].pid = 0;
+                shm_conn_info[connid].stats[i].weight = 0;
+            } else if ((shm_conn_info[connid].stats[i].alive_secs != 0) && (cur_time.tv_sec - shm_conn_info[connid].stats[i].alive_secs > DEAD_PNUM_TIMEOUT)) {
+                vlog(LOG_ERR, "ASSERT FAILED! detected dead process by timeout cur %d last alive %d", cur_time.tv_sec, shm_conn_info[connid].stats[i].alive_secs);
+                
                 if (my_conn_num == -1) my_conn_num = i;
                 shm_conn_info[connid].stats[i].pid = 0;
                 shm_conn_info[connid].stats[i].weight = 0;

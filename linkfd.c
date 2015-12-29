@@ -7045,6 +7045,7 @@ int lfd_linker(void)
                 dev_my_cnt = 0;
                 last_tick = info.current_time.tv_sec;
                 shm_conn_info->alive = info.current_time.tv_sec;
+                shm_conn_info->stats[info.process_num].alive_secs = info.current_time.tv_sec;
                 delay_acc = 0;
                 delay_cnt = 0;
 

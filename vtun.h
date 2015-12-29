@@ -364,6 +364,7 @@ struct conn_stats {
     int lssqn; // TODO: remove this after tests
     int hsnum; /* session name hash - identical between prodesses */
     int pid; /* current pid */
+    int alive_secs; /* this is used in tunnel.c to detect emergency kill */
     int pid_remote; // pid from another side
     long int weight; /* bandwith-delay product */
     long int last_tick; // watch dog timer
