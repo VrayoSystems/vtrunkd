@@ -253,7 +253,7 @@ void client(struct vtun_host *host)
         vlog(LOG_INFO, "Connecting to %s", vtun.svr_name);
 
         if ( connect_t(s, (struct sockaddr *) &svr_addr, host->timeout) ) {
-            vlog(LOG_INFO, "Connect to %s failed. %s(%d)", vtun.svr_name,
+            vlog(LOG_ERR, "Connect to %s failed. %s(%d)", vtun.svr_name,
                         strerror(errno), errno);
         } else {
             if ( auth_client(s, host, &reason) ) {
@@ -269,9 +269,9 @@ void client(struct vtun_host *host)
                 gettimeofday(&cur_time, NULL);
                 shm_conn_info->alive = cur_time.tv_sec; // show we are alive and trying to reconnect still.. (or fd_server will quit)
 
-                vlog(LOG_INFO, "Session %s[%s] closed", host->host, vtun.svr_name);
+                vlog(LOG_ERR, "Session %s[%s] closed", host->host, vtun.svr_name);
             } else {
-                vlog(LOG_INFO, "Connection denied by %s, reason: %d", vtun.svr_name, reason);
+                vlog(LOG_ERR, "Connection denied by %s, reason: %d", vtun.svr_name, reason);
             }
         }
         close(s);
