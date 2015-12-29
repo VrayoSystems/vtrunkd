@@ -169,7 +169,6 @@ struct my_ip {
 #define MAX_SD_W 1700 // stat buf max send_q (0..MAX_SD_W)
 #define SD_PARITY 2 // stat buf len = MAX_SD_W / SD_PARITY
 #define SLOPE_POINTS 30 // how many points ( / SD_PARITY ) to make linear fit from
-#define PESO_STAT_PKTS 200 // packets to collect for ACS2 statistics to be correct for PESO
 #define ZERO_W_THR 2000.0 // ms. when to consider weight of point =0 (value outdated)
 #define SPEED_REDETECT_TV {2,0} // timeval (interval) for chan speed redetect
 #define HEAD_REDETECT_HYSTERESIS_TV {0,800000} // timeval (interval) for chan speed redetect
@@ -3690,56 +3689,6 @@ int set_IDLE() {
     sem_post(&(shm_conn_info->stats_sem));
     return 0;
 }
-// returns max value for send_q (NOT index) at which weight is > 0.7
-int set_smalldata_weights( struct _smalldata *sd, int *pts) {
-    struct timeval tv_tmp;
-    int ms;
-    int max_good_sq = -1;
-    for (int i=0; i< (MAX_SD_W / SD_PARITY); i++) {
-        timersub(&info.current_time, &sd->ts[i], &tv_tmp);
-        ms = tv2ms(&tv_tmp);
-        sd->w[i] = -(double)ms / (double)ZERO_W_THR + 1.0;
-        if(sd->w[i] < 0.0) sd->w[i] = 0;
-        if(sd->w[i] > 0.1) (*pts)++;
-        if(sd->w[i] > 1.0) {
-            // TODO: check unnesessary
-            vlog(LOG_ERR, "ssw: ERROR! Weight somehow was > 1.0: %f ms %d ", sd->w[i], ms);
-            sd->w[i] = 1.0;
-        }
-        if(sd->w[i] > 0.7) {
-            //vlog(LOG_INFO, "ssw: Found last datapoint sq=%f ACS=%f w=%f ms %d", sd->send_q[i], sd->ACS[i], sd->w[i], ms);
-            max_good_sq = i;
-        }
-    }
-    return max_good_sq * SD_PARITY;
-}
-
-int get_slope(struct _smalldata *sd) {
-    int len = SLOPE_POINTS; // 15 datapoints to draw slope
-    int pts = 0;
-    int to_idx = set_smalldata_weights(sd, &pts);
-    if( ((to_idx / SD_PARITY) < SLOPE_POINTS+1) || pts < 15) { // TODO: is 5 ok for slope?
-        return 999999; // could not get slope?
-    }
-    int from_idx = to_idx / SD_PARITY - len;
-
-    double c0, c1, cov00, cov01, cov11, chisq; // model Y = c_0 + c_1 X
-/*
-    vlog(LOG_INFO, "slope: s_q %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
-                            sd->send_q[from_idx+0],  sd->send_q[from_idx+1], sd->send_q[from_idx+2], sd->send_q[from_idx+3], sd->send_q[from_idx+4], sd->send_q[from_idx+5], sd->send_q[from_idx+6], sd->send_q[from_idx+7], sd->send_q[from_idx+8], sd->send_q[from_idx+9], sd->send_q[from_idx+10], sd->send_q[from_idx+12], sd->send_q[from_idx+13], sd->send_q[from_idx+14], sd->send_q[from_idx+15]);
-    vlog(LOG_INFO, "slope: ACS %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
-                            sd->ACS[from_idx+0],  sd->ACS[from_idx+1], sd->ACS[from_idx+2], sd->ACS[from_idx+3], sd->ACS[from_idx+4], sd->ACS[from_idx+5], sd->ACS[from_idx+6], sd->ACS[from_idx+7], sd->ACS[from_idx+8], sd->ACS[from_idx+9], sd->ACS[from_idx+10], sd->ACS[from_idx+12], sd->ACS[from_idx+13], sd->ACS[from_idx+14], sd->ACS[from_idx+15]);
-    vlog(LOG_INFO, "slope:   w %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", 
-                            sd->w[from_idx+0],  sd->w[from_idx+1], sd->w[from_idx+2], sd->w[from_idx+3], sd->w[from_idx+4], sd->w[from_idx+5], sd->w[from_idx+6], sd->w[from_idx+7], sd->w[from_idx+8], sd->w[from_idx+9], sd->w[from_idx+10], sd->w[from_idx+12], sd->w[from_idx+13], sd->w[from_idx+14], sd->w[from_idx+15]);
-*/
-    fit_wlinear (&sd->send_q[from_idx], 1, &sd->w[from_idx], 1, &sd->ACS[from_idx], 1, len, 
-                   &c0, &c1, &cov00, &cov01, &cov11, &chisq);
-
-    //vlog(LOG_INFO, "slope: Linear fit c1 is %f", c1);
-    if(isnan(c1)) return 999999;
-    return (int) (c1 * 100.0);
-}
-
 
 int plp_avg_pbl(int pnum) {
     if(shm_conn_info->stats[pnum].l_pbl_tmp > shm_conn_info->stats[pnum].l_pbl_recv) {
@@ -5045,21 +4994,6 @@ int lfd_linker(void)
         buf_len_sent[i]=0;
     }
 
-    struct _smalldata smalldata;
-    smalldata.rtt = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
-    smalldata.ACS = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
-    smalldata.w = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
-    smalldata.send_q = malloc(sizeof(double) * (MAX_SD_W / SD_PARITY));
-    smalldata.ts = malloc(sizeof(struct timeval) * (MAX_SD_W / SD_PARITY));
-
-    for(int i = 0; i < (MAX_SD_W / SD_PARITY); i++) {
-        smalldata.send_q[i] = (double) (i * SD_PARITY * 1000);
-        smalldata.rtt[i] = 0; // TODO: memset?
-        smalldata.ACS[i] = 0; // TODO: memset?
-        smalldata.w[i] = 0; // TODO: memset?
-        smalldata.ts[i] = info.current_time;
-    }
-    int last_smalldata_ACS = 0;
     t = (int) t_from_W( RSR_TOP - 10000, info.send_q_limit_cubic_max, info.B, info.C);
     struct timeval new_lag;
     ms2tv(&new_lag, t * CUBIC_T_DIV); // multiply to compensate
@@ -5070,8 +5004,6 @@ int lfd_linker(void)
     set_Wu_to(RSR_TOP);
     
     sem_post(&(shm_conn_info->stats_sem));
-    struct timeval peso_lrl_ts = info.current_time;
-    int32_t peso_old_last_recv_lsn = 10;
     int ELD_send_q_max = 0;
     int need_send_FCI = 0;
     info.max_latency_drop.tv_usec = MAX_LATENCY_DROP_USEC;
@@ -5685,19 +5617,6 @@ int lfd_linker(void)
                 info.max_send_q_u = send_q_eff_mean;
             }
             info.tv_sqe_mean_added = info.current_time;
-            // int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-            // if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-            //     // TODO: write averaged data ? more points -> more avg!
-            //     if(last_smalldata_ACS != info.packet_recv_upload_avg) {
-            //         smalldata.ACS[s_q_idx] = info.packet_recv_upload_avg;
-            //         smalldata.rtt[s_q_idx] = info.rtt2;
-            //         smalldata.ts[s_q_idx] = info.current_time;
-            //         last_smalldata_ACS = info.packet_recv_upload_avg;
-            //     }
-            // } else {
-            //     vlog(LOG_ERR, "WARNING! send_q too big!");
-            // }
-            
             
             timersub(&info.current_time, &info.head_change_tv, &tv_tmp_tmp_tmp);
             info.head_change_safe = (tv2ms(&tv_tmp_tmp_tmp) > (info.exact_rtt * 2) ? 1 : 0);
@@ -6523,7 +6442,6 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "loss_out", "%d", lmax); // never used, dunno if works
             
             // now get slope
-            //int slope = get_slope(&smalldata);
             //add_json(js_buf, &js_cur, "slope", "%d", slope);
             add_json(js_buf, &js_cur, "sqn[1]", "%lu", shm_conn_info->seq_counter[1]);
             add_json(js_buf, &js_cur, "lssqn[?]", "%lu", last_sent_packet_num[1].seq_num);
@@ -8496,22 +8414,7 @@ if(drop_packet_flag) {
                     //if(info.max_send_q < info.channel[chan_num].send_q) {
                     //    info.max_send_q = info.channel[chan_num].send_q;
                     //}
-                    // if( (last_recv_lsn - peso_old_last_recv_lsn) > PESO_STAT_PKTS) {
-                    //     // TODO: multi-channels broken here!
-                    //     timersub(&info.current_time, &peso_lrl_ts, &tv_tmp);
-                    //     // TODO: check for overflow here? -->
-                    //     if(tv2ms(&tv_tmp) > 3) { // TODO: what to do if < 3ms?? 3ms is 333p/s
-                    //         int ACS2 = (last_recv_lsn - peso_old_last_recv_lsn) * info.eff_len / tv2ms(&tv_tmp) * 1000;
-                    //         int s_q_idx = send_q_eff / info.eff_len / SD_PARITY;
-                    //         if(s_q_idx < (MAX_SD_W / SD_PARITY)) {
-                    //             smalldata.ACS[s_q_idx] = ACS2;
-                    //             smalldata.rtt[s_q_idx] = info.rtt2;
-                    //             smalldata.ts[s_q_idx] = info.current_time;
-                    //         }
-                    //     }
-                    //     peso_lrl_ts = info.current_time;
-                    //     peso_old_last_recv_lsn = last_recv_lsn;
-                    // }
+
 #ifdef DEBUGG
 if(drop_packet_flag) {
                     vlog(LOG_INFO, "PKT send_q %d:.local_seq_num=%d, last_recv_lsn=%d", info.channel[chan_num].send_q, info.channel[chan_num].local_seq_num, info.channel[chan_num].packet_seq_num_acked);

@@ -481,16 +481,6 @@ struct logical_status {
     uint32_t bytes_put;
 };
 
-struct _smalldata {
-    double *ACS;
-    double *rtt;
-    double *w;
-    double *send_q; // static 'x' axist
-    struct timeval *ts;
-};
-
-
-
 /**
  * Structure for storing all information about
  * physical channel
