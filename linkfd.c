@@ -5189,7 +5189,7 @@ int lfd_linker(void)
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
         if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
-                vlog(LOG_ERR, "WARNING! info.rtt2 == 0!");
+                vlog(LOG_INFO, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
             }
             exact_rtt = info.rtt2; 
@@ -5197,7 +5197,7 @@ int lfd_linker(void)
     } else {
             // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
-                vlog(LOG_ERR, "WARNING! info.rtt == 0!");
+                vlog(LOG_INFO, "WARNING! info.rtt == 0!");
                 info.rtt = 1;
             }
             exact_rtt = info.rtt;

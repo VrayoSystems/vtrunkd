@@ -142,7 +142,7 @@ void connection(int sock)
         /* Start tunnel */
         tunnel(host, 1);
 
-        vlog(LOG_INFO, "Session %s closed", host->host);
+        vlog(LOG_ERR, "Session %s closed", host->host);
 
         /* Unlock host. (locked in auth_server) */
         unlock_host(host);
