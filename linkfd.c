@@ -4803,7 +4803,8 @@ int lfd_linker(void)
             if (getsockname(info.channel[i].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                 vlog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
                 close(prio_s);
-                return 0;
+                linker_term = TERM_NONFATAL;
+                break;
             }
 
             info.channel[i].lport = ntohs(localaddr.sin_port);
@@ -4821,7 +4822,7 @@ int lfd_linker(void)
         if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
             vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
             close(prio_s);
-            return 0;
+            linker_term = TERM_NONFATAL;
         }
 
         // now listen to socket, wait for connection
@@ -7272,9 +7273,10 @@ int lfd_linker(void)
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
                     if (proto_write(service_channel, buf, ((6 * sizeof(uint32_t) + 2 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                        vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Could not send FLI pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
-                        return 0;
+                        linker_term = TERM_NONFATAL;
+                        break;
                     }
                 } else {
                     info.last_sent_FLI_idx--;
@@ -7318,9 +7320,10 @@ int lfd_linker(void)
                 FD_SET(service_channel, &fdset2);
                 if (select(service_channel + 1, NULL, &fdset2, NULL, &tv_tmp) > 0) {
                     if (proto_write(service_channel, buf, ((7 * sizeof(uint32_t) + 3 * sizeof(uint16_t)) | VTUN_BAD_FRAME)) < 0) {
-                        vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
+                        vlog(LOG_ERR, "Could not send FLLI pkt; exit %s(%d)", strerror(errno), errno);
                         close(prio_s);
-                        return 0;
+                        linker_term = TERM_NONFATAL;
+                        break;
                     }
                 } else {
                     info.last_sent_FLLI_idx--;
