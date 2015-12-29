@@ -310,8 +310,8 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         if (!(shm_conn_info->channels_mask & (1 << i))) {
             continue;
         }
-        if (!kill(shm_conn_info->stats[i].pid, SIGKILL)) {
-            vlog(LOG_ERR, "Process %d killed with KILL", shm_conn_info->stats[i].pid);
+        if (!kill(shm_conn_info->stats[i].pid, SIGTERM)) {
+            vlog(LOG_ERR, "Process %d killed with TERM", shm_conn_info->stats[i].pid);
         }
     }
 // clean up
