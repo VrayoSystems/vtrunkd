@@ -6373,7 +6373,6 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "eff_len", "%d", info.eff_len);
             //add_json(js_buf, &js_cur, "max_chan", "%d", shm_conn_info->max_chan);
             //add_json(js_buf, &js_cur, "sel_imd", "%d", info.select_immediate); // experimetn failed - TODO REMOVE
-            info.select_immediate = 0; // this too as above
             //add_json(js_buf, &js_cur, "frtt", "%d", shm_conn_info->forced_rtt); // unused, all the related WTF code to be removed
             add_json(js_buf, &js_cur, "frtt_r", "%d", shm_conn_info->forced_rtt_remote); // received remote frtt, only for server-side logger analysis
             //add_json(js_buf, &js_cur, "trtt", "%d", shm_conn_info->t_model_rtt100); // dup of tmrtt??
@@ -8634,6 +8633,8 @@ if(drop_packet_flag) {
             vlog(LOG_INFO, "Logical channels have not created. Hope to create later... ");
 #endif
             if(timercmp(&tv, &select_tv_copy, ==)) { // means select was an immediate return
+                // we either did not connect channels or did not receive FRAME_JUST_STATRTED
+                // FJS is sent by TCP, so we should wait a bit and exit if we fail to get it at last
                 // fill in all structs for immediate read
                 FD_ZERO(&fdset_w);
                 FD_ZERO(&fdset);
@@ -8643,8 +8644,15 @@ if(drop_packet_flag) {
                 for (i = 0; i < info.channel_amount; i++) {
                     FD_SET(info.channel[i].descriptor, &fdset);
                 }
+                usleep(20000);
                 info.select_immediate++;
-                goto main_select;
+                if(info.select_immediate > 1000) { // wait 20 seconds in total, then exit
+                    vlog(LOG_ERR, "Timeout waiting for FRAME_JUST_STATRTED or channels to create");
+                    linker_term = TERM_NONFATAL;
+                    break;
+                } else {
+                    goto main_select;
+                }
             }
             continue;
         }
