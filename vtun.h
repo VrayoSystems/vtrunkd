@@ -88,7 +88,7 @@
 // DROP shall not be reached! if reached - it indicates problems
 #define P_MAX_LATENCY_DROP 5 // seconds
 // this is hardly dependent on MAX_REORDER (e.g. MR90/MABL350)
-#define P_MAX_ALLOWED_BUF_LEN 4000 // int // WARNING: need large buffer for rtt tweaking on fast chans! (500ms * 2MB/s = at least 1MB!
+#define P_MAX_ALLOWED_BUF_LEN 1800 // int // WARNING: need large buffer for rtt tweaking on fast chans! (500ms * 2MB/s = at least 1MB!
 // very sensitive parameter - setting it huge will stuck into MAX_LATENCY* product always
 #define P_MAX_REORDER 90 // int
 // seconds to timeout. set to 10 for mostly-stable links, to 30 for very-unstable and jitterish
@@ -117,13 +117,13 @@
 #define LWS_NOTIFY_PEROID 3 // seconds; TODO: make this configurable
 #define LWS_NOTIFY_MAX_SUB_SEQ 30
 // should be --> MAX_ALLOWED_BUF_LEN*TCP_CONN_AMOUNT to exclude outages
-#define FRAME_BUF_SIZE 4500 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
+#define FRAME_BUF_SIZE 2200 // int WARNING: see P_MAX_ALLOWED_BUF_LEN
 // to avoid drops absolutely, this should be able to hold up to MAX_LATENCY_DROP*(TCP_CONN_AMOUT+1)*speed packets!
 #ifdef LOW_MEM
     #define RESEND_BUF_SIZE 600 // int
     #define JS_MAX 1000 // data for logs, * 3 times is allocated
 #else
-    #define RESEND_BUF_SIZE 5000 // int
+    #define RESEND_BUF_SIZE 3000 // int
     #define JS_MAX 20000 // 100kb string len of JSON logs * 3 size is used!
 #endif
 // maximum compiled-in buffers for tcp channels per link
