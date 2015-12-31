@@ -4675,12 +4675,12 @@ int lfd_linker(void)
         info.channel = calloc(info.channel_amount, sizeof(*(info.channel)));
         if (info.channel == NULL) {
             vlog(LOG_ERR, "Cannot allocate memory for info.channel, process - %i, pid - %i",info.process_num, info.pid);
-            return 0;
+            return -1;
         }
         chan_info = (struct channel_info *) calloc(info.channel_amount, sizeof(struct channel_info));
         if (chan_info == NULL ) {
             vlog(LOG_ERR, "Can't allocate array for struct chan_info for the linker");
-            return 0;
+            goto finish_loop;
         }
 		sem_wait(&(shm_conn_info->stats_sem));
         info.channel[0].descriptor = service_channel; // load service channel
@@ -4689,7 +4689,11 @@ int lfd_linker(void)
 		time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
     	*((uint16_t *) buf) = htons(shm_conn_info->stats[info.process_num].pid);
 		sem_post(&(shm_conn_info->stats_sem));
-		write_n(service_channel, buf, sizeof(uint16_t));
+		len = write_n(service_channel, buf, sizeof(uint16_t));
+ 		if(len < 0) {
+            vlog(LOG_ERR, "Error! failed to send pid %s(%d)", strerror(errno), errno);
+            goto finish_loop;
+ 		}
 #ifdef DEBUGG
  		vlog(LOG_ERR,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 #endif
@@ -4700,7 +4704,7 @@ int lfd_linker(void)
         for (int i = 1; i < info.channel_amount; i++) {
             if ((info.channel[i].descriptor = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
                 vlog(LOG_ERR, "Can't create Channels socket");
-                return -1;
+                goto finish_loop;
             }
 
             // Get buffer size
@@ -4727,7 +4731,7 @@ int lfd_linker(void)
                 if (getsockname(service_channel, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
                     vlog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
                     close(prio_s);
-                    return 0;
+                    goto finish_loop;
                 }
                 memcpy(&my_addr.sin_addr.s_addr, &localaddr.sin_addr.s_addr, sizeof(localaddr.sin_addr.s_addr));
                 my_addr.sin_port = htons(port_tmp);
@@ -4737,11 +4741,11 @@ int lfd_linker(void)
                     if ((errno == EADDRINUSE) & (port_tmp < lfd_host->end_port)) {
                         vlog(LOG_ERR, "Can't bind port %"PRIu16", try next", port_tmp);
                     } else if ((errno == EADDRINUSE) & (port_tmp == lfd_host->end_port)) {
-                        vlog(LOG_ERR, "Can't found free port in range %"PRIu16"-%"PRIu16"", lfd_host->start_port, lfd_host->end_port);
-                        return -1;
+                        vlog(LOG_ERR, "Can't find free port in range %"PRIu16"-%"PRIu16"", lfd_host->start_port, lfd_host->end_port);
+                        goto finish_loop;
                     } else {
                         vlog(LOG_ERR, "Can't bind to the Channels socket reason: %s (%d)", strerror(errno), errno);
-                        return -1;
+                        goto finish_loop;
                     }
                 } else {
                     break;
@@ -4753,7 +4757,8 @@ int lfd_linker(void)
                 vlog(LOG_ERR, "My port socket getsockname error; retry %s(%d)", strerror(errno), errno);
                 close(prio_s);
                 linker_term = TERM_NONFATAL;
-                break;
+                goto finish_loop;
+                // break;
             }
 
             info.channel[i].lport = ntohs(localaddr.sin_port);
@@ -4763,7 +4768,11 @@ int lfd_linker(void)
             memcpy(buf + sizeof(uint16_t) * (i - 1), &hton_ret, sizeof(uint16_t));
             vlog(LOG_INFO, "Send port to client %u", info.channel[i].lport);
         }
-        write_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
+        len = write_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
+ 		if(len < 0) {
+            vlog(LOG_ERR, "Error! failed to send chamt %s(%d)", strerror(errno), errno);
+            goto finish_loop;
+ 		}
 
 
         *((uint32_t *) buf) = htonl(0); // already in htons format...
@@ -4772,6 +4781,7 @@ int lfd_linker(void)
             vlog(LOG_ERR, "Could not send FRAME_PRIO_PORT_NOTIFY pkt; exit %s(%d)", strerror(errno), errno);
             close(prio_s);
             linker_term = TERM_NONFATAL;
+            goto finish_loop;
         }
 
         // now listen to socket, wait for connection
@@ -4816,7 +4826,8 @@ int lfd_linker(void)
                 close(info.channel[i].descriptor);
             }
             linker_term = TERM_NONFATAL;
-            alarm(0);
+            alarm(0); // TODO why?
+            goto finish_loop;
         }
 
         memset(&rmaddr, 0, sizeof(rmaddr));
@@ -4826,10 +4837,12 @@ int lfd_linker(void)
         if (getpeername(info.channel[0].descriptor, (struct sockaddr *) (&rmaddr), &rmaddrlen) < 0) {
             vlog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
             linker_term = TERM_NONFATAL;
+            goto finish_loop;
         }
         if (getsockname(info.channel[0].descriptor, (struct sockaddr *) (&localaddr), &laddrlen) < 0) {
             vlog(LOG_ERR, "Service channel socket getsockname error; retry %s(%d)", strerror(errno), errno);
             linker_term = TERM_NONFATAL;
+            goto finish_loop;
          }
         info.channel[0].rport = ntohs(rmaddr.sin_port);
         info.channel[0].lport = ntohs(localaddr.sin_port);
@@ -4853,9 +4866,17 @@ int lfd_linker(void)
     	*((uint16_t *) (buf + sizeof(uint16_t))) = htons(shm_conn_info->stats[info.process_num].pid);
     	time_lag_local.pid = shm_conn_info->stats[info.process_num].pid;
     	sem_post(&(shm_conn_info->stats_sem));
-        write_n(service_channel, buf, sizeof(uint16_t) + sizeof(uint16_t));
+        len = write_n(service_channel, buf, sizeof(uint16_t) + sizeof(uint16_t));
+ 		if(len < 0) {
+            vlog(LOG_ERR, "Error! failed to send pid %s(%d)", strerror(errno), errno);
+            goto finish_loop;
+ 		}
 
- 		read_n(service_channel, buf, sizeof(uint16_t));
+ 		len = read_n(service_channel, buf, sizeof(uint16_t));
+ 		if(len <= 0) {
+            vlog(LOG_ERR, "Error! failed to read remote pid %s(%d)", strerror(errno), errno);
+            goto finish_loop;
+ 		}
  		sem_wait(&(shm_conn_info->stats_sem));
  		shm_conn_info->stats[info.process_num].pid_remote = ntohs(*((uint16_t *) buf));
  		time_lag_local.pid_remote = shm_conn_info->stats[info.process_num].pid_remote;
@@ -4863,6 +4884,11 @@ int lfd_linker(void)
  		vlog(LOG_INFO,"Remote pid - %d, local pid - %d", time_lag_local.pid_remote, time_lag_local.pid);
 
  		len = read_n(service_channel, buf, sizeof(uint16_t) * (info.channel_amount - 1));
+ 		if(len <= 0) {
+            vlog(LOG_ERR, "Error! failed to read remote ports %s(%d)", strerror(errno), errno);
+            goto finish_loop;
+ 		}
+ 		    
         vlog(LOG_INFO, "remote ports len %d", len);
 
         for (int i = 1; i < info.channel_amount; i++) {
@@ -4887,6 +4913,7 @@ int lfd_linker(void)
     if (proto_write(service_channel, buf, ((sizeof(uint32_t) + sizeof(flag_var)) | VTUN_BAD_FRAME)) < 0) {
         vlog(LOG_ERR, "Could not send init pkt; exit");
         linker_term = TERM_NONFATAL;
+        goto finish_loop;
     }
 #ifdef JSON
     vlog(LOG_INFO,"{\"name\":\"%s\",\"start\":1, \"build\":\"%s\"}", lfd_host->host, BUILD_DATE);
@@ -4913,7 +4940,7 @@ int lfd_linker(void)
     info.check_shm = 0; // zeroing check_shm
 
 
-    struct timer_obj *recv_n_loss_send_timer = create_timer();
+    struct timer_obj *recv_n_loss_send_timer = create_timer(); // TODO: create_timer may fail, should be fixed
     struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
     set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
 
@@ -8831,6 +8858,8 @@ if(drop_packet_flag) {
         
         CHKCPU(6);
     }
+    
+finish_loop:
 
     free_timer(recv_n_loss_send_timer);
     free_timer(send_q_limit_change_timer);
