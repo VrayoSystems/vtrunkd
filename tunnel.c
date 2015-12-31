@@ -767,12 +767,16 @@ int tunnel(struct vtun_host *host, int srv)
         }
     }
     if (my_conn_num == -1) {
-        vlog(LOG_ERR, "could not find free conn_num for stats, exit.");
+        // this may only happen if either amount of processes > MAX_TCP_PHYSICAL_CHANNELS or a bug in cleanup code at linkfd
+        vlog(LOG_ERR, "could not find free conn_num for stats, exit."); 
         return -1;
     }
     shm_conn_info[connid].stats[my_conn_num].pid = getpid();
 
     opt = linkfd(host, &(shm_conn_info[connid]), srv, my_conn_num);
+    
+    shm_conn_info[connid].stats[my_conn_num].pid = 0;
+    
     set_title("%s running down commands", host->host);
 
     if (srv) {
