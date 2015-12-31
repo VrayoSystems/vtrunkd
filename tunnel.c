@@ -759,13 +759,7 @@ int tunnel(struct vtun_host *host, int srv)
             if ( kill(shm_conn_info[connid].stats[i].pid, 0) < 0 ) {
 // okay no proc found, use it
                 vlog(LOG_ERR, "ASSERT FAILED! detected dead process by nonexistent pid %d", shm_conn_info[connid].stats[i].pid);
-
-                if (my_conn_num == -1) my_conn_num = i;
-                shm_conn_info[connid].stats[i].pid = 0;
-                shm_conn_info[connid].stats[i].weight = 0;
-            } else if ((shm_conn_info[connid].stats[i].alive_secs != 0) && (cur_time.tv_sec - shm_conn_info[connid].stats[i].alive_secs > DEAD_PNUM_TIMEOUT)) {
-                vlog(LOG_ERR, "ASSERT FAILED! detected dead process by timeout cur %d last alive %d", cur_time.tv_sec, shm_conn_info[connid].stats[i].alive_secs);
-                
+                // we may only check vtrunkd by PID if we are sure that this particular PID is vtrunkd and it is using this one SHM
                 if (my_conn_num == -1) my_conn_num = i;
                 shm_conn_info[connid].stats[i].pid = 0;
                 shm_conn_info[connid].stats[i].weight = 0;
