@@ -191,6 +191,7 @@ write_fd(int fd, void *ptr, size_t nbytes, int sendfd)
 
 static void fd_server_term(int sig) {
     fdserver_term = 1;
+    vlog(LOG_ERR, "Received a SIGTERM! No connections possible after this message!");
 }
 
 int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) {
@@ -304,19 +305,24 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv) 
         vlog_shm_process(shm_conn_info);
 #endif
     }
+    shm_conn_info->rdy = 0; // todo: lock!
+    
+    vlog(LOG_INFO, "fd_server zeroing shm & exiting.\n");
+    memset(shm_conn_info, 0, sizeof(struct conn_info)); // TODO: lock rdy flag instead!
     vlog(LOG_INFO, "Killing old connections");
     /* Make sure it's dead */
     for (int i = 0; i < 32; i++) {
         if (!(shm_conn_info->channels_mask & (1 << i))) {
             continue;
         }
-        if (!kill(shm_conn_info->stats[i].pid, SIGTERM)) {
-            vlog(LOG_ERR, "Process %d killed with TERM", shm_conn_info->stats[i].pid);
+        if (!kill(shm_conn_info->stats[i].pid, SIGKILL)) {
+            // if we do not kill - then zeroing SHM will cause deadlock
+            vlog(LOG_ERR, "fd_server exiting; killed %d with SIGKILL", shm_conn_info->stats[i].pid);
         }
     }
-// clean up
+    // clean up
     memset(shm_conn_info, 0, sizeof(struct conn_info));
-    vlog(LOG_INFO, "fd_server zeroing shm & exiting.\n");
+    vlog(LOG_ERR, "fd_server exit");
     exit(0);
 
     return 0;

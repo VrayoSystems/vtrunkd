@@ -774,8 +774,8 @@ void segfault_sigaction(int signal, siginfo_t *si, void *arg)
 
 static void sig_term(int sig)
 {
-    vlog(LOG_INFO, "Get sig_term");
-    vlog(LOG_INFO, "Closing connection");
+    //vlog(LOG_INFO, "Get sig_term");
+    //vlog(LOG_ERR, "Closing connection");
     io_cancel();
     linker_term = VTUN_SIG_TERM;
 }
@@ -786,23 +786,6 @@ static void sig_hup(int sig)
     vlog(LOG_INFO, "Reestablishing connection");
     io_cancel();
     linker_term = VTUN_SIG_HUP;
-}
-
-/* Statistic dump */
-void sig_alarm(int sig)
-{
-    vlog(LOG_INFO, "Get sig_alarm");
-    static time_t tm;
-    static char stm[20];
-    /*
-       tm = time(NULL);
-       strftime(stm, sizeof(stm)-1, "%b %d %H:%M:%S", localtime(&tm));
-       fprintf(lfd_host->stat.file,"%s %"PRIu32" %"PRIu32" %"PRIu32" %"PRIu32"\n", stm,
-    lfd_host->stat.byte_in, lfd_host->stat.byte_out,
-    lfd_host->stat.comp_in, lfd_host->stat.comp_out);
-    */
-    //alarm(VTUN_STAT_IVAL);
-    alarm(lfd_host->MAX_IDLE_TIMEOUT);
 }
 
 static void sig_usr1(int sig)
@@ -4817,7 +4800,7 @@ int lfd_linker(void)
                 break_out = 1;
                 break;
             }
-            alarm(0);
+            //alarm(0);
         }
 
         if(break_out) {
@@ -4826,7 +4809,7 @@ int lfd_linker(void)
                 close(info.channel[i].descriptor);
             }
             linker_term = TERM_NONFATAL;
-            alarm(0); // TODO why?
+            //alarm(0); // TODO why?
             goto finish_loop;
         }
 
@@ -9079,27 +9062,33 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler=SIG_IGN;
-    sa.sa_flags=SA_NOCLDWAIT;;
+    sa.sa_flags=SA_NOCLDWAIT;
     sigaction(SIGCHLD,&sa,NULL);
-    sa.sa_handler=sig_alarm;
-    sigaction(SIGALRM,&sa,NULL);
+    
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler=sig_term;
     sigaction(SIGTERM,&sa,&sa_oldterm);
+    
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler=sig_term;
     sigaction(SIGINT,&sa,&sa_oldint);
+    
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler=sig_hup;
     sigaction(SIGHUP,&sa,&sa_oldhup);
+    
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler=sig_usr1;
-    sa.sa_flags=SA_NOCLDWAIT;
     sigaction(SIGUSR1,&sa,&sa_oldusr1);
-    sigaction(SIGCONT,&sa,NULL);
 
 
     sigemptyset (&block_mask);
-    //sigemptyset (&unblock_mask);
+    // sigemptyset (&unblock_mask);
     sigaddset (&block_mask, SIGTERM);
     sigaddset (&block_mask, SIGUSR1);
-    sigaddset (&block_mask, SIGCONT);
+    // sigaddset (&block_mask, SIGCONT);
     sigaddset (&block_mask, SIGHUP);
+    sigaddset (&block_mask, SIGALRM);
     if (sigprocmask(SIG_BLOCK, &block_mask, &unblock_mask) < 0) {
         perror ("sigprocmask");
         return 1;
@@ -9133,7 +9122,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     free(chan_info);
 
     if( host->flags & VTUN_STAT ) {
-        alarm(0);
+        //alarm(0);
         if (host->stat.file)
             fclose(host->stat.file);
     }
