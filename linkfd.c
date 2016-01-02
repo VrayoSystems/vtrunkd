@@ -4098,7 +4098,7 @@ int lossed_consume(unsigned int local_seq_num, unsigned int seq_num, unsigned in
                 *last_received_seq = info.lossed_loop_data[next_missed].seq_num;
                 *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             } else {
-                vlog(LOG_ERR, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
+                vlog(LOG_INFO, "Warning! Cannot set last_received_seq as it is 0! lsn: %d; last lsn: %d, sqn: %d", local_seq_num, info.lossed_loop_data[info.lossed_last_received].local_seq_num, seq_num);
                 *last_local_received_seq = info.lossed_loop_data[next_missed].local_seq_num;
             }
         } else {
