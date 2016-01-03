@@ -269,8 +269,9 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv, 
                 continue;
             }
         }
-        if (select_counter <= 10000)
-            select_counter += tv.tv_usec;
+        if (select_counter <= 10000) {
+            select_counter += 1;
+        }
         if (FD_ISSET(s, &fdset)) {
 
             t = sizeof(remote);
@@ -294,7 +295,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv, 
             } while (!done);
 
             close(s2);
-        } else if (select_counter > 10000) {
+        } else if (select_counter > PROCESS_FD_SHM_TIMEOUT) {
             gettimeofday(&cur_time, NULL);
             if ( srv && ( (cur_time.tv_sec - shm_conn_info->alive) > PROCESS_FD_SHM_TIMEOUT )) {
                 sem_wait(shm_sem);
