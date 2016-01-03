@@ -225,6 +225,7 @@ void listener(void)
     }
 
     memset(shm_conn_info, 0, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM);
+    sem_init(&shm_conn_info[0].shm_sem, 1, 1);
 
     while ( (!server_term) || (server_term == VTUN_SIG_HUP) ) {
         opt = sizeof(cl_addr);

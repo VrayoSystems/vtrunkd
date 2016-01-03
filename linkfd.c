@@ -8873,6 +8873,7 @@ finish_loop:
 
     sem_wait(&(shm_conn_info->stats_sem));
     shm_conn_info->stats[info.process_num].pid = 0;
+    shm_conn_info->stats[info.process_num].name[0] = 0;
     shm_conn_info->stats[info.process_num].weight = 0;
     shm_conn_info->stats[info.process_num].max_send_q = 0;
     shm_conn_info->stats[info.process_num].max_send_q_avg = 0;

@@ -645,7 +645,9 @@ struct conn_info {
     char void1[4096];
 #endif
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
-    char devname[50];
+    sem_t shm_sem;
+    short usecount;
+    char devname[VTUN_DEV_LEN];
     sem_t hard_sem;
     //sem_t frtt; // for frtt calculations and tokens
     sem_t tun_device_sem;
@@ -670,7 +672,6 @@ struct conn_info {
     unsigned long seq_counter[MAX_TCP_LOGICAL_CHANNELS];	// packet sequense counter
     uint32_t flushed_packet[FLUSHED_PACKET_ARRAY_SIZE]; //sync by write_buf_sem
     uint32_t seq_num_unrecoverable_loss; /** seq_num of unrecoverable loss - just flush up to this one since we're going to retransmit anyways */
-    short usecount;
     short lock_pid;	// who has locked shm
     char normal_senders;
     int rxmt_mode_pid; // unused?
