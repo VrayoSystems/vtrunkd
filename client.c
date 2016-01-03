@@ -265,7 +265,7 @@ void client(struct vtun_host *host)
                 //cshit3(&shm_conn_info[0], 39);
 
                 /* Start the tunnel */
-                client_term = tunnel(host, 0);
+                client_term = tunnel(host, 0, NULL);
                 gettimeofday(&cur_time, NULL);
                 shm_conn_info->alive = cur_time.tv_sec; // show we are alive and trying to reconnect still.. (or fd_server will quit)
 

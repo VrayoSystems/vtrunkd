@@ -94,7 +94,7 @@ static void sig_term(int sig) {
     server_term = VTUN_SIG_TERM;
 }
 
-void connection(int sock)
+void connection(int sock, sem_t *shm_sem)
 {
 #ifndef CLIENTONLY
     struct sockaddr_in my_addr, cl_addr;
@@ -140,7 +140,7 @@ void connection(int sock)
         host->start_port = vtun.start_port;
         host->end_port = vtun.end_port;
         /* Start tunnel */
-        tunnel(host, 1);
+        tunnel(host, 1, shm_sem);
 
         vlog(LOG_ERR, "Session %s closed", host->host);
 
@@ -225,7 +225,15 @@ void listener(void)
     }
 
     memset(shm_conn_info, 0, sizeof(struct conn_info) * vtun.MAX_TUNNELS_NUM);
-    sem_init(&shm_conn_info[0].shm_sem, 1, 1);
+    
+    char semname[255];
+    sprintf(semname, "/vtrunkd_%d", vtun.shm_key);
+    sem_t *shm_sem;
+    if ((shm_sem = sem_open(semname, O_CREAT, 0644, 1)) == SEM_FAILED) {
+        perror("shm semaphore initilization");
+        exit(1);
+    }
+    sem_init(&shm_sem, 1, 1);
 
     while ( (!server_term) || (server_term == VTUN_SIG_HUP) ) {
         opt = sizeof(cl_addr);
@@ -247,7 +255,7 @@ void listener(void)
             if (setrlimit(RLIMIT_CORE, &core_limit) < 0) {
                 vlog(LOG_ERR, "setrlimit: Warning: core dumps may be truncated or non-existant reason %s (%d)", strerror(errno), errno);
             }
-            connection(s1);
+            connection(s1, shm_sem);
             break;
         case -1:
             vlog(LOG_ERR, "Couldn't fork()");
@@ -284,7 +292,7 @@ void server(int sock)
         listener();
         break;
     case VTUN_INETD:
-        connection(sock);
+        connection(sock, NULL);
         break;
     }
 }

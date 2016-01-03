@@ -644,9 +644,9 @@ struct conn_info {
     volatile char void11[4096];
     char void1[4096];
 #endif
+    int usecount;
+    int rdy; /* ready flag */
     // char sockname[100], /* remember to init to "/tmp/" and strcpy from byte *(sockname+5) or &sockname[5]*/ // not needed due to devname
-    sem_t shm_sem;
-    short usecount;
     char devname[VTUN_DEV_LEN];
     sem_t hard_sem;
     //sem_t frtt; // for frtt calculations and tokens
@@ -687,7 +687,6 @@ struct conn_info {
 #endif
     long int lock_time;
     long int alive;
-    int rdy; /* ready flag */
     sem_t AG_flags_sem; // semaphore for AG_ready_flags and channels_mask
     uint32_t AG_ready_flag; // contain global flags for aggregation possible 0 - enable 1 - disable sync by AG_flags_sem
     uint32_t channels_mask; // 1 - channel is working 0 - channel is dead sync by AG_flags_sem
@@ -940,7 +939,7 @@ extern int debug_trace;
 
 void server(int sock);
 void client(struct vtun_host *host);
-int  tunnel(struct vtun_host *host, int srv);
+int  tunnel(struct vtun_host *host, int srv, sem_t * shm_sem);
 int  read_config(char *file);
 struct vtun_host * find_host(char *host);
 

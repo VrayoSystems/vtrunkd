@@ -3576,7 +3576,7 @@ uint32_t name2hsnum(char *name) {
 
 uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
     uint32_t hsag_mask = 0;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if(ag_mask & (1 << i)) {
             hsag_mask |= (1 << shm_conn_info->stats[i].hsnum); // set bin mask to 1
         }
@@ -3586,7 +3586,7 @@ uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
 
 uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
     uint32_t ag_mask = 0;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if(hsag_mask & (1 << i)) {
             ag_mask |= (1 << hsnum2pnum(i)); // set bin mask to 1
         }
@@ -6800,7 +6800,7 @@ int lfd_linker(void)
                     vlog(LOG_INFO, "Need to exit by peer");
                 }
                 sem_post(&(shm_conn_info->AG_flags_sem));
-                for (uint32_t i = 0; i < 32; i++) {
+                for (uint32_t i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                     if (!(chan_mask & (1 << i))) {
                         if (last_channels_mask & (1 << i)) {
     #ifdef DEBUGG
@@ -6834,7 +6834,7 @@ int lfd_linker(void)
             info.encap_streams_bitcnt= 0;
             int stsum = 0;
             int stmax=0;
-            for(int i=0;i<32;i++) {//   WARN unsync but seems dont care
+            for(int i=0;i<MAX_TCP_PHYSICAL_CHANNELS;i++) {//   WARN unsync but seems dont care
                 stsum+=shm_conn_info->streams[i];
                 if(stmax<shm_conn_info->streams[i]) {
                     stmax = shm_conn_info->streams[i];
@@ -7416,7 +7416,7 @@ if(drop_packet_flag) {
         //     sem_wait(&(shm_conn_info->AG_flags_sem));
         //     uint32_t chan_mask = shm_conn_info->channels_mask;
         //     sem_post(&(shm_conn_info->AG_flags_sem));
-        //     for (int i = 0; i < 32; i++) {
+        //     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         //         if (chan_mask & (1 << i)) {
         //             alive_physical_channels++;
         //         }
@@ -7570,7 +7570,7 @@ if(drop_packet_flag) {
                                 shm_conn_info->tokens_lastadd_tv = info.current_time;
                                 sem_post(&(shm_conn_info->AG_flags_sem));
                                 info.session_hash_remote = session_hash_remote;
-                                for (int i = 0; i < 32; i++) {
+                                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
                                         continue;
                                     }
@@ -9131,7 +9131,7 @@ int linkfd(struct vtun_host *host, struct conn_info *ci, int ss, int physical_ch
     sem_wait(&(shm_conn_info->AG_flags_sem));
     uint32_t chan_mask = shm_conn_info->channels_mask;
     sem_post(&(shm_conn_info->AG_flags_sem));
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if ((i == info.process_num) || (!(chan_mask & (1 << i)))) {
             continue;
         }

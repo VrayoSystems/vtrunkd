@@ -109,7 +109,7 @@ pid_t read_lock(char * file)
   }
 
   /* Check if process is still alive */
-  if( kill(pid, 0) < 0 && errno == ESRCH ){
+  if(kill(pid, 0) < 0 && errno == ESRCH ){
      /* Process is dead. Remove stale lock. */
      if( unlink(file) < 0 )
         vlog(LOG_ERR, "Unable to remove stale lock %s", file);
@@ -138,7 +138,7 @@ int lock_host(struct vtun_host * host)
 	    vlog(LOG_INFO, "We have another process (process %d), connection deny", pid);
             return -1; //temporaly, deny if process working
            vlog(LOG_INFO, "Killing old connection (process %d)", pid);
-           if( kill(pid, SIGTERM) < 0 && errno != ESRCH ){
+           if(pid != -1 && kill(pid, SIGTERM) < 0 && errno != ESRCH ){
               vlog(LOG_ERR, "Can't kill process %d. %s",pid,strerror(errno));
               return -1;
            }
@@ -149,7 +149,7 @@ int lock_host(struct vtun_host * host)
 	   }
 
 	   /* Make sure it's dead */		 
-           if( !kill(pid, SIGKILL) ){
+           if(pid != -1 && !kill(pid, SIGKILL) ){
               vlog(LOG_ERR, "Process %d ignored TERM, killed with KILL", pid);
    	      /* Remove lock */
               if( unlink(lock_file) < 0 )
