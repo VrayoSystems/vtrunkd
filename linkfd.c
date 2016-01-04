@@ -631,6 +631,7 @@ void profexit(int sig)
              || (forced_rtt_reached && ( \
                         cond_flag \
                       || (buf_len > lfd_host->MAX_ALLOWED_BUF_LEN) \
+                      || timercmp(&packet_wait_tv, &((struct timeval) MAX_PACKET_WAIT), >=) \
                       || (    timercmp(&packet_wait_tv, &max_latency_drop, >=) \
                            && timercmp(&since_write_tv, &shm_conn_info->max_network_stall, >=) ) \
                       || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num < shm_conn_info->seq_num_unrecoverable_loss) \
@@ -1160,7 +1161,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     // if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
     //     shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     // }
-    if(shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
+    if(shm_conn_info->max_stuck_buf_len > TOKENS_MAXWAIT && shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
         shm_conn_info->tokens = shm_conn_info->max_stuck_buf_len;
     }
  
@@ -6092,7 +6093,7 @@ int lfd_linker(void)
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
                 timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
-                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d, APCS=%d tks=%d. Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length, shm_conn_info->APCS, shm_conn_info->tokens);
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d, APCS=%d tks=%d maxstall %ld.%06ld s. Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length, shm_conn_info->APCS, shm_conn_info->tokens, shm_conn_info->max_network_stall);
                 //shm_conn_info->tokenbuf+=50;
                 if(shm_conn_info->tokens == 0) {
                     shm_conn_info->tokens += 10;

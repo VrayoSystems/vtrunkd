@@ -21,4 +21,5 @@
 #define RSR_TOP 2990000 // now infinity...
 #define MIN_PPS 10 // minimal packets per second for the system
 #define TOKENS_MAXWAIT 40 // amount of tokens to wait for drop max. (this limits jitter)
+#define MAX_PACKET_WAIT {5,0} // 5 seconds max possible total lag before unconditional drop
 #endif
