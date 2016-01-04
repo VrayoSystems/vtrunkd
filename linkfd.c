@@ -6083,13 +6083,16 @@ int lfd_linker(void)
                 shm_conn_info->last_net_read_ds = last_net_read_ds;
             }
             
-            struct timeval min_tv, max_pkt_lag, max_lag = {1, 800000}, since_write_tv;
+            struct timeval min_tv, max_pkt_lag, max_lag = {3, 800000}, since_write_tv;
             get_wb_oldest_ts_unsync(&min_tv);
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
                 timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
-                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d Adding 50 packets", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length);
-                shm_conn_info->tokenbuf+=50;
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length);
+                //shm_conn_info->tokenbuf+=50;
+                if(shm_conn_info->tokens == 0) {
+                    shm_conn_info->tokens += 10;
+                }
             }
             
             //if( info.head_channel && (max_speed != shm_conn_info->stats[info.process_num].ACK_speed) ) {
