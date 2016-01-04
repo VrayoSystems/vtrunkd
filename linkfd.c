@@ -3586,9 +3586,13 @@ uint32_t ag_mask2hsag_mask(uint32_t ag_mask) {
 
 uint32_t hsag_mask2ag_mask(uint32_t hsag_mask) {
     uint32_t ag_mask = 0;
+    int hs;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if(hsag_mask & (1 << i)) {
-            ag_mask |= (1 << hsnum2pnum(i)); // set bin mask to 1
+            hs = hsnum2pnum(i);
+            if(hs > -1) {
+                ag_mask |= (1 << hs); // set bin mask to 1
+            }
         }
     }
     return ag_mask;
@@ -6088,7 +6092,7 @@ int lfd_linker(void)
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
                 timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
-                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length);
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d, APCS=%d tks=%d. Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length, shm_conn_info->APCS, shm_conn_info->tokens);
                 //shm_conn_info->tokenbuf+=50;
                 if(shm_conn_info->tokens == 0) {
                     shm_conn_info->tokens += 10;
