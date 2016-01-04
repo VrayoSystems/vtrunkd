@@ -6162,6 +6162,9 @@ int lfd_linker(void)
                 shm_conn_info->APCS_cnt = 0;
                 shm_conn_info->APCS_tick_tv = info.current_time;
             }
+            if(shm_conn_info->APCS < MIN_PPS) {
+                shm_conn_info->APCS = MIN_PPS;
+            }
            
             shm_conn_info->stats[info.process_num].l_pbl = cur_plp; // absolutely unnessessary (done at loop )
             //set_xhi_brl_flags_unsync(); // compute xhi from l_pbl

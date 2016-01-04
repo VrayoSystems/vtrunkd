@@ -19,4 +19,5 @@
 #define WBUF_HASH_SIZE 256
 #define MAX_WBUF_HASH_DEPTH 6
 #define RSR_TOP 2990000 // now infinity...
+#define MIN_PPS 10 // minimal packets per second for the system
 #endif
