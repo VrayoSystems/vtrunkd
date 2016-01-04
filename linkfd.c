@@ -1160,7 +1160,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     // if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
     //     shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     // }
-    if(shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
+    if(shm_conn_info->max_stuck_buf_len > TOKENS_MAXWAIT && shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
         shm_conn_info->tokens = shm_conn_info->max_stuck_buf_len;
     }
  
