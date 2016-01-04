@@ -1337,7 +1337,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
             }
         }
     }
-    shm_conn_info->tokens = 0; // zero tokens and retry again...
+    if(shm_conn_info->tokens > TOKENS_MAXWAIT) shm_conn_info->tokens = TOKENS_MAXWAIT; // zero tokens and retry again...
     return 0;
 }
 

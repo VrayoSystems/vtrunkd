@@ -20,4 +20,5 @@
 #define MAX_WBUF_HASH_DEPTH 6
 #define RSR_TOP 2990000 // now infinity...
 #define MIN_PPS 10 // minimal packets per second for the system
+#define TOKENS_MAXWAIT 40 // amount of tokens to wait for drop max. (this limits jitter)
 #endif
