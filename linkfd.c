@@ -2046,7 +2046,7 @@ int retransmit_send(char *out2) {
  * 
  */
  
-int get_total_sqe_mean_pkt(int *aavg) {
+int get_total_sqe_mean_pkt(int *aavg, int *lim_pkt) {
     int sqe_tot = 0;
     int sqe_pkt;
     *aavg = 1;
@@ -2056,6 +2056,11 @@ int get_total_sqe_mean_pkt(int *aavg) {
         if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask & (1 << i))) { // hope this works..
             sqe_pkt = shm_conn_info->stats[i].sqe_mean / info.eff_len;
             sqe_tot += sqe_pkt;
+            if(shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr) {
+                lim_pkt += shm_conn_info->stats[i].W_cubic;
+            } else {
+                lim_pkt += shm_conn_info->stats[i].rsr;
+            }
             if(sqe_pkt > 0) {
                 *aavg += shm_conn_info->stats[i].ACK_speed_avg / sqe_pkt;
             }
@@ -2075,7 +2080,7 @@ int is_a_hold() {
     uint32_t chan_mask = shm_conn_info->channels_mask;
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         // this does not work - see ag_mask_recv and mode
-        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask & (1 << i))) { // hope this works..
             limit = shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr ? shm_conn_info->stats[i].W_cubic : shm_conn_info->stats[i].rsr;
             sqe = shm_conn_info->stats[i].sqe_mean;
             if( percent_delta_equal(sqe, limit, 15) || (sqe > limit) ) {
@@ -2087,6 +2092,8 @@ int is_a_hold() {
     }
     return 1;
 }
+
+    
 
 int select_net_write(int chan_num) {
     struct timeval tv;
@@ -5476,10 +5483,14 @@ int lfd_linker(void)
             timersub(&info.current_time, &shm_conn_info->head_detected_ts, &tv_tmp_tmp_tmp);
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) HEAD_TRANSITION_DELAY), >=); // protect from immediate dolbejka TODO: need more precise timing
             if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
-                int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
-                int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
-                int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
-                int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
+                int rsrp = 0, sum_aer; 
+                int sqe = get_total_sqe_mean_pkt(&sum_aer, &rsrp);
+                int sqe_above = rsrp * 60 / 100; // above thresh -> push to MBSL
+                int sqe_below = rsrp * 40 / 100; // below thresh -> push to net
+                // int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
+                // int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
+                // int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
+                // int rsrp = shm_conn_info->stats[max_chan].rsr / info.eff_len;
                 if(sqe > sqe_above && sqe_above != rsrp) {
                     //info.head_send_q_shift = - calculate_hsqs_percents(MAX_HSQS_EAT, (sqe - sqe_above) * 100 / (rsrp - sqe_above) ) * sqe / 100/ 100; // negative value
                     if(sqe > rsrp) {
@@ -5788,8 +5799,8 @@ int lfd_linker(void)
             }
             
             // now calculate max RSR limit in case of CWND deficiency
-            int sum_aer;
-            int total_sq = get_total_sqe_mean_pkt(&sum_aer) + shm_conn_info->msbl_recv - MSBL_RESERV;
+            int sum_aer, lim;
+            int total_sq = get_total_sqe_mean_pkt(&sum_aer, &lim) + shm_conn_info->msbl_recv - MSBL_RESERV;
             int total_sq_avail = rsr_top > (MIN_SEND_Q_BESTGUESS_3G * info.eff_len) ? (total_sq - MIN_SEND_Q_BESTGUESS_3G) : (total_sq - rsr_top / info.eff_len);
             int sqe_pkt = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len;
             if(sqe_pkt > 0) {
