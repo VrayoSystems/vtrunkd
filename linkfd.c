@@ -1161,7 +1161,9 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
     // if(shm_conn_info->tokenbuf - MAX_STUB_JITTER > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
     //     shm_conn_info->tokenbuf = shm_conn_info->max_stuck_buf_len + MAX_STUB_JITTER;
     // }
-    if(shm_conn_info->max_stuck_buf_len > TOKENS_MAXWAIT && shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
+    
+    if(shm_conn_info->max_stuck_buf_len > TOKENS_MAXWAIT && shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) {
+    // if(shm_conn_info->tokens > shm_conn_info->max_stuck_buf_len) { // no need for tokenbuf larger than MSBL
         shm_conn_info->tokens = shm_conn_info->max_stuck_buf_len;
     }
  
@@ -1339,6 +1341,7 @@ int get_write_buf_wait_data(uint32_t chan_mask, int *next_token_ms) {
         }
     }
     if(shm_conn_info->tokens > TOKENS_MAXWAIT) shm_conn_info->tokens = TOKENS_MAXWAIT; // zero tokens and retry again...
+    // shm_conn_info->tokens = 0; // needed to ensure that we only have tokens when we can write
     return 0;
 }
 
@@ -4153,7 +4156,7 @@ int get_rttlag(uint32_t ag_mask) {
 }
 
 int get_rto_usec() {
-    int sum_rtt = (shm_conn_info->frtt_local_applied + shm_conn_info->rttvar_worst) * 1000;
+    int sum_rtt = (shm_conn_info->rttvar_worst) * 1000;
     if(sum_rtt > info.max_latency_drop.tv_usec) {
         return sum_rtt;
     }
@@ -6088,12 +6091,12 @@ int lfd_linker(void)
                 shm_conn_info->last_net_read_ds = last_net_read_ds;
             }
             
-            struct timeval min_tv, max_pkt_lag, max_lag = {3, 800000}, since_write_tv;
+            struct timeval min_tv, max_pkt_lag, max_lag = {5, 100000}, since_write_tv;
             get_wb_oldest_ts_unsync(&min_tv);
             timersub(&info.current_time, &min_tv, &max_pkt_lag);
             if(timercmp(&max_pkt_lag, &max_lag, >)) {
                 timersub(&info.current_time, &shm_conn_info->write_buf[1].last_write_time, &since_write_tv);
-                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d, APCS=%d tks=%d maxstall %ld.%06ld s. Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length, shm_conn_info->APCS, shm_conn_info->tokens, shm_conn_info->max_network_stall);
+                vlog(LOG_ERR, "ERROR! Max buffer packet lag exceeded: %ld.%06ld s, wlag %ld.%06ld s, buf_len=%d, APCS=%d tks=%d maxstall %ld.%06ld s MLD %d ms. Adding tokens", max_pkt_lag, since_write_tv, shm_conn_info->write_buf[1].frames.length, shm_conn_info->APCS, shm_conn_info->tokens, shm_conn_info->max_network_stall, get_rto_usec()/1000);
                 //shm_conn_info->tokenbuf+=50;
                 if(shm_conn_info->tokens == 0) {
                     shm_conn_info->tokens += 10;
