@@ -382,6 +382,7 @@ struct conn_stats {
     int32_t max_PCS2;
     int32_t max_sqspd;
     int32_t W_cubic;
+    int max_send_q_available;
     int32_t W_cubic_u;
     int32_t rsr; // sync on stats_sem
     int rtt_phys_avg; // accurate on idling
