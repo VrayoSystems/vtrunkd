@@ -2048,7 +2048,7 @@ int retransmit_send(char *out2) {
  * 
  */
  
-int get_total_sqe_mean_pkt(int *aavg, int *lim_pkt) {
+int get_total_sqe_mean_pkt(int *aavg, int *lim_pkt, int ignore_msqa) {
     int sqe_tot = 0;
     int sqe_pkt;
     *aavg = 1;
@@ -2059,13 +2059,13 @@ int get_total_sqe_mean_pkt(int *aavg, int *lim_pkt) {
             sqe_pkt = shm_conn_info->stats[i].sqe_mean / info.eff_len;
             sqe_tot += sqe_pkt;
             if(shm_conn_info->stats[i].W_cubic < shm_conn_info->stats[i].rsr) {
-                if(shm_conn_info->stats[i].max_send_q_available < shm_conn_info->stats[i].W_cubic) {
+                if(!ignore_msqa && shm_conn_info->stats[i].max_send_q_available < shm_conn_info->stats[i].W_cubic) {
                     *lim_pkt += shm_conn_info->stats[i].max_send_q_available / info.eff_len;
                 } else {
                     *lim_pkt += shm_conn_info->stats[i].W_cubic / info.eff_len;
                 }
             } else {
-                if(shm_conn_info->stats[i].max_send_q_available < shm_conn_info->stats[i].rsr) {
+                if(!ignore_msqa && shm_conn_info->stats[i].max_send_q_available < shm_conn_info->stats[i].rsr) {
                     *lim_pkt += shm_conn_info->stats[i].max_send_q_available / info.eff_len;
                 } else {
                     *lim_pkt += shm_conn_info->stats[i].rsr / info.eff_len;
@@ -5495,7 +5495,7 @@ int lfd_linker(void)
             int headswitch_start_ok = timercmp(&tv_tmp_tmp_tmp, &((struct timeval) HEAD_TRANSITION_DELAY), >=); // protect from immediate dolbejka TODO: need more precise timing
             if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
                 int rsrp = 0, sum_aer; 
-                int sqe = get_total_sqe_mean_pkt(&sum_aer, &rsrp);
+                int sqe = get_total_sqe_mean_pkt(&sum_aer, &rsrp, 0);
                 int sqe_above = rsrp * 85 / 100; // above thresh -> push to MBSL
                 int sqe_below = rsrp * 75 / 100; // below thresh -> push to net
                 // int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
@@ -5827,12 +5827,12 @@ int lfd_linker(void)
             
             // now calculate max RSR limit in case of CWND deficiency
             int sum_aer, lim;
-            int total_sq_pkt = get_total_sqe_mean_pkt(&sum_aer, &lim) + shm_conn_info->msbl_recv - MSBL_RESERV;
+            int total_sq_pkt = get_total_sqe_mean_pkt(&sum_aer, &lim, 1) + shm_conn_info->msbl_recv - MSBL_RESERV;
             int total_sq_avail = rsr_top > (MIN_SEND_Q_BESTGUESS_3G_PKT * info.eff_len) ? (total_sq_pkt - MIN_SEND_Q_BESTGUESS_3G_PKT) : (total_sq_pkt - rsr_top / info.eff_len);
             int sqe_pkt = shm_conn_info->stats[info.process_num].sqe_mean / info.eff_len;
             if(sqe_pkt > 0) {
                 int aer = shm_conn_info->stats[info.process_num].ACK_speed_avg / sqe_pkt;
-                if(aer > 0) {
+                if(aer > 0 && sum_aer > 0) {
                     max_send_q_available = (total_sq_avail * aer) / sum_aer * info.eff_len;
                 } else {
                     max_send_q_available = SEND_Q_AG_ALLOWED_THRESH; // what to do if our ACS == 0? we're R_MODE probably..
@@ -6408,7 +6408,7 @@ int lfd_linker(void)
             
 #ifndef CLIENTONLY
             int tot_lim = 0, ss;
-            int tot_sq = get_total_sqe_mean_pkt(&ss, &tot_lim);
+            int tot_sq = get_total_sqe_mean_pkt(&ss, &tot_lim, 0);
             add_json(js_buf, &js_cur, "tsq", "%d", tot_sq);
             add_json(js_buf, &js_cur, "tlm", "%d", tot_lim);
             add_json(js_buf, &js_cur, "PCS2", "%d", PCS * 2);
