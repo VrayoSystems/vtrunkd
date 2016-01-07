@@ -751,7 +751,7 @@ struct conn_info {
     int max_chan_new;
     struct timeval head_detected_ts;
     int max_allowed_rtt; // MAR calculated against current speed and send_q
-    int tpps;
+    int tpps; // transfer packets per second
     int forced_rtt_remote;
     int rttvar_worst;
     uint32_t latest_la_sqn; /** latest SQN used to identify HSQS event update age */

@@ -4424,7 +4424,7 @@ int mawmar_allowed() {
     statb.mar = MAR;
     if(shm_conn_info->stats[info.process_num].ag_flag_local == R_MODE) {
         //return (MAW + MAR < cwnd) && (MAR < BL);
-        return (my_limit / info.eff_len < BL) && (MAR < BL); // in fact, we only need to check that our limit is reachable by pushing MSBL to net
+        return (my_limit / info.eff_len < BL) && (MAR < BL); // in theory we need to check MAW+MAR - if, after we push msbl to net, we will still be able to compansate for the jitter
     } else { // AG_MODE
         return (MAR < BL); // this will automatically fail if we push all the MSBL to network
     }
