@@ -5013,6 +5013,7 @@ int lfd_linker(void)
     info.rtt2 = 0;
     int was_hold_mode = 0; // TODO: remove, testing only!
     int send_q_eff_mean = 0;
+    int send_q_eff_var = 0;
     int channel_dead = 0;
     int exact_rtt = 0;
     int t; // time for W
@@ -5493,8 +5494,8 @@ int lfd_linker(void)
             if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
                 int rsrp = 0, sum_aer; 
                 int sqe = get_total_sqe_mean_pkt(&sum_aer, &rsrp);
-                int sqe_above = rsrp * 60 / 100; // above thresh -> push to MBSL
-                int sqe_below = rsrp * 40 / 100; // below thresh -> push to net
+                int sqe_above = rsrp * 80 / 100; // above thresh -> push to MBSL
+                int sqe_below = rsrp * 70 / 100; // below thresh -> push to net
                 // int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
                 // int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
                 // int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
@@ -5637,7 +5638,15 @@ int lfd_linker(void)
             //send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?) // TODO: use correct smoothing algorithm!
             send_q_eff_mean = 6 * send_q_eff_mean / 7 + send_q_eff / 7;
             if(send_q_eff < info.max_send_q) {
-                info.max_send_q = 8 * info.max_send_q / 9 + send_q_eff / 9;
+                info.max_send_q = 25 * info.max_send_q / 26 + send_q_eff / 26;
+            } else {
+                info.max_send_q = send_q_eff;
+            }
+            int sqe_delta = send_q_eff - send_q_eff_mean;
+            if(sqe_delta > 0) {
+                send_q_eff_var = (6 * send_q_eff_var  +  sqe_delta)/7;
+            } else {
+                send_q_eff_var = (6 * send_q_eff_var  -  sqe_delta)/7;
             }
             
             if(shm_conn_info->stats[info.process_num].sqe_mean_lossq < send_q_eff) {
@@ -5646,9 +5655,6 @@ int lfd_linker(void)
                 //send_q_eff_mean += (send_q_eff - send_q_eff_mean) / 30; // TODO: choose aggressiveness for smoothed-sqe (50?)
                 //shm_conn_info->stats[info.process_num].sqe_mean_lossq = (send_q_eff - shm_conn_info->stats[info.process_num].sqe_mean_lossq) / 30;
                 shm_conn_info->stats[info.process_num].sqe_mean_lossq = 6 * shm_conn_info->stats[info.process_num].sqe_mean_lossq / 7 + send_q_eff / 7;
-            }
-            if (info.max_send_q < send_q_eff_mean) {
-                info.max_send_q = send_q_eff_mean;
             }
             if (info.max_send_q_u < send_q_eff_mean) {
                 info.max_send_q_u = send_q_eff_mean;
@@ -5693,6 +5699,7 @@ int lfd_linker(void)
         }
         shm_conn_info->stats[info.process_num].channel_dead = channel_dead;
         shm_conn_info->stats[info.process_num].sqe_mean = send_q_eff_mean;
+        shm_conn_info->stats[info.process_num].sqe_var = send_q_eff_mean;
         shm_conn_info->stats[info.process_num].max_send_q = send_q_eff;
         shm_conn_info->stats[info.process_num].exact_rtt = exact_rtt;
         shm_conn_info->stats[info.process_num].rttvar = rttvar;
@@ -6358,6 +6365,8 @@ int lfd_linker(void)
             //add_json(js_buf, &js_cur, "THR", "%u", info.send_q_limit_threshold); // long-unused (CDT only)
             add_json(js_buf, &js_cur, "send_q", "%d", (int)send_q_eff);
             add_json(js_buf, &js_cur, "sqe_mean", "%d", send_q_eff_mean);
+            add_json(js_buf, &js_cur, "sqe_var", "%d", send_q_eff_var);
+            add_json(js_buf, &js_cur, "sqe_max", "%d", info.max_send_q);
             add_json(js_buf, &js_cur, "strms", "%d", info.encap_streams);
             //add_json(js_buf, &js_cur, "ACS", "%d", info.packet_recv_upload_avg); // this is actually required!
             add_json(js_buf, &js_cur, "APCS", "%d", shm_conn_info->APCS);
@@ -8159,11 +8168,13 @@ if(drop_packet_flag) {
                                 } else {
                                     //if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
                                     if (info.max_send_q >= info.send_q_limit_cubic_max) {
+                                    // if (send_q_eff_mean + send_q_eff_var/2 >= info.send_q_limit_cubic_max) {
                                         info.Wmax_saved = info.send_q_limit_cubic_max;
                                         info.Wmax_tv = loss_time;
                                         //info.send_q_limit_cubic_max = info.channel[my_max_send_q_chan_num].send_q;
                                         // if(info.max_send_q > info.send_q_limit_cubic) {
                                             info.send_q_limit_cubic_max = info.max_send_q;
+                                            // info.send_q_limit_cubic_max = send_q_eff_mean + send_q_eff_var/2;
                                         // } else {
                                         //     info.send_q_limit_cubic_max = info.send_q_limit_cubic;
                                         // }
@@ -8175,6 +8186,7 @@ if(drop_packet_flag) {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
                                         // if(info.max_send_q > info.send_q_limit_cubic) {
                                             info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                            // info.send_q_limit_cubic_max = (int) ((double)send_q_eff_var * (2.0 - info.B) / 2.0);
                                         // } else {
                                         //     info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);
                                         // }

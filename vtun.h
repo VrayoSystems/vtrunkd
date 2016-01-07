@@ -390,6 +390,7 @@ struct conn_stats {
     int srtt2_10; // COPIED from info RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
     int srtt2_100; // COPIED from info RTT based on per-packet ACK delivery watch; very accurate on high speeds; does not work while idling
     int sqe_mean;
+    int sqe_var;
     int sqe_mean_lossq;
     int my_max_send_q_chan_num;
     int ag_flag_local;
