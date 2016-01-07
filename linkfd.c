@@ -337,6 +337,7 @@ struct {
     int p_tooold;
     int p_expnum;
     int p_tooearly;
+    int web_surf_optimization;
 } statb;
 
 
@@ -1191,6 +1192,7 @@ static inline int add_tokens(int chan_num, int *next_token_ms) {
 int check_tokens(int chan_num) {
     if(shm_conn_info->avg_len_in <= AVG_LEN_IN_ACK_THRESH) {
         shm_conn_info->max_stuck_buf_len = 0;
+        statb.web_surf_optimization |= 1;
         return 1; 
     }
     // if(shm_conn_info->slow_start_recv) {
@@ -5494,8 +5496,8 @@ int lfd_linker(void)
             if(shm_conn_info->stats[max_chan].loss_send_q != LOSS_SEND_Q_UNKNOWN) {
                 int rsrp = 0, sum_aer; 
                 int sqe = get_total_sqe_mean_pkt(&sum_aer, &rsrp);
-                int sqe_above = rsrp * 80 / 100; // above thresh -> push to MBSL
-                int sqe_below = rsrp * 70 / 100; // below thresh -> push to net
+                int sqe_above = rsrp * 85 / 100; // above thresh -> push to MBSL
+                int sqe_below = rsrp * 75 / 100; // below thresh -> push to net
                 // int sqe_above = shm_conn_info->stats[max_chan].rsr * 60 / 100 / info.eff_len; // above thresh -> push to MBSL
                 // int sqe_below = shm_conn_info->stats[max_chan].rsr * 40 / 100 / info.eff_len; // below thresh -> push to net
                 // int sqe = shm_conn_info->stats[max_chan].sqe_mean / info.eff_len; // no sync, don't care about actual value +-?
@@ -5522,12 +5524,14 @@ int lfd_linker(void)
                     //need_send_FCI = 1;
                 } else if(sqe < sqe_below && sqe_below > 0) {
                     //info.head_send_q_shift = calculate_hsqs_percents(MAX_HSQS_PUSH, (sqe_below - sqe) * 100 / sqe_below ) * sqe / 100/100; // positive value
-                    if(percent_delta_equal(sqe, sqe_below, 20)) {
+                    if(percent_delta_equal(sqe, sqe_below, 10)) {
                         info.head_send_q_shift = 1;
+                    } else if(percent_delta_equal(sqe, sqe_below, 20)) {
+                        info.head_send_q_shift = 3;
                     } else if(percent_delta_equal(sqe, sqe_below, 40)) {
-                        info.head_send_q_shift = 2;
+                        info.head_send_q_shift = 5;
                     } else {
-                        info.head_send_q_shift = 30;
+                        info.head_send_q_shift += 3;
                     }
                     //need_send_FCI = 1;
                 } else {
@@ -5585,8 +5589,14 @@ int lfd_linker(void)
                         }
                     }
                 }
-                if((max_rtt * shm_conn_info->APCS)/1000 < 80) {
+                if(max_rtt && ((max_rtt * shm_conn_info->APCS)/1000 < 80)) {
+                    // if(shm_conn_info->max_stuck_buf_len > 10) shm_conn_info->max_stuck_buf_len -= 10;
+                    // else
                     shm_conn_info->max_stuck_buf_len = 0;
+                    if(max_rtt < 50) 
+                        statb.web_surf_optimization |= 4;
+                    else
+                        statb.web_surf_optimization |= 2;
                 }
                 // <-- end workaround
                 shm_conn_info->msbl_tick = info.current_time;
@@ -6393,6 +6403,8 @@ int lfd_linker(void)
             add_json(js_buf, &js_cur, "tks", "%d", statb.tokens_max);
             add_json(js_buf, &js_cur, "msqa", "%d", shm_conn_info->stats[info.process_num].max_send_q_available);
             statb.tokens_max = 0;
+            add_json(js_buf, &js_cur, "wso", "%d", statb.web_surf_optimization);
+            statb.web_surf_optimization = 0;
             
 #ifndef CLIENTONLY
             int tot_lim = 0, ss;
