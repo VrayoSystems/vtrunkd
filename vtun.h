@@ -292,7 +292,7 @@ struct vtun_host {
 #define AG_MODE 1
 #define R_MODE 0
 
-#define W_STREAMS_AMT 10000 // amount of streams (in collisions) of write buffer retransmit seq queueing
+#define W_STREAMS_AMT 1000
 
 #define PLP_BUF_SIZE 20 // size of buffer used for old values of PBL for PLP calc
 #define PLP_BUF_TIMEOUT_MS 5000 // timeout for PLP buffer values
@@ -631,6 +631,7 @@ struct timed_loss {
 struct streams_seq {
     unsigned int seq;
     struct timeval ts;
+    int packets;
 };
 
 struct frame_hash {
@@ -788,7 +789,8 @@ struct conn_info {
     int avg_len_in;
     int avg_len_out;
     struct timeval slow_start_tv;
-    struct streams_seq w_streams[W_STREAMS_AMT];
+    // struct streams_seq w_streams[W_STREAMS_AMT];
+    int w_stream_pkts[W_STREAMS_AMT]; /** packets for this stream currently in wb */
     struct timeval cwr_tv; // for CWND Reserve 1s
     struct timeval max_network_stall; /** drop packets if this value is exceeded */
     int head_send_q_shift_recv; 

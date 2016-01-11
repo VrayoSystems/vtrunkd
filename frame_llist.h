@@ -45,6 +45,8 @@ struct frame_seq {
     int current_rtt;
     uint32_t marker;
     int stub_counter; // amount of stub packets before this one to skip
+    unsigned int shash; // stream hash (max W_STREAMS_AMT)
+    int unconditional_write_flag;
 };
 
 struct frame_llist{

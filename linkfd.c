@@ -76,6 +76,7 @@
 #ifdef HAVE_NETINET_TCP_H
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 #endif
 
 #include "udp_states.h"
@@ -626,7 +627,7 @@ void profexit(int sig)
 #define IF_WRITE_CONDITION timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].time_stamp, &packet_wait_tv); \
         timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv); \
         forced_rtt_reached=check_tokens(logical_channel); \
-        cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
+        cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == 0) || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
         buf_len = shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_tail].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq; \
         if ( shm_conn_info->is_single_channel \
              || (forced_rtt_reached && ( \
@@ -895,6 +896,7 @@ int discard_packets(int chan_num, uint32_t stop_sqn) {
         // now jsut discard the packet
         cnt++;
         vlog(LOG_INFO, "Discarding seq_num %ld cnt %d", sqn, cnt);
+        shm_conn_info->w_stream_pkts[shm_conn_info->frames_buf[idx].shash % W_STREAMS_AMT]--;
         n_idx = shm_conn_info->frames_buf[idx].rel_next;
         if(frame_llist_pull(&shm_conn_info->write_buf[chan_num].frames, shm_conn_info->frames_buf, &idx) < 0) {
             vlog(LOG_ERR, "WARNING! discard_packets tried to pull from empty write_buf 2!");
@@ -1606,6 +1608,11 @@ unsigned int get_tcp_hash(char *buf, unsigned int *tcp_seq) {
         hash += udp->source;
         hash += udp->dest;
     }
+    if (ip->ip_p == 1) { // ICMP
+        struct icmphdr *icmp = (struct icmphdr*) (buf + sizeof(struct my_ip));
+        hash += icmp->un.echo.id;
+    }
+    
     return hash;
 }
 
@@ -2300,12 +2307,13 @@ int select_devread_send(char *buf, char *out2) {
 #endif
 
         // now determine packet IP..
-        unsigned int tcp_seq2 = 0;
-        unsigned int hash = get_tcp_hash(buf, &tcp_seq2);
-        chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
-        info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
-        if (shm_conn_info->streams[hash % 31] < 255)
-            shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
+        // unsigned int tcp_seq2 = 0;
+        // unsigned int hash = get_tcp_hash(buf, &tcp_seq2);
+        // chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
+        chan_num = 1;
+        // info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
+        // if (shm_conn_info->streams[hash % 31] < 255)
+        //     shm_conn_info->streams[hash % 31]++; // WARNING unsync but seems okay
         sem_wait(&(shm_conn_info->common_sem));
         if(shm_conn_info->ag_mask_recv & (1 << info.process_num)) {
             shm_conn_info->t_model_rtt100 = ((TMRTTA - 1) * shm_conn_info->t_model_rtt100 + info.exact_rtt * 100) / TMRTTA; // RFC6298 compliant
@@ -2824,27 +2832,20 @@ int write_buf_check_n_flush(int logical_channel) {
                 shm_conn_info->write_sequential++;
             }
             shm_conn_info->prev_flushed = 0;
-            shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
 
             struct frame_seq *frame_seq_tmp = &shm_conn_info->frames_buf[fprev];
-#ifdef DEBUGG
-            struct timeval work_loop1, work_loop2;
-            gettimeofday(&work_loop1, NULL );
-            if (timercmp(&tv_tmp, &max_latency_drop, >=)) {
-                vlog(LOG_INFO, "flush packet %"PRIu32" lws %"PRIu32" %ld.%06ld", shm_conn_info->frames_buf[fprev].seq_num,
-                        shm_conn_info->write_buf[logical_channel].last_written_seq, tv_tmp.tv_sec, tv_tmp.tv_usec);
-            }
-#endif            
+
             // calculate this stream TCP_seq_nums etc.
-            unsigned int tcp_seq2 = 0;
-            unsigned int hash = get_tcp_hash(frame_seq_tmp->out, &tcp_seq2);
-            unsigned int tcp_seq = getTcpSeq(frame_seq_tmp->out);
-            shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
-            if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
-                shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
-            }
+            unsigned int tcp_seq2 = 0, hash, tcp_seq;
+            shm_conn_info->w_stream_pkts[shm_conn_info->frames_buf[fprev].shash % W_STREAMS_AMT]--;
+            // unsigned int hash = get_tcp_hash(frame_seq_tmp->out, &tcp_seq2);
+            // unsigned int tcp_seq = getTcpSeq(frame_seq_tmp->out);
+            // shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
+            // if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
+            //     shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
+            // }
             // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
-            int need_drop = (shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync();
+            int need_drop = shm_conn_info->frames_buf[fprev].unconditional_write_flag || ((shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync());
             if(frame_seq_tmp->len > 0 && !need_drop) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp->out, frame_seq_tmp->len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
@@ -2862,7 +2863,7 @@ int write_buf_check_n_flush(int logical_channel) {
                     }
                 }
             } else {
-                vlog(LOG_INFO, "dropping frame at write seq_num %lu", shm_conn_info->frames_buf[fprev].seq_num);
+                vlog(LOG_INFO, "dropping frame at write seq_num %lu unf %d", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->frames_buf[fprev].unconditional_write_flag);
                 drop_counter++;
                 // shm_conn_info->write_buf[logical_channel].frames.stub_total--;
                 
@@ -2880,13 +2881,15 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
-            if (shm_conn_info->tokens > 0) {
-                shm_conn_info->tokens--; // remove a token...
+            if(shm_conn_info->frames_buf[fprev].seq_num != 0) {
+                if (shm_conn_info->tokens > 0) {
+                    shm_conn_info->tokens--; // remove a token...
+                }
+                shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
+                shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
+                shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
+                shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
             }
-            shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
-            shm_conn_info->write_buf[logical_channel].last_write_time.tv_sec = info.current_time.tv_sec;
-            shm_conn_info->write_buf[logical_channel].last_write_time.tv_usec = info.current_time.tv_usec;
-            shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
             assert_packet_ipv4("writing to dev", frame_seq_tmp->out, frame_seq_tmp->len);
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
@@ -3104,6 +3107,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->frames_buf[newf].physical_channel_num = info.process_num;
     shm_conn_info->frames_buf[newf].time_stamp = info.current_time;
     shm_conn_info->frames_buf[newf].current_rtt = info.exact_rtt;
+    shm_conn_info->frames_buf[newf].unconditional_write_flag = 0;
     struct timeval t_rtt, t_frtt, tv_tmp;
     int full_rtt = ((shm_conn_info->forced_rtt_recv > shm_conn_info->frtt_local_applied) ? shm_conn_info->forced_rtt_recv : shm_conn_info->frtt_local_applied);
     if(info.exact_rtt < full_rtt) {
@@ -3137,6 +3141,29 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         //}
     }
     int written = 0;
+    unsigned int tcp_seq2 = 0;
+    unsigned int shash = get_tcp_hash(out, &tcp_seq2);
+    int unf = -1;
+    if(i>=0 && shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT] == 0 && shm_conn_info->frames_buf[i].seq_num != 0) {
+        // duplicate this packet in front of queue
+        if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &unf) < 0) {
+            vlog(LOG_ERR, "WARNING! Can not write new stream packet in front: no free elements in buffer");
+        } else {
+            shm_conn_info->write_buf[conn_num].frames.rel_head = unf;
+            shm_conn_info->frames_buf[unf].rel_next = i;
+            
+            shm_conn_info->frames_buf[unf].unconditional_write_flag = 0; // this is unnessessary; we check zero seq_num- this is used only to indicate that we need to skip the packet write (real one; see below)
+            shm_conn_info->frames_buf[unf].seq_num = 0; //=0: these packets are written unconditionally
+            shm_conn_info->frames_buf[unf].len = len;
+            shm_conn_info->frames_buf[unf].sender_pid = mypid;
+            shm_conn_info->frames_buf[unf].physical_channel_num = info.process_num;
+            shm_conn_info->frames_buf[unf].time_stamp = info.current_time;
+            shm_conn_info->frames_buf[unf].current_rtt = info.exact_rtt;
+            memcpy(shm_conn_info->frames_buf[unf].out, out, len); // now actually copy the data.. just a tiny optimization
+            shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
+            shm_conn_info->frames_buf[unf].shash = shash;
+        }
+    }
     if(i<0) { // buffer empty.
         shm_conn_info->frames_buf[newf].rel_next = -1;
         shm_conn_info->write_buf[conn_num].frames.rel_head = shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
@@ -3147,12 +3174,16 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
         shm_conn_info->write_buf_hashtable[hash].n = newf;
         shm_conn_info->APCS_cnt++;
+        shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
+        shm_conn_info->frames_buf[newf].shash = shash;
+        if(unf >= 0) {
+            shm_conn_info->frames_buf[newf].unconditional_write_flag = 1;
+        }
         return mlen;
     } else { // buffer not empty
         // if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
         //     vlog(LOG_ERR, "WARNING! added one packet loss! %lu +2= %lu", shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num, seq_num);
         // }
-
         if( (shm_conn_info->frames_buf[i].seq_num > seq_num) &&
                 (shm_conn_info->frames_buf[i].rel_next > -1)) { // new packet is older (&lt) than all the buffer
             // append to head
@@ -3256,6 +3287,11 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
     shm_conn_info->write_buf_hashtable[hash].n = newf;
     shm_conn_info->APCS_cnt++;
+    shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
+    shm_conn_info->frames_buf[newf].shash = shash;
+    if(unf >= 0) {
+        shm_conn_info->frames_buf[newf].unconditional_write_flag = 1;
+    }
 
     mlen = 0; //missing_resend_buffer (conn_num, incomplete_seq_buf, buf_len);
 
@@ -6909,20 +6945,20 @@ int lfd_linker(void)
 
             info.encap_streams = NumberOfSetBits(info.encap_streams_bitcnt);
             info.encap_streams_bitcnt= 0;
-            int stsum = 0;
-            int stmax=0;
-            for(int i=0;i<MAX_TCP_PHYSICAL_CHANNELS;i++) {//   WARN unsync but seems dont care
-                stsum+=shm_conn_info->streams[i];
-                if(stmax<shm_conn_info->streams[i]) {
-                    stmax = shm_conn_info->streams[i];
-                }
-                shm_conn_info->streams[i]=0;
-            }
-            if((stsum-stmax) > (stmax/20)) {
-                shm_conn_info->single_stream=0;
-            } else {
-                shm_conn_info->single_stream=1;
-            }
+            // int stsum = 0;
+            // int stmax=0;
+            // for(int i=0;i<MAX_TCP_PHYSICAL_CHANNELS;i++) {//   WARN unsync but seems dont care
+            //     stsum+=shm_conn_info->streams[i];
+            //     if(stmax<shm_conn_info->streams[i]) {
+            //         stmax = shm_conn_info->streams[i];
+            //     }
+            //     shm_conn_info->streams[i]=0;
+            // }
+            // if((stsum-stmax) > (stmax/20)) {
+            //     shm_conn_info->single_stream=0;
+            // } else {
+            //     shm_conn_info->single_stream=1;
+            // }
             
             set_IDLE();
 
@@ -7120,6 +7156,19 @@ int lfd_linker(void)
             check_result = check_consistency_free(FRAME_BUF_SIZE, info.channel_amount, shm_conn_info->write_buf, &shm_conn_info->wb_free_frames, shm_conn_info->frames_buf);
             if(shm_conn_info->write_buf[1].frames.length < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf length < 0: %d", shm_conn_info->write_buf[1].frames.length);
+            }
+            if(shm_conn_info->write_buf[1].frames.length == 0) {
+                int pct = 0;
+                for(int j=0; j<W_STREAMS_AMT; j++) {
+                    if(shm_conn_info->w_stream_pkts[j] >= 0) {
+                        pct += shm_conn_info->w_stream_pkts[j];
+                    } else {
+                        vlog(LOG_ERR, "ASSERT FAILED: stream hash %d < 0: %d", j, shm_conn_info->w_stream_pkts[j]);
+                    }
+                }
+                if(pct != 0) {
+                    vlog(LOG_ERR, "ASSERT FAILED: write_buf length == 0 but streams != 0: %d", pct);
+                }
             }
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
@@ -7665,6 +7714,7 @@ if(drop_packet_flag) {
                                     frame_llist_fill(&(shm_conn_info->wb_free_frames), shm_conn_info->frames_buf, FRAME_BUF_SIZE);
                                 }
                                 shm_conn_info->max_network_stall = (struct timeval) MAX_NETWORK_STALL;
+                                memset(shm_conn_info->w_stream_pkts, 0, sizeof(shm_conn_info->w_stream_pkts));
                                 sem_post(&(shm_conn_info->write_buf_sem));
                                 sem_wait(&(shm_conn_info->resend_buf_sem));
                                 for (i = 0; i < RESEND_BUF_SIZE; i++) {
@@ -7986,7 +8036,8 @@ if(drop_packet_flag) {
                             add_json(lossLog, &lossLog_cur, "i_ertt", "%d", shm_conn_info->t_model_rtt100/100); 
                             add_json(lossLog, &lossLog_cur, "i_tpps", "%d", tpps);
                             add_json(lossLog, &lossLog_cur, "i_strms", "%d", info.encap_streams);
-                            add_json(lossLog, &lossLog_cur, "i_sstrm", "%d", shm_conn_info->single_stream);
+                            // add_json(lossLog, &lossLog_cur, "i_sstrm", "%d", shm_conn_info->single_stream);
+                            add_json(lossLog, &lossLog_cur, "i_sstrm", "0");
                             add_json(lossLog, &lossLog_cur, "i_eff_len", "%d", info.eff_len);
                             int ch=NumberOfSetBits(chan_mask);
                             // for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
