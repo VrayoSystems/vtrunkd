@@ -5591,15 +5591,15 @@ int lfd_linker(void)
                         }
                     }
                 }
-                // if(max_rtt && ((max_rtt * shm_conn_info->APCS)/1000 < 80)) {
-                //     // if(shm_conn_info->max_stuck_buf_len > 10) shm_conn_info->max_stuck_buf_len -= 10;
-                //     // else
-                //     shm_conn_info->max_stuck_buf_len = 0;
-                //     if(max_rtt < 50) 
-                //         statb.web_surf_optimization |= 4;
-                //     else
-                //         statb.web_surf_optimization |= 2;
-                // }
+                if(max_rtt && ((max_rtt * shm_conn_info->APCS)/1000 < 80)) {
+                    // if(shm_conn_info->max_stuck_buf_len > 10) shm_conn_info->max_stuck_buf_len -= 10;
+                    // else
+                    shm_conn_info->max_stuck_buf_len = 0;
+                    if(max_rtt < 50) 
+                        statb.web_surf_optimization |= 4;
+                    else
+                        statb.web_surf_optimization |= 2;
+                }
                 // <-- end workaround
                 shm_conn_info->msbl_tick = info.current_time;
             }
@@ -6287,6 +6287,17 @@ int lfd_linker(void)
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
             
+            info.psl_per_second = info.psl_count * 2;
+            info.loss_events_per_second = info.loss_event_count * 2;
+            info.psl_count = 0;
+            info.loss_event_count = 0;
+            if(info.loss_events_per_second > 10 && info.psl_per_second > 100) {
+                info.xlm = 1;
+            } else {
+                info.xlm = 0;
+            }
+                
+            
             //Check time interval and ping if need.
             if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) ) {
     				// ping ALL channels! this is required due to 120-sec limitation on some NATs
@@ -6407,6 +6418,9 @@ int lfd_linker(void)
             statb.tokens_max = 0;
             add_json(js_buf, &js_cur, "wso", "%d", statb.web_surf_optimization);
             statb.web_surf_optimization = 0;
+            add_json(js_buf, &js_cur, "pslps", "%d", info.psl_per_second);
+            add_json(js_buf, &js_cur, "lps", "%d", info.loss_events_per_second);
+            
             
 #ifndef CLIENTONLY
             int tot_lim = 0, ss;
@@ -7855,8 +7869,6 @@ if(drop_packet_flag) {
                             } else {
                                 add_json(lossLog, &lossLog_cur, "l_psl", "%d", ntohl(tmp_h));
                                 psl = ntohl(tmp_h);
-                                info.psl_count += psl;
-                                info.loss_event_count++;
                             }
 
                             memcpy(&tmp_h, buf + sizeof(uint16_t) + 4 * sizeof(uint32_t), sizeof(uint32_t));
@@ -7904,6 +7916,10 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
+                                if(who_lost == info.process_num) {
+                                    info.psl_count += psl;
+                                    info.loss_event_count++;
+                                }
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
@@ -8183,7 +8199,7 @@ if(drop_packet_flag) {
                                     info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                 } else {
                                     //if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
-                                    if (info.max_send_q >= info.send_q_limit_cubic_max) {
+                                    if (!info.xlm && info.max_send_q >= info.send_q_limit_cubic_max) {
                                     // if (send_q_eff_mean + send_q_eff_var/2 >= info.send_q_limit_cubic_max) {
                                         info.Wmax_saved = info.send_q_limit_cubic_max;
                                         info.Wmax_tv = loss_time;
@@ -8201,7 +8217,11 @@ if(drop_packet_flag) {
                                     } else {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
                                         // if(info.max_send_q > info.send_q_limit_cubic) {
-                                            info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                            if(info.xlm) {
+                                                info.send_q_limit_cubic_max = info.max_send_q / 2;
+                                            } else {
+                                                info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                            }
                                             // info.send_q_limit_cubic_max = (int) ((double)send_q_eff_var * (2.0 - info.B) / 2.0);
                                         // } else {
                                         //     info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);
