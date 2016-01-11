@@ -1997,7 +1997,8 @@ int retransmit_send(char *out2) {
         uint16_t sum;
         len = seqn_break_tail(out_buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(i, out_buf, len, tmp_seq_counter, info.channel[i].local_seq_num, tmp_flag);
-        if( (info.rtt2_lsn[i] == 0) && ((shm_conn_info->stats[info.process_num].max_ACS2/info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
+        // if( (info.rtt2_lsn[i] == 0) && ((shm_conn_info->stats[info.process_num].ACK_speed /info.eff_len) > (1000/shm_conn_info->stats[info.process_num].exact_rtt)) ) {
+        if(info.rtt2_lsn[i] == 0) {
             info.rtt2_lsn[i] = info.channel[i].local_seq_num;
             info.rtt2_tv[i] = info.current_time;
             info.rtt2_send_q[i] = info.channel[i].send_q;
@@ -2416,8 +2417,9 @@ int select_devread_send(char *buf, char *out2) {
 
         len = seqn_break_tail(buf, len, &tmp_seq_counter, &tmp_flag, &local_seq_num_p, &sum, &local_seq_num_p, &local_seq_num_p); // last four unused
         len = pack_packet(chan_num, buf, len, tmp_seq_counter, info.channel[chan_num].local_seq_num, tmp_flag);
-        if ((info.rtt2_lsn[chan_num] == 0)
-                && ((shm_conn_info->stats[info.process_num].max_ACS2 / info.eff_len) > (1000 / shm_conn_info->stats[info.process_num].exact_rtt))) {
+        // if ((info.rtt2_lsn[chan_num] == 0)
+        //         && ((shm_conn_info->stats[info.process_num].ACK_speed / info.eff_len) > (1000 / shm_conn_info->stats[info.process_num].exact_rtt))) {
+        if(info.rtt2_lsn[chan_num] == 0) {
             info.rtt2_lsn[chan_num] = info.channel[chan_num].local_seq_num;
             info.rtt2_tv[chan_num] = info.current_time;
             info.rtt2_send_q[chan_num] = info.channel[chan_num].send_q;
@@ -5155,14 +5157,14 @@ int lfd_linker(void)
 
         // Section to set exact_rtt
         timersub(&ping_req_tv[1], &info.rtt2_tv[1], &tv_tmp);
-        if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=))&& (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
+        if (((!shm_conn_info->idle) || timercmp(&tv_tmp, &((struct timeval) {lfd_host->PING_INTERVAL, 0}), <=)) && (info.rtt2 > 3)){ // TODO: threshold depends on phys RTT and speed; investigate that!
             if(info.rtt2 == 0) {
                 vlog(LOG_INFO, "WARNING! info.rtt2 == 0!");
                 info.rtt2 = 1;
             }
             exact_rtt = info.rtt2; 
             rttvar = info.srtt2var;
-    } else {
+        } else {
             // TODO: make sure that we sent PING after high load __before__ this happens!
             if(info.rtt == 0) {
                 vlog(LOG_INFO, "WARNING! info.rtt == 0!");
@@ -6285,6 +6287,17 @@ int lfd_linker(void)
             statb.packet_sent_ag = 0;
             statb.packet_sent_rmit = 0;
             
+            info.psl_per_second = info.psl_count * 2;
+            info.loss_events_per_second = info.loss_event_count * 2;
+            info.psl_count = 0;
+            info.loss_event_count = 0;
+            if(info.loss_events_per_second > 10 && info.psl_per_second > 100) {
+                info.xlm = 1;
+            } else {
+                info.xlm = 0;
+            }
+                
+            
             //Check time interval and ping if need.
             if (((info.current_time.tv_sec - last_ping) > lfd_host->PING_INTERVAL) ) {
     				// ping ALL channels! this is required due to 120-sec limitation on some NATs
@@ -6405,6 +6418,9 @@ int lfd_linker(void)
             statb.tokens_max = 0;
             add_json(js_buf, &js_cur, "wso", "%d", statb.web_surf_optimization);
             statb.web_surf_optimization = 0;
+            add_json(js_buf, &js_cur, "pslps", "%d", info.psl_per_second);
+            add_json(js_buf, &js_cur, "lps", "%d", info.loss_events_per_second);
+            
             
 #ifndef CLIENTONLY
             int tot_lim = 0, ss;
@@ -7900,6 +7916,10 @@ if(drop_packet_flag) {
                                     }
                                 }
                                 add_json(lossLog, &lossLog_cur, "who_lost", "%d", who_lost);
+                                if(who_lost == info.process_num) {
+                                    info.psl_count += psl;
+                                    info.loss_event_count++;
+                                }
                                 sem_wait(&(shm_conn_info->stats_sem));
                                 for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
                                     if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { // hope this works..
@@ -8179,7 +8199,7 @@ if(drop_packet_flag) {
                                     info.cubic_t_max_u = t_from_W(RSR_TOP, info.W_u_max, info.Bu, info.Cu);
                                 } else {
                                     //if (info.channel[my_max_send_q_chan_num].send_q >= info.send_q_limit_cubic_max) {
-                                    if (info.max_send_q >= info.send_q_limit_cubic_max) {
+                                    if (!info.xlm && info.max_send_q >= info.send_q_limit_cubic_max) {
                                     // if (send_q_eff_mean + send_q_eff_var/2 >= info.send_q_limit_cubic_max) {
                                         info.Wmax_saved = info.send_q_limit_cubic_max;
                                         info.Wmax_tv = loss_time;
@@ -8197,7 +8217,11 @@ if(drop_packet_flag) {
                                     } else {
                                         //info.send_q_limit_cubic_max = (int) ((double)info.channel[my_max_send_q_chan_num].send_q * (2.0 - info.B) / 2.0);
                                         // if(info.max_send_q > info.send_q_limit_cubic) {
-                                            info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                            if(info.xlm) {
+                                                info.send_q_limit_cubic_max = info.max_send_q / 2;
+                                            } else {
+                                                info.send_q_limit_cubic_max = (int) ((double)info.max_send_q * (2.0 - info.B) / 2.0);
+                                            }
                                             // info.send_q_limit_cubic_max = (int) ((double)send_q_eff_var * (2.0 - info.B) / 2.0);
                                         // } else {
                                         //     info.send_q_limit_cubic_max = (int) ((double)info.send_q_limit_cubic * (2.0 - info.B) / 2.0);

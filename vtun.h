@@ -611,6 +611,11 @@ struct phisical_status { // A.K.A. "info"
     int FCI_send_counter;
     struct timeval recv_loss_immune;
     struct timeval idle_enter;
+    int loss_event_count; // EXT
+    int psl_count; // EXT
+    int psl_per_second; // EXT
+    int loss_events_per_second; // EXT
+    int xlm;
 };
 
 #define LOSS_ARRAY 80
