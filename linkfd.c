@@ -5583,23 +5583,23 @@ int lfd_linker(void)
                 }
                 // now fix msbl to 0 as an implementation of #77 workaround
                 // warning! this is a temporary workaround and should be removed
-                int max_rtt = 0;
-                for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-                    if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { 
-                        if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
-                            max_rtt = shm_conn_info->stats[i].exact_rtt;
-                        }
-                    }
-                }
-                if(max_rtt && ((max_rtt * shm_conn_info->APCS)/1000 < 80)) {
-                    // if(shm_conn_info->max_stuck_buf_len > 10) shm_conn_info->max_stuck_buf_len -= 10;
-                    // else
-                    shm_conn_info->max_stuck_buf_len = 0;
-                    if(max_rtt < 50) 
-                        statb.web_surf_optimization |= 4;
-                    else
-                        statb.web_surf_optimization |= 2;
-                }
+                // int max_rtt = 0;
+                // for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+                //     if ((shm_conn_info->channels_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead)) { 
+                //         if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                //             max_rtt = shm_conn_info->stats[i].exact_rtt;
+                //         }
+                //     }
+                // }
+                // if(max_rtt && ((max_rtt * shm_conn_info->APCS)/1000 < 80)) {
+                //     // if(shm_conn_info->max_stuck_buf_len > 10) shm_conn_info->max_stuck_buf_len -= 10;
+                //     // else
+                //     shm_conn_info->max_stuck_buf_len = 0;
+                //     if(max_rtt < 50) 
+                //         statb.web_surf_optimization |= 4;
+                //     else
+                //         statb.web_surf_optimization |= 2;
+                // }
                 // <-- end workaround
                 shm_conn_info->msbl_tick = info.current_time;
             }
