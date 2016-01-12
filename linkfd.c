@@ -627,7 +627,7 @@ void profexit(int sig)
 #define IF_WRITE_CONDITION timersub(&info.current_time, &shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].time_stamp, &packet_wait_tv); \
         timersub(&info.current_time, &shm_conn_info->write_buf[logical_channel].last_write_time, &since_write_tv); \
         forced_rtt_reached=check_tokens(logical_channel); \
-        cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == 0) || (shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
+        cond_flag = ((shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num == (shm_conn_info->write_buf[logical_channel].last_written_seq + 1))) ? 1 : 0; \
         buf_len = shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_tail].seq_num - shm_conn_info->write_buf[logical_channel].last_written_seq; \
         if ( shm_conn_info->is_single_channel \
              || (forced_rtt_reached && ( \
@@ -1600,7 +1600,7 @@ int is_priority_packet(char *buf) {
     return 0;
 }
 
-unsigned int get_tcp_hash(char *buf, unsigned int *tcp_seq) {
+unsigned int get_l4_hash(char *buf, unsigned int *tcp_seq) {
     struct my_ip *ip;
     struct tcphdr *tcp;
     struct udphdr *udp;
@@ -2330,7 +2330,7 @@ int select_devread_send(char *buf, char *out2) {
 
         // now determine packet IP..
         // unsigned int tcp_seq2 = 0;
-        // unsigned int hash = get_tcp_hash(buf, &tcp_seq2);
+        // unsigned int hash = get_l4_hash(buf, &tcp_seq2);
         // chan_num = (hash % (info.channel_amount - 1)) + 1; // send thru 1-n channel
         chan_num = 1;
         // info.encap_streams_bitcnt |= (1 << (hash % 31)); // set bin mask to 1 
@@ -2648,7 +2648,7 @@ int write_buf_check_n_flush(int logical_channel) {
             return 0;
         }
         if(shm_conn_info->frames_buf[fprev].seq_num == shm_conn_info->write_buf[logical_channel].last_written_seq) {
-            vlog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB!");
+            vlog(LOG_ERR, "ASSERT FAILED! Duplicate packet in WB! %lu == lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
         }
         if(shm_conn_info->frames_buf[fprev].seq_num < shm_conn_info->write_buf[logical_channel].last_written_seq) {
             vlog(LOG_ERR, "ASSERT FAILED! Negative packet seq_num diff in WB! seq %lu < lws %lu", shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq);
@@ -2860,14 +2860,14 @@ int write_buf_check_n_flush(int logical_channel) {
             // calculate this stream TCP_seq_nums etc.
             unsigned int tcp_seq2 = 0, hash, tcp_seq;
             shm_conn_info->w_stream_pkts[shm_conn_info->frames_buf[fprev].shash % W_STREAMS_AMT]--;
-            // unsigned int hash = get_tcp_hash(frame_seq_tmp->out, &tcp_seq2);
+            // unsigned int hash = get_l4_hash(frame_seq_tmp->out, &tcp_seq2);
             // unsigned int tcp_seq = getTcpSeq(frame_seq_tmp->out);
             // shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts = info.current_time;
             // if(shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq < tcp_seq) {
             //     shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq = tcp_seq;
             // }
             // TODO: drop here may be pre-calculated once in 500ms - no need to do it each packet
-            int need_drop = shm_conn_info->frames_buf[fprev].unconditional_write_flag || ((shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync());
+            int need_drop = (shm_conn_info->frames_buf[fprev].unconditional_write_flag == 1) || ((shm_conn_info->write_buf[1].frames.length > (MSBL_LIMIT - MSBL_RESERV)) && (shm_conn_info->max_stuck_buf_len > (MSBL_LIMIT - MSBL_RESERV)) && check_drop_period_unsync());
             if(frame_seq_tmp->len > 0 && !need_drop) {
                 if ((len = dev_write(info.tun_device, frame_seq_tmp->out, frame_seq_tmp->len)) < 0) {
                     vlog(LOG_ERR, "error writing to device %d %s chan %d", errno, strerror(errno), logical_channel);
@@ -2903,15 +2903,15 @@ int write_buf_check_n_flush(int logical_channel) {
                         shm_conn_info->frames_buf[fprev].seq_num, shm_conn_info->write_buf[logical_channel].last_written_seq, (int) channel_mode, shm_conn_info->normal_senders,
                         weight, shm_conn_info->frames_buf[fprev].len, logical_channel, shm_conn_info->frames_buf[fprev].time_stamp, info.current_time, shm_conn_info->frames_buf[fprev].current_rtt, shm_conn_info->frames_buf[fprev].physical_channel_num, shm_conn_info->tokens, tcp_seq, tcp_seq2, hash);
             }
-            if(shm_conn_info->frames_buf[fprev].seq_num != 0) {
+            if(shm_conn_info->frames_buf[fprev].unconditional_write_flag != -1) {
                 if (shm_conn_info->tokens > 0) {
                     shm_conn_info->tokens--; // remove a token...
                 }
-                shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
-                shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
-                shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
-                shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
             }
+            shm_conn_info->flushed_packet[shm_conn_info->frames_buf[fprev].seq_num % FLUSHED_PACKET_ARRAY_SIZE] = shm_conn_info->frames_buf[fprev].seq_num;
+            shm_conn_info->write_buf[logical_channel].last_written_seq = shm_conn_info->frames_buf[fprev].seq_num;
+            shm_conn_info->last_written_recv_ts = shm_conn_info->frames_buf[fprev].time_stamp;
+            shm_conn_info->write_buf[logical_channel].last_write_time = info.current_time;
             assert_packet_ipv4("writing to dev", frame_seq_tmp->out, frame_seq_tmp->len);
             fold = fprev;
             fprev = shm_conn_info->frames_buf[fprev].rel_next;
@@ -2930,6 +2930,9 @@ int write_buf_check_n_flush(int logical_channel) {
                 }
                 frame_llist_append(&shm_conn_info->wb_free_frames, frame_index, shm_conn_info->frames_buf);
             }
+            // if(shm_conn_info->write_buf[logical_channel].frames.rel_head >= 0) {
+            //     vlog(LOG_ERR, "Pulled! Now lws is %lu next packet is %lu", shm_conn_info->write_buf[logical_channel].last_written_seq, shm_conn_info->frames_buf[shm_conn_info->write_buf[logical_channel].frames.rel_head].seq_num);
+            // }
        //     vlog(LOG_ERR, "wb_just_write show llist len %i wb %i free %i", shm_conn_info->wb_just_write_frames[logical_channel].length, shm_conn_info->write_buf[logical_channel].frames.length, shm_conn_info->wb_free_frames.length);
             // for (int i = shm_conn_info->wb_just_write_frames[logical_channel].rel_head;; i = shm_conn_info->frames_buf[i].rel_next) {
 
@@ -3046,7 +3049,7 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     /*
     unsigned int tcp_seq = getTcpSeq(out);
     unsigned int tcp_seq2 = 0;
-    unsigned int hash = get_tcp_hash(out, &tcp_seq2);
+    unsigned int hash = get_l4_hash(out, &tcp_seq2);
     if(0 && shm_conn_info->w_streams[hash % W_STREAMS_AMT].seq > tcp_seq) {
         struct timeval tv_tmp;
         timersub(&info.current_time, &shm_conn_info->w_streams[hash % W_STREAMS_AMT].ts, &tv_tmp);
@@ -3164,28 +3167,9 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
     }
     int written = 0;
     unsigned int tcp_seq2 = 0;
-    unsigned int shash = get_tcp_hash(out, &tcp_seq2);
+    unsigned int shash = get_l4_hash(out, &tcp_seq2);
     int unf = -1;
-    if(i>=0 && shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT] == 0 && shm_conn_info->frames_buf[i].seq_num != 0) {
-        // duplicate this packet in front of queue
-        if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &unf) < 0) {
-            vlog(LOG_ERR, "WARNING! Can not write new stream packet in front: no free elements in buffer");
-        } else {
-            shm_conn_info->write_buf[conn_num].frames.rel_head = unf;
-            shm_conn_info->frames_buf[unf].rel_next = i;
-            
-            shm_conn_info->frames_buf[unf].unconditional_write_flag = 0; // this is unnessessary; we check zero seq_num- this is used only to indicate that we need to skip the packet write (real one; see below)
-            shm_conn_info->frames_buf[unf].seq_num = 0; //=0: these packets are written unconditionally
-            shm_conn_info->frames_buf[unf].len = len;
-            shm_conn_info->frames_buf[unf].sender_pid = mypid;
-            shm_conn_info->frames_buf[unf].physical_channel_num = info.process_num;
-            shm_conn_info->frames_buf[unf].time_stamp = info.current_time;
-            shm_conn_info->frames_buf[unf].current_rtt = info.exact_rtt;
-            memcpy(shm_conn_info->frames_buf[unf].out, out, len); // now actually copy the data.. just a tiny optimization
-            shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
-            shm_conn_info->frames_buf[unf].shash = shash;
-        }
-    }
+    
     if(i<0) { // buffer empty.
         shm_conn_info->frames_buf[newf].rel_next = -1;
         shm_conn_info->write_buf[conn_num].frames.rel_head = shm_conn_info->write_buf[conn_num].frames.rel_tail = newf;
@@ -3198,9 +3182,6 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         shm_conn_info->APCS_cnt++;
         shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
         shm_conn_info->frames_buf[newf].shash = shash;
-        if(unf >= 0) {
-            shm_conn_info->frames_buf[newf].unconditional_write_flag = 1;
-        }
         return mlen;
     } else { // buffer not empty
         // if(shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_tail].seq_num == seq_num - 2) {
@@ -3304,6 +3285,33 @@ int write_buf_add(int conn_num, char *out, int len, uint32_t seq_num, uint32_t i
         *succ_flag= 0;
         return 0;
     }
+    
+    if(   shm_conn_info->write_buf[conn_num].frames.rel_head >= 0 && 
+          shm_conn_info->write_buf[conn_num].frames.length > 20 && 
+          shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT] == 0 && 
+          shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_head].unconditional_write_flag != -1 && 
+          shm_conn_info->frames_buf[shm_conn_info->write_buf[conn_num].frames.rel_head].seq_num != seq_num) {
+        // duplicate this packet in front of queue
+        if (frame_llist_pull(&shm_conn_info->wb_free_frames, shm_conn_info->frames_buf, &unf) < 0) {
+            vlog(LOG_ERR, "WARNING! Can not write new stream packet in front: no free elements in buffer");
+        } else {
+            frame_llist_prepend(&shm_conn_info->write_buf[conn_num].frames, unf, shm_conn_info->frames_buf);
+            
+            shm_conn_info->frames_buf[unf].unconditional_write_flag = -1;
+            shm_conn_info->frames_buf[unf].seq_num = shm_conn_info->write_buf[conn_num].last_written_seq;
+            shm_conn_info->write_buf[conn_num].last_written_seq = shm_conn_info->frames_buf[unf].seq_num - 1;
+            shm_conn_info->frames_buf[unf].len = len;
+            shm_conn_info->frames_buf[unf].sender_pid = mypid;
+            shm_conn_info->frames_buf[unf].physical_channel_num = info.process_num;
+            shm_conn_info->frames_buf[unf].time_stamp = info.current_time;
+            shm_conn_info->frames_buf[unf].current_rtt = info.exact_rtt;
+            memcpy(shm_conn_info->frames_buf[unf].out, out, len); // now actually copy the data.. just a tiny optimization
+            shm_conn_info->w_stream_pkts[shash % W_STREAMS_AMT]++;
+            shm_conn_info->frames_buf[unf].shash = shash;
+            vlog(LOG_ERR, "Adding priority packet seq %lu imitated %lu, next is %lu", seq_num, shm_conn_info->frames_buf[unf].seq_num, shm_conn_info->frames_buf[shm_conn_info->frames_buf[unf].rel_next].seq_num);
+        }
+    }
+    
     memcpy(shm_conn_info->frames_buf[newf].out, out, len); // now actually copy the data.. just a tiny optimization
     unsigned int hash = seq_num * 2654435761 % 4294967296 % WBUF_HASH_SIZE;
     shm_conn_info->write_buf_hashtable[hash].seq = seq_num;
@@ -4487,6 +4495,22 @@ int mawmar_allowed() {
         return (my_limit / info.eff_len < BL) && (MAR < BL); // in theory we need to check MAW+MAR - if, after we push msbl to net, we will still be able to compansate for the jitter
     } else { // AG_MODE
         return (MAR < BL); // this will automatically fail if we push all the MSBL to network
+    }
+}
+
+void assert_wstreams(int msgid) {
+    if(shm_conn_info->write_buf[1].frames.length == 0) {
+        int pct = 0;
+        for(int j=0; j<W_STREAMS_AMT; j++) {
+            if(shm_conn_info->w_stream_pkts[j] >= 0) {
+                pct += shm_conn_info->w_stream_pkts[j];
+            } else {
+                vlog(LOG_ERR, "ASSERT FAILED: %d stream hash %d < 0: %d", msgid, j, shm_conn_info->w_stream_pkts[j]);
+            }
+        }
+        if(pct != 0) {
+            vlog(LOG_ERR, "ASSERT FAILED: %d write_buf length == 0 but streams != 0: %d", msgid, pct);
+        }
     }
 }
 /*
@@ -7179,19 +7203,7 @@ int lfd_linker(void)
             if(shm_conn_info->write_buf[1].frames.length < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf length < 0: %d", shm_conn_info->write_buf[1].frames.length);
             }
-            if(shm_conn_info->write_buf[1].frames.length == 0) {
-                int pct = 0;
-                for(int j=0; j<W_STREAMS_AMT; j++) {
-                    if(shm_conn_info->w_stream_pkts[j] >= 0) {
-                        pct += shm_conn_info->w_stream_pkts[j];
-                    } else {
-                        vlog(LOG_ERR, "ASSERT FAILED: stream hash %d < 0: %d", j, shm_conn_info->w_stream_pkts[j]);
-                    }
-                }
-                if(pct != 0) {
-                    vlog(LOG_ERR, "ASSERT FAILED: write_buf length == 0 but streams != 0: %d", pct);
-                }
-            }
+            assert_wstreams(0);
             sem_post(&(shm_conn_info->write_buf_sem));
             if(check_result < 0) {
                 vlog(LOG_ERR, "ASSERT FAILED: write_buf broken: error %d", check_result);
