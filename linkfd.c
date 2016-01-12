@@ -1586,6 +1586,18 @@ int get_resend_frame_local_sqn(int chan_num, int process_num, uint32_t local_seq
     return len;
 }
 
+int is_priority_packet(char *buf) {
+    struct my_ip *ip;
+    ip = (struct my_ip*) (buf);
+    if (ip->ip_p == 1) { // ICMP
+        return 1;
+    }
+    if(ip->ip_p == 6 && getTcpSeq(buf) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
 unsigned int get_tcp_hash(char *buf, unsigned int *tcp_seq) {
     struct my_ip *ip;
     struct tcphdr *tcp;
@@ -1765,7 +1777,7 @@ int add_fast_resend_frame(int conn_num, char *buf, int len, uint32_t seq_num) {
  * @return
  */
 int get_fast_resend_frame(int *conn_num, char *buf, int *len, uint32_t *seq_num) {
-    if (shm_conn_info->fast_resend_buf_idx == 0) {
+    if (!check_fast_resend()) {
         return -1; // buffer is blank
     }
     int i = --(shm_conn_info->fast_resend_buf_idx);
@@ -1800,6 +1812,16 @@ void print_head_of_packet(char *buf, char* str, uint32_t seq_num, int len) {
 int check_fast_resend() {
     if (shm_conn_info->fast_resend_buf_idx == 0) {
         return 0; // buffer is blank
+    }
+    if((info.process_num == shm_conn_info->max_rtt_pnum) && is_priority_packet(shm_conn_info->fast_resend_buf[shm_conn_info->fast_resend_buf_idx-1].out)) {
+        return 0;
+    }
+    return 1;
+}
+
+int is_fast_resend_available() {
+    if (shm_conn_info->fast_resend_buf_idx >= FAST_RESEND_BUF_SIZE) {
+        return 0; // fast_resend_buf is full
     }
     return 1;
 }
@@ -2376,7 +2398,7 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef DEBUGG
     vlog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
 #endif
-    if (select_ret != 1) {
+    if ((select_ret != 1) || ((info.process_num == shm_conn_info->max_rtt_pnum) && is_priority_packet(buf) && is_fast_resend_available())) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter); // fast_resend technique is used for info.channel_amount > 1
         sem_post(&(shm_conn_info->resend_buf_sem));
