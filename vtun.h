@@ -765,8 +765,8 @@ struct conn_info {
     int write_speed_avg;
     int write_speed;
     int write_speed_b;
-    int min_rtt_pnum;
-    int max_rtt_pnum;
+    int min_rtt_pnum_checkonly;
+    int max_rtt_pnum_checkonly;
     int max_stuck_buf_len;
     int max_stuck_rtt;
     int msbl_recv;

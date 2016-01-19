@@ -1820,7 +1820,7 @@ int check_fast_resend() {
     if (shm_conn_info->fast_resend_buf_idx == 0) {
         return 0; // buffer is blank
     }
-    if((info.process_num == shm_conn_info->max_rtt_pnum) && is_priority_packet(shm_conn_info->fast_resend_buf[shm_conn_info->fast_resend_buf_idx-1].out)) {
+    if((info.process_num == shm_conn_info->max_rtt_pnum_checkonly) && is_priority_packet(shm_conn_info->fast_resend_buf[shm_conn_info->fast_resend_buf_idx-1].out)) {
         return 0;
     }
     return 1;
@@ -2406,7 +2406,7 @@ int select_devread_send(char *buf, char *out2) {
 #ifdef DEBUGG
     vlog(LOG_INFO, "Trying to select descriptor %i channel %d", info.channel[chan_num].descriptor, chan_num);
 #endif
-    if ((select_ret != 1) || ((info.process_num == shm_conn_info->max_rtt_pnum) && is_priority_packet(buf) && is_fast_resend_available())) {
+    if ((select_ret != 1) || ((info.process_num == shm_conn_info->max_rtt_pnum_checkonly) && is_priority_packet(buf) && is_fast_resend_available())) {
         sem_wait(&(shm_conn_info->resend_buf_sem));
         idx = add_fast_resend_frame(chan_num, buf, len, tmp_seq_counter); // fast_resend technique is used for info.channel_amount > 1
         sem_post(&(shm_conn_info->resend_buf_sem));
@@ -4266,41 +4266,43 @@ int get_lbuf_len() {
 }
 int set_rttlag() { // TODO: rewrite using get_rttlag
     uint32_t chan_mask = shm_conn_info->channels_mask;
-    if(NumberOfSetBits(shm_conn_info->ag_mask_recv)< 2) {
-        shm_conn_info->max_rtt_lag = 0;
-    } else {
-        int min_rtt = INT32_MAX;
-        int min_rtt_chan = shm_conn_info->max_chan;
-        int max_rtt = 0;
-        int max_rtt_chan = shm_conn_info->max_chan;
-        int chamt = 0;
-        for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
-            if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
-                if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
-                    min_rtt = shm_conn_info->stats[i].exact_rtt;
-                    min_rtt_chan = i;
-                }
+    int min_rtt = INT32_MAX;
+    int min_rtt_chan = shm_conn_info->max_chan;
+    int max_rtt = 0;
+    int max_rtt_chan = shm_conn_info->max_chan;
+    int chamt = 0;
+    
+    for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
+        // if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask_recv & (1 << i))) { // hope this works..
+        if ((chan_mask & (1 << i)) && (!shm_conn_info->stats[i].channel_dead) && (shm_conn_info->ag_mask & (1 << i))) { // hope this works..
+            if(min_rtt > shm_conn_info->stats[i].exact_rtt) {
+                min_rtt = shm_conn_info->stats[i].exact_rtt;
+                min_rtt_chan = i;
+            }
 
-                if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
-                    max_rtt = shm_conn_info->stats[i].exact_rtt;
-                    max_rtt_chan = i;
-                }
-                chamt++;
+            if(max_rtt < shm_conn_info->stats[i].exact_rtt) {
+                max_rtt = shm_conn_info->stats[i].exact_rtt;
+                max_rtt_chan = i;
             }
+            chamt++;
         }
-        if(chamt > 1) {
-            // now check that max_rtt_lag is adequate
-            if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
-                vlog(LOG_INFO, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
-                max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
-            }
-            shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
-        } else {
-            shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
-        }
-        shm_conn_info->max_rtt_pnum = max_rtt_chan;
-        shm_conn_info->min_rtt_pnum = min_rtt_chan;
     }
+    
+    if(chamt > 1) {
+        shm_conn_info->max_rtt_pnum_checkonly = max_rtt_chan;
+        shm_conn_info->min_rtt_pnum_checkonly = min_rtt_chan;
+        // now check that max_rtt_lag is adequate
+        // if(max_rtt > (min_rtt * RTT_THRESHOLD_MULTIPLIER)) {
+        //     vlog(LOG_INFO, "WARNING! max_rtt_lag is %d > min_rtt * 7 %d", max_rtt, min_rtt);
+        //     max_rtt = min_rtt * RTT_THRESHOLD_MULTIPLIER;
+        // }
+        // shm_conn_info->max_rtt_lag = max_rtt; // correct is max_rtt only // assume whole RTT is bufferbloat so PT >> rtt_phys
+    } else {
+        // shm_conn_info->max_rtt_lag = 0; // correct is max_rtt only
+        shm_conn_info->max_rtt_pnum_checkonly = -1;
+        shm_conn_info->min_rtt_pnum_checkonly = -1;
+    }
+    
 }
 
 int set_rttlag_total() {  // unused TODO REMOVE
@@ -4712,6 +4714,25 @@ int lfd_linker(void)
         vlog(LOG_ERR,"Can't allocate buffer 2 for the linker");
         return 0;
     }
+    
+    struct timer_obj *recv_n_loss_send_timer = create_timer(); // TODO: create_timer may fail, should be fixed
+    struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
+    set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
+
+    struct timer_obj *send_q_limit_change_timer = create_timer();
+    struct timeval send_q_limit_change_time = { 0, 500000 };
+    set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
+
+    struct timer_obj *s_q_lim_drop_timer = create_timer();
+    fast_update_timer(s_q_lim_drop_timer, &info.current_time);
+
+    struct timer_obj *packet_speed_timer = create_timer();
+    struct timeval packet_speed_timer_time = { 0, 500000 };
+    set_timer(packet_speed_timer, &packet_speed_timer_time);
+
+    struct timer_obj *head_channel_switch_timer = create_timer();
+    struct timeval head_channel_switch_timer_time = { 0, 0 };
+    set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
 
     char *save_out_buf = out_buf;
     memset(time_lag_info_arr, 0, sizeof(struct time_lag_info) * MAX_TCP_LOGICAL_CHANNELS);
@@ -5032,24 +5053,7 @@ int lfd_linker(void)
     info.check_shm = 0; // zeroing check_shm
 
 
-    struct timer_obj *recv_n_loss_send_timer = create_timer(); // TODO: create_timer may fail, should be fixed
-    struct timeval recv_n_loss_time = { 0, 100000 }; // this time is crucial to detect send_q dops in case of long hold
-    set_timer(recv_n_loss_send_timer, &recv_n_loss_time);
-
-    struct timer_obj *send_q_limit_change_timer = create_timer();
-    struct timeval send_q_limit_change_time = { 0, 500000 };
-    set_timer(send_q_limit_change_timer, &send_q_limit_change_time);
-
-    struct timer_obj *s_q_lim_drop_timer = create_timer();
-    fast_update_timer(s_q_lim_drop_timer, &info.current_time);
-
-    struct timer_obj *packet_speed_timer = create_timer();
-    struct timeval packet_speed_timer_time = { 0, 500000 };
-    set_timer(packet_speed_timer, &packet_speed_timer_time);
-
-    struct timer_obj *head_channel_switch_timer = create_timer();
-    struct timeval head_channel_switch_timer_time = { 0, 0 };
-    set_timer(head_channel_switch_timer, &head_channel_switch_timer_time);
+    
 
     struct timeval t_tv;
     struct timeval loss_time, loss_immune, loss_tv = { 0, 0 };
@@ -5358,7 +5362,7 @@ int lfd_linker(void)
         if(fast_check_timer(jsSQ_timer, &info.current_time)) {
            add_json_arr(jsSQ_buf, &jsSQ_cur, "%d", send_q_eff);
         #ifdef BUF_LEN_LOG
-                   //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
+                   //int lbl =  shm_conn_info->write_buf[1].last_received_seq[shm_conn_info->max_rtt_pnum_checkonly] - shm_conn_info->write_buf[1].last_written_seq; // tcp_cwnd = lbl + gSQ
                    int buf_len_real = shm_conn_info->write_buf[1].frames.length;
                    add_json_arr(jsBL_buf, &jsBL_cur, "%d", buf_len_real);
                    add_json_arr(jsAC_buf, &jsAC_cur, "%d", shm_conn_info->APCS_cnt);
