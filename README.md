@@ -1,7 +1,8 @@
 [![Build Status](https://travis-ci.org/VrayoSystems/vtrunkd.svg?branch=master)](https://travis-ci.org/VrayoSystems/vtrunkd)
 
-vtrunkd - universal netork link bonding and multichannel VPN.
-Copyright (C) 2011-2016 Vrayo Systems Ltd. team 
+# vtrunkd - universal network link bonding and multichannel VPN.
+
+Copyright (C) 2015-2016 Vrayo Systems team, http://vrayo.com/
 
 Vtrunkd is a Linux VPN daemon used to combine several connection paths 
 into one aggregated channel. Features latency, reordering and jitter 
@@ -11,14 +12,8 @@ Up to 30 heterogenous links bonding supported. Used for live streaming,
 LTE/3G/Wi-Fi link bonding. 32/64-bit, x86, MIPS and ARM supported. 
 Supports python plug-ins for new algorithms implementation. 
 
-Based on original package vtun - Copyright (C) 1998-2004 
-Maxim Krasnyansky <max_mk@yahoo.com>
 
-This product includes software developed by the OpenSSL Project
-for use in the OpenSSL Toolkit. (http://www.openssl.org/).
-Copyright (c) 1998-2004 The OpenSSL Project.  All rights reserved.
-
-Compilation and Installation:
+## Compilation and Installation:
 
 In order to compile vtrunkd you need several software packages.
 Required packages: 
@@ -30,18 +25,33 @@ Required packages:
   - Universal TUN/TAP driver 	http://vtun.sourceforge.net/tun
   
 On ubuntu, run: 
+
     $ sudo apt-get install build-essential flex bison
 
 To configure run:
-  ./configure 
+
+    ./configure 
 
 To compile and install run:
-  make install
+
+    make install
+
+## Support
 
 If you have any suggestions, ideas, wishes send them to 
-Andrew Gryaznov 
-  ag@vrayo.com, 
-  https://www.linkedin.com/in/grandrew
+
+- Andrew Gryaznov 
+   - ag@vrayo.com, 
+   - https://www.linkedin.com/in/grandrew
+- Commercial support available from Vrayo Systems team. 
+   - For more info, please visit http://vrayo.com/support/
   
+----
+
 vtrunkd and vtrunkd algorithm (C) Andrew Gryaznov
-Vtun (c) Maxim Krasnyansky
+
+Based on Vtun (C) 1998-2004 Maxim Krasnyansky
+
+This product includes software developed by the OpenSSL Project
+for use in the OpenSSL Toolkit. (http://www.openssl.org/).
+Copyright (c) 1998-2004 The OpenSSL Project.  All rights reserved.
