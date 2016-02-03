@@ -61,7 +61,7 @@ CONFIGURE_FILES = Makefile config.status config.cache config.h config.log
 %.o: %.c vtun.h lib.h log.h
 	$(CC) $(CFLAGS) $(DEFS) -c $<
 
-all: vtrunkd vshm_start_debug get_cong_status
+all: vtrunkd 
 
 vtrunkd: $(OBJS)
 	$(CC) $(CFLAGS) -o vtrunkd $(OBJS) $(FSSOBJS) $(LFD_OBJS) $(LDFLAGS)
