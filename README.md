@@ -27,14 +27,9 @@ Required packages:
 On ubuntu, run: 
 
     $ sudo apt-get install build-essential flex bison
-
-To configure run:
-
-    ./configure 
-
-To compile and install run:
-
-    make install
+    $ ./configure --prefix=
+    $ make
+    $ sudo make install
 
 ## Support
 
