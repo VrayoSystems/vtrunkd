@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/VrayoSystems/vtrunkd.svg?branch=master)](https://travis-ci.org/VrayoSystems/vtrunkd)
+
 vtrunkd - universal netork link bonding and multichannel VPN.
 Copyright (C) 2011-2016 Vrayo Systems Ltd. team 
 
