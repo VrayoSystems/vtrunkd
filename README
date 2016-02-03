@@ -1,4 +1,4 @@
-vtrunkd - universal network link bonding and multichannel VPN.
+vtrunkd - universal netork link bonding and multichannel VPN.
 Copyright (C) 2011-2016 Vrayo Systems Ltd. team 
 
 Vtrunkd is a Linux VPN daemon used to combine several connection paths 
@@ -18,7 +18,7 @@ Copyright (c) 1998-2004 The OpenSSL Project.  All rights reserved.
 
 Compilation and Installation:
 
-In order to compile VTun you need several software packages.
+In order to compile vtrunkd you need several software packages.
 Required packages: 
   - Good C compiler (gcc, egcs, etc)
   - GNU Make (make)
