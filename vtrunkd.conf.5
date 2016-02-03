@@ -1,0 +1,290 @@
+.\" Manual page for vtrunkd.conf
+.\" vtrunkd.conf.5,v 1.1.2.6.2.3 2011/05/08 04:04:12 realgrandrew Exp
+.TH VTRUNKD.CONF 5
+
+.SH NAME
+vtrunkd.conf \- Virtual Tunnel Trunking daemon configuration file.
+
+.SH DESCRIPTION
+
+Configuration file for
+.BR vtrunkd (8)
+virtual trunking daemon.
+.LP
+File consists of sections in the form:
+.IP
+.nf
+.IR name " {"
+.IR "  keyword value" ;
+.IR "  keyword value" ;
+  ..
+}
+.fi
+
+.LP
+Semicolon at the end of each keyword-value pair is required,
+as well as grouping curly braces {}.
+Lines which begin with '#' characters are comments.
+.LP
+Name of section (\fIname\fR) can be one of:
+.IP \fBoptions\fR
+this section specifies general options for vtrunkd
+.IP \fBdefault\fR
+specifies default options for all sessions
+.IP \fIsession\fR
+(any other word except "options" and "default")
+introduces new session and specifies options for it.
+.LP
+All keyword names can be abbreviated to a minimum of 4 characters.
+.LP
+
+.SH "GENERAL OPTIONS"
+
+.LP
+This section, named
+.BR options ,
+specifies general options to use by
+.BR vtrunkd (8).
+Possible \fIkeyword\fRs are:
+
+.IP \fBport\ \fIportnumber\fR
+server port number to listen on or connect to.
+By default, \fBvtrunkd\fR(8) uses port 5000.
+
+.IP \fBbindaddr\ \fIlist\fR
+server listen address. Used to force vtrunkd to bind to the specific
+address and port in server mode.  Format:
+.nf
+  \fBbindaddr\fR {
+   \fIoption \fIvalue\fR;
+  };
+.fi
+.IP
+\fBbindaddr\fR options:
+.RS
+.IP \fBiface\ \fIif_name\fR
+use interface address \fIif_name\fR as the bind address.
+.IP \fBaddr\ \fIaddr\fR
+bind address.  Can be either IP address or host name.
+.RE
+
+.IP \fBtimeout\ \fIseconds\fR
+General timeout.
+
+.IP \fBpersist\fR\ \fByes\fR|\fBkeep\fR|\fBno\fR
+persist mode.  If \fByes\fR, the client will try to reconnect to the server
+after connection termination.  If \fBkeep\fR, the client will not remove
+and re-add the \fBtun\fIXX\fR device when reconnecting.
+If \fBno\fR, the client will exit (default).
+This option is ignored by the server.
+
+.IP \fBsyslog\fR\ \fBnumber\fR|\fBname\fR
+syslog facility specification, either numeric or name (from syslog (3)).
+
+.IP \fBifconfig\ \fIpath\fR
+path to \fBifconfig\fR(8) program.  Can be used in session sections.
+
+.IP \fBroute\ \fIpath\fR
+path to \fBroute\fR(8) program.  Can be used in session sections.
+
+.IP \fBip\ \fIpath\fR
+path to \fBiproute\fR(8) program.  Can be used in session sections.
+
+.IP \fBfirewall\ \fIpath\fR
+program for the firewall setup.
+
+.IP \fBmax_tunnels_num\ \fIsecounds\fR
+maximum VPNs allocated at server side (affects SHM memory). Used by server.
+
+.LP
+All the \fBifconfig\fR, \fBroute\fR and \fBfirewall\fR
+parameters can specify a filename for corresponding program or
+equivalent (or shell script).  This parameters are used in session sections
+to setup network interfaces.
+
+.SH "SESSION OPTIONS"
+
+.LP
+Session options can be specified inside session section or
+inside \fBdefault\fR section.  Default parameters apply
+to any session section but can be overwritten there.
+Parameters are:
+
+.IP \fBpasswd\ \fIsecret\fR
+password for authentication.  This should be the same in
+client and server.
+
+.IP \fBtype\ \fItype\fR
+type of tunnel.  Possible tunnel types are:
+.RS
+.IP \fBtun\fR
+IP tunnel (no PPP, Ether etc headers)
+.RE
+.IP
+This option is ignored by client.
+
+.IP \fBdevice\ \fIdev\fR
+network device to use.  You can choose
+\fBtun\fIXX\fR for \fBtun\fR tunnel.
+By default \fBvtrunkd\fR(8) will automatically select available device.
+
+.IP \fBproto\ \fBtcp\fR|\fBudp\fR
+protocol to use.  By default, \fBvtrunkd\fR(8) will use TCP protocol.
+UDP is recommended for \fBether\fR and \fBtun\fR tunnels only.
+This option is ignored by the client. Current UDP implementation is untested.
+
+.IP \fBtimeout\ \fIseconds\fR
+Connect timeout.
+
+.IP \fBcompress\ \fImethod\fR[\fB:\fIlevel\fR]
+specifies compression method to use. Compression and encryption are not yet supported by vtrunkd.  Compression \fImethod\fRs include:
+.RS
+.IP \fBno\fR
+no compression
+.IP \fByes\fR
+default compression method
+.IP \fBzlib\fR
+ZLIB compression
+.IP \fBlzo\fR
+LZO compression (if compiled in)
+.RE
+.IP
+You can also specify \fIlevel\fR of compression using one
+digit (1 is best speed, 9 is best compression ratio).
+This option ignored by the client.
+.IP \fBencrypt\ \fByes\fR|\fBno\fR
+enable or disable encryption.  This option ignored by the client.
+.IP \fBkeepalive\ \fByes\fR|\fBno\fR
+enable or disable connection keep-alive.
+This option is ignored by the client.
+.IP \fBstat\ \fByes\fR|\fBno\fR
+enable or disable statistics.  If enabled \fBvtrunkd\fR(8) will log
+statistic counters to /var/log/vtrunkd/session_X every 5 minutes.
+.IP \fBspeed\ \fIkbps\fR
+specifies speed of the connection in kilobits/second.
+Valid values for \fIkbps\fR are 8,16,32,64,128,256,etc.
+0 (the default) means maximum possible speed without shaping.
+You can specify speed in form \fIin\fB:\fIout\fR, where
+\fIin\fR is speed to client, \fIout\fR - from the client.
+Single number means the same speed for in and out.
+This option ignored by the client.
+.IP \fBsrcaddr\ \fIlist\fR
+local (source) address. Used to force vtrunkd to bind to the specific
+address and port.  Format:
+.nf
+  \fBsrcaddr\fR {
+   \fIoption \fIvalue\fR;
+   \fIoption \fIvalue\fR;
+   ..
+  };
+.fi
+.IP
+\fBsrcaddr\fR options:
+.RS
+.IP \fBiface\ \fIif_name\fR
+use interface address \fIif_name\fR as the source address.
+.IP \fBaddr\ \fIaddr\fR
+source address.  Can be either IP address or host name.
+.IP \fBport\ \fIportnumber\fR
+source port.
+.RE
+.IP \fBmulti\ \fIvalue\fR
+control multiple connections.  \fIvalue\fR can be
+\fByes\fR or \fBallow\fR to allow multiple connections,
+\fBno\fR or \fBdeny\fR to deny them or
+\fBkillold\fR to allow new connection and kill old one.
+Ignored by the client.
+.IP \fBup\ \fIlist\fR
+list of programs to run after connection has been established.
+Used to initialize protocols, devices, routing and firewall.
+This option looks like whole section inside of session section.
+Format:
+.nf
+ \fBup\fR {
+   \fIoption \fIvalue\fR;
+   \fIoption \fIvalue\fR;
+   ..
+ };
+
+.fi
+.IP
+Options inside \fBup\fR (and \fBdown\fR) blocks:
+.RS
+.IP \fBprogram\ \fIpath\ arguments\fR\ [\fBwait\fR]
+run specified program.  \fIpath\fR is the full path to the program,
+\fIarguments\fR is all arguments to pass to it (enclosed in double quotes).
+If \fIwait\fR specified, \fBvtrunkd\fR will wait program termination.
+Special characters that can be used inside \fIarguments\fR parameter:
+.IP
+\fB\'\fR (single quotes) - group arguments
+.br
+\fB\\\fR (back slash) - escape character
+.br
+\fB%d\fR - TUN or TAP device or TTY port name 
+.br
+\fB%%\fR (double percent) - same as %d
+.br
+\fB%A\fR - Local IP address
+.br
+\fB%P\fR - Local TCP or UDP port
+.br
+\fB%a\fR - Remote IP address
+.br
+\fB%p\fR - Remote TCP or UDP port
+.IP \fBppp\ \fIarguments\fR
+run program specified by \fBppp\fR statement in \fBoptions\fR section.
+All special character described above are valid in \fIarguments\fR here.
+.IP \fBifconfig\ \fIarguments\fR
+run program specified by \fBifconfig\fR statement in \fBoptions\fR section.
+.IP \fBroute\ \fIarguments\fR
+run program specified by \fBroute\fR statement in \fBoptions\fR section.
+.IP \fBip\ \fIarguments\fR
+run program specified by \fBip\fR statement in \fBoptions\fR section.
+.IP \fBfirewall\ \fIarguments\fR
+run program specified by \fBfirewall\fR statement in \fBoptions\fR section.
+.RE
+.IP \fBdown\ \fIlist\fR
+list of programs to run after connection has been terminated.
+It is similar to \fBup\fR parameter above.
+Format:
+.nf
+ \fBdown\fR {
+   \fIoption \fIvalue\fR;
+   \fIoption \fIvalue\fR;
+   ..
+ };
+
+.SH "AG ALGORITHM PARAMETERS"
+
+.LP
+Algorithm parameters control various aspects of channel bonding behaviour. All algorithm parameters are integer numbers. Please see the example config files and project online documentation on how to use them.
+
+.IP \fBrt_mark\ \fInumber\fR
+Marker to use for packet routing. This actually allows to route virtual connections through different interfaces. Defaults to not set any mark, thus requiring to use separate IP addresses per virtual link on server-side.
+
+.IP \fBping_interval\ \fIseconds\fR
+ seconds to ping. must be less than MAX_IDLE_TIMEOUT, set to higher to reduce idle traffic
+
+.IP \fBtun_txqueue_len\ \fIpackets\fR
+this controls jitter and congestion on tun device (set to higher on faster links, lower on slower). Setting it t
+
+
+.fi
+
+.SH NOTES
+Options ignored by the client are supplied by the server at the run
+time or are used only on the server side.
+
+.SH "SEE ALSO"
+.BR vtrunkd (8),
+.BR ifconfig (8),
+.BR route (8),
+.BR pppd (8),
+.BR syslog (3),
+.BR zlib (3).
+
+.SH AUTHOR
+Vtrunkd algorithm written by Andrew Gryaznov <realgrandrew@gmail.com>.
+Original vtund written by Maxim Krasnyansky <max_mk@yahoo.com>.
+This manual page was derived from comments in config file by
+Michael Tokarev <mjt@tls.msk.ru>

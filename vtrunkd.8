@@ -1,0 +1,183 @@
+.\" Manual page for vtrunkd
+.\" vtrunkd.8,v 1.4.2.3.2.2 2011/05/08 04:03:59 realgrandrew
+.\" SH section heading
+.\" SS subsection heading
+.\" LP paragraph
+.\" IP indented paragraph
+.\" TP hanging label
+.TH VTRUNKD 8
+.SH NAME
+vtrunkd \- Virtual Tunnel Trunking (Aggregation, Bonding) daemon.
+.SH SYNOPSIS
+.B vtrunkd 
+<
+.I -s  
+>
+[ 
+.I -i 
+] 
+[ 
+.I -n 
+] 
+[ 
+.I -f file 
+] 
+[ 
+.I -S SHM_ID
+] 
+[ 
+.I -P port 
+]
+.LP
+.B vtrunkd 
+[ 
+.I -f file 
+]
+[ 
+.I -S SHM_ID
+]
+[ 
+.I -P port 
+]
+[ 
+.I -p 
+]
+[ 
+.I -m 
+]
+[ 
+.I -t timeout 
+]
+[ 
+.I -n 
+] 
+<
+.I session 
+>
+<
+.I server address 
+>
+
+.SH DESCRIPTION
+.LP
+vtrunkd provides the method for creating Virtual Tunnels over IP networks
+and allows to bond available bandwidth in created virtual tunnels. It 
+includes network congestion avoidance algorithms and aggressive failover and 
+is suitable even for highly-unstable uplinks aggregation e.g. for fast-moving 
+mobile.
+.LP
+Supported type of tunnels is: IP packet based.
+.LP
+vtrunkd is easily and highly configurable, it can be used for various network
+task like VPN, Mobile IP, IP address saving, etc.
+.LP
+It is completely user space implementation and does not require modification
+to any kernel parts. 
+.LP
+The dynamic aggregation algorithm invented and implemented by Andrew Gryaznov
+has over 20 tunable input parameters but comes with good defaults. Please 
+refer to algorithm manual for fine-tuning the aggregation to your needs, like
+preferencing lower latency and failover over higher bandwidth, or vice versa.
+Algorithm manual can be found on the online wiki on project web homepage.
+Please note that vtrunkd is in a state of active development and everything
+listed here is subject to change.
+.LP
+Some setups may require advanced knowledge in TCP/IP networking and linux
+network stack, advanced tools like iproute2 and iptables. Please see the
+examples given in the project wiki. 
+.LP
+Please note that client mode vtrunkd does not free up SHM upon exit. You 
+should do it manually by calling \fBipcrm -M 567888\fR or the SHM_ID you used.
+.LP
+Also note that server-mode vtrunkd allocates all memory required to hold 
+\fBmax_tunnels_num\fR connections at start. This may be more than your system
+is configured to allow by default. You may change the SHM size defaults at
+\fB/proc/sys/kernel/shmmax\fR and \fB/proc/sys/kernel/shmall\fR.
+.LP
+In order to mix server/client modes and run several servers on single host
+you must provide different SHM_ID and server ports for each instance group
+and/or bind (-L) to different IP addresses explicitly.
+
+.SH OPTIONS
+.TP
+.I -f file 
+Read config information from the
+.I file
+(full path required). By default vtrunkd uses /etc/vtrunkd.conf
+.TP
+.I -n 
+Do not become daemon.
+.SS Server mode: 
+.TP
+.I -s
+Run as the server.
+.TP
+.I -i
+Run as the inetd server.
+.TP
+.I -P port
+Listen for connection on the specified
+.I port
+By default vtrunkd listens on TCP port 5000. This options is equivalent to 
+the 'port' option of config file.
+.SS Client mode:
+.TP
+.I -P port
+Connect to the server on the specified
+.I port
+By default vtrunkd connects to TCP port 5000. This options is equivalent to 
+the 'port' option of config file.
+.TP
+.I -p
+Reconnect to the server after connection termination. By default vtrunkd will
+exit if connection has been terminated. This options is equivalent to 
+the 'persist' option of config file.
+.TP
+.I -m
+Force memory pages to be locked memory-resident to prevent potential VM deadlock.  Useful with NFS traffic.  This option has no config file equivalent.
+.TP
+.I -t timeout
+Connect 
+.I timeout
+Default is 30 seconds. This options is equivalent to the 'timeout' option of
+config file.
+.TP
+.I session 
+Session name from the config file.
+.TP
+.I server 
+Address of the server to connect to. Either IP address or domain name can be 
+specified.
+.SH FILES
+.TP
+.B /etc/vtrunkd.conf
+Main configuration file with sessions and other information. 
+See vtrunkd.conf example provided with distribution and vtrunkd.conf(5) 
+for more information.
+.TP
+.B /var/lock/vtrunkd/
+Session lock files. 
+.TP
+.B /var/log/vtrunkd/
+Connection statistic log files.
+.br
+Format:
+   Date Uncomp_In Uncomp_Out Comp_In Comp_Out
+.SH SIGNALS
+.TP
+.B SIGHUP
+Server mode: Causes vtrunkd to reread the config file.
+.br
+Client mode: Causes vtrunkd to reestablish the connection.
+.TP
+.B SIGUSR1
+This signal causes vtrunkd to reset statistic counters. 
+.SH SEE ALSO
+.TP
+vtrunkd.conf(5)
+.SH NOTES 
+.LP
+This product includes software developed by the OpenSSL Project
+for use in the OpenSSL Toolkit. (http://www.openssl.org/)
+.SH AUTHORS
+Vrayo Systems (http://vrayo.com/), Maxim Krasnyansky <max_mk@yahoo.com>

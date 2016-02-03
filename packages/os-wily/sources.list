@@ -1,0 +1,8 @@
+deb http://us.archive.ubuntu.com/ubuntu/ wily main universe restricted multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ wily main universe restricted multiverse
+
+deb http://security.ubuntu.com/ubuntu wily-security main universe restricted multiverse
+deb-src http://security.ubuntu.com/ubuntu wily-security main universe restricted multiverse
+
+deb http://us.archive.ubuntu.com/ubuntu/ wily-updates main universe restricted multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ wily-updates main universe restricted multiverse

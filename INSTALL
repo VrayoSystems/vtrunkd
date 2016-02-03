@@ -1,0 +1,10 @@
+System requirements:
+
+- Linux. Kernel 2.6.25+ recommended
+- Additional software:
+   bison
+   flex
+   zlib-dev
+   liblzo-dev
+   libssl-dev
+

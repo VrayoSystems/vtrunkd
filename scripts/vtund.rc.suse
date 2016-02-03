@@ -1,0 +1,108 @@
+#!/bin/sh
+#
+# Script for starting and stoping vtund.
+#
+# Writen by Dag Wieers <dag@mind.be>.
+# Updated by willems luc <willems.luc@pandora.be> 02-10-2002
+#
+### BEGIN INIT INFO
+# Provides: vtunnel
+# Required-Start: $remote_fs $syslog $network
+# Required-Stop:  $remote_fs $syslog $network
+# Default-Start:  3 5
+# Default-Stop:   0 1 2 6
+# Description:    Start vtunnel.
+### END INIT INFO
+
+# Source SuSE config
+. /etc/rc.config
+
+# Determine the base and follow a runlevel link name.
+base=${0##*/}
+link=${base#*[SK][0-9][0-9]}
+
+# Force execution if not called by a runlevel directory.
+test $link = $base && START_VTUNNEL=yes
+test "$START_VTUNNEL" = yes || exit 0
+
+VTUND_BIN=/usr/sbin/vtund
+test -x $VTUND_BIN || exit 5
+
+# Shell functions sourced from /etc/rc.status:
+#      rc_check         check and set local and overall rc status
+#      rc_status        check and set local and overall rc status
+#      rc_status -v     ditto but be verbose in local rc status
+#      rc_status -v -r  ditto and clear the local rc status
+#      rc_failed        set local and overall rc status to failed
+#      rc_failed <num>  set local and overall rc status to <num><num>
+#      rc_reset         clear local rc status (overall remains)
+#      rc_exit          exit appropriate to overall rc status
+. /etc/rc.status
+
+# First reset status of this service
+rc_reset
+
+# Return values acc. to LSB for all commands but status:
+# 0 - success
+# 1 - generic or unspecified error
+# 2 - invalid or excess argument(s)
+# 3 - unimplemented feature (e.g. "reload")
+# 4 - insufficient privilege
+# 5 - program is not installed
+# 6 - program is not configured
+# 7 - program is not running
+# 
+# Note that starting an already running service, stopping
+# or restarting a not-running service as well as the restart
+# with force-reload (in case signalling is not supported) are
+# considered a success.
+
+# chkconfig: 345 55 45
+# description: vtund Virtual Tunnel Daemon.
+#    VTun provides the method for creating Virtual Tunnels 
+#    over TCP/IP networks and allows to shape, compress, encrypt 
+#    traffic in that tunnels.
+
+
+# See how we were called.
+case "$1" in
+  start)
+        echo -n "Starting service vtund"
+        startproc /usr/sbin/vtund -s
+        touch /var/lock/subsys/vtund
+	rc_status -v	
+        ;;
+  stop)
+        echo -n "Shutting down service vtund"
+        killproc -TERM /usr/sbin/vtund || return=$rc_failed
+        rm -f /var/lock/subsys/vtund
+	rc_status -v	
+        ;;
+  try-restart)
+	## Stop the service and if this succeeds (i.e. the
+	## service was running before), start it again.
+	$0 stop  &&  $0 start
+
+	# Remember status and be quiet
+	rc_status
+	;;
+  reload|restart)
+	## Stop the service and regardless of whether it was
+	## running or not, start it again.
+	$0 stop
+	$0 start
+
+	# Remember status and be quiet
+	rc_status
+	;;
+  status)
+        echo -n "Checking for service vtund: "
+        checkproc /usr/sbin/vtund && echo OK || echo No process
+        ;;
+  *)
+        echo "Usage: vtund {start|stop|reload|try-restart|restart|status}"
+        exit 1
+esac
+
+rc_exit
+

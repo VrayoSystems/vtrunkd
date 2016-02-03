@@ -1,0 +1,144 @@
+vtrunkd (c) 2015-2016 Vrayo Systems Ltd. team (http://vrayo.com)
+
+Author of vtrunkd core algorithm is Andrew Gryaznov <realgrandrew@gmail.com>
+with help of Andrey Kuznetsov <andreykyz@gmail.com>
+
+Author of the original vtun package is Maxim Krasnyansky <max_mk@yahoo.com>.
+
+A lot of thanks to the following people for their suggestions and 
+contributions (original vtun):
+
+Gayaneh Krasnyanskaya(Max's Wife) <gayaneh@yahoo.com> 
+	Initial Web site creation. And a lot of other help :)))  
+
+Alex Korenkov <alex@uznet.net> 
+	Testing, bug reports.
+
+Shukhrat Zakhidov <shukhrat@ishonch.uz>
+	Testing, bug reports, suggestions.
+
+Dag Wieers <dag@mind.be>
+	Initial RPM packager specification file. 
+	RedHat startup script. 
+	Several bug reports. 
+	SOCKS support suggestions.
+
+Ted Rolle <ted@acacia.datacomm.com> 
+	Spelling fixes.
+
+Craig Sanders <cas@taz.net.au> 
+	Debian startup script.
+
+Catalin Ciocoiu <catalin@ccp.pub.ro> 
+	Reported compilation problems. 
+
+Timur Danyarhojaev <tid@podolsk.ru> 
+	Added client source address option.
+
+Andreas Kainz <aka@gams.at>
+	RPM package improvements.
+
+Chris Todd <christ@insynq.com>
+	Idea of challenge based authentication. 
+	Initial BlowFish encryption code. 
+	Suggestions.
+
+Garet Krampe <garet@satix.net> 
+	A lot of great ideas. Mailing list.
+	Web site mirror.
+
+Denis Zapolsky <denis@granch.com.my> 
+	Testing. 
+
+Vadim Zaliva <lord@crocodile.org>
+	Solaris patches.  Suggestions.
+
+Hurricane Floyd <floyd@hurricanes.org> 
+	Max had several vacations.
+	Bishop had no power or water, and was able
+	   to experience the Third World.
+	:)))))))))))))))))))
+
+James B. MacLean <macleajb@Trademart-1.EDnet.NS.CA> 
+	Client persist mode fix. Suggestions.
+
+Paul <xerox@httpd.net> 
+	Stress tests, bug reports, suggestions.
+
+Maksim Yevenkin <m_evmenkin@yahoo.com>
+	TAP driver for FreeBSD.
+
+Anthon Walters <anthon@ws.co.za>
+	Web site mirror. Testing. Initial FAQ.
+
+Ryan Defelice <ryand@mobiletel.com> 
+	OpenBSD package maintainer. Provided OpenBSD server for 
+	development and testing
+
+Alexander Bergolth <leo@strike.wu-wien.ac.at>
+	Initial multiple connection handling and host lock functionalities.
+	Improvements and fixes of source address option. Incorrect error 
+	handling fix. Ideas. Suggestions.
+
+Hubert Feyrer <feyrer@rfhs8012.fh-regensburg.de>
+	NetBSD package.
+
+Hiroharu Tamaru <tamaru@ap.t.u-tokyo.ac.jp>
+	Updated FreeBSD 4.0 TUN driver support. 
+
+Terry Donaldson <tsd@geo-mis.com>
+	Provided Solaris 8.0 server for development and testing.
+
+Daniel Podlejski <underley@underley.eu.org>
+	TUN/TAP driver modifications for 2.3.99-pre5 kernel.
+
+Michael Tokarev <mjt@tls.msk.ru>
+	File descriptors and memory leaks fix. 
+	Tons of other bug fixes and patches. Suggestions. Ideas.
+
+Xavier <xavier@bru-noc.net>
+	European web site mirror.
+
+Chris Snell <chris@bikeworld.com>
+	Mailing list archives.
+
+Robert Stone <talby@trap.mtview.ca.us>
+	Security enhancements. Suggestions. Ideas.
+	Encryption and other subsystems rework for 3.X.
+
+Steinar H. Gunderson <sgunderson@bigfoot.com>
+	Tons of stability fixes and problem reports. 
+	Ideas and suggestions.
+
+Yan Seiner <yan@cardinalengineering.com>
+	Testing. Bug reports. Suggestions.
+
+James Yonan <jim@funnybee.ntlp.com>
+	Encryption and other fixes. Suggestions.
+
+Greg Olszewski <noop@nwonknu.org>
+	Config parser and other fixes. Suggestions.
+
+Kevin P. Fleming <kevin@labsysgrp.com>
+	Makefile and config parser enhancement.
+	Other minor fixes and suggestions.
+
+Robert R. Wal <rrw@hell.pl>
+	Added support for iproute command.
+
+Willems Luc <willems.luc@pandora.be>
+	Initial SuSE packaging.  Testing.
+
+Nickolai Zeldovich <nickolai@cs.stanford.edu>
+	mlockall() support to prevent VM collapse.
+
+Dale Fountain <dpf-vtun@fountainbay.com>
+	Added multiple cipher support.
+	Added multiple cipher modes support.
+	Added support for different sized keys.
+	Re-sync ciphers when using non-ECB modes over a UDP connection.
+	Fixed Bug#908824 (persist=keep not re-applying routes)
+
+Alan Grow <agrow-at-thegotonerd.com>
+	Added a Listening Address/Interface (rfe936523)
+	Cleaned up the code around that portion of the config.

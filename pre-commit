@@ -1,0 +1,6 @@
+#!/bin/sh
+ 
+revision_number=`git describe --abbrev=4 --dirty --always`;
+echo "#define VERSION \"$revision_number\"" > ./version.h
+git update-index --again
+

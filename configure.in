@@ -1,0 +1,214 @@
+dnl
+dnl vtrunkd - Virtual Tunnel Trunking over TCP/IP network.
+dnl Copyright (C) 2011-2016  Vrayo Systems Ltd. team
+dnl derived from
+dnl VTun - Virtual Tunnel over TCP/IP network.
+dnl Copyright (C) 1998-2006  Maxim Krasnyansky <max_mk@yahoo.com>
+dnl License: GPL v.3 or higher
+dnl configure.in,v 1.10.2.12.2.6 2006/12/11 01:47:45 mtbishop Exp
+dnl
+dnl Process this file with autoconf to produce a configure script.
+dnl
+
+AC_INIT(lib.c)
+AC_CONFIG_HEADER(config.h)
+
+CFLAGS="$CFLAGS -std=gnu99"
+
+dnl no O3 support
+AC_ARG_ENABLE(o3,
+   --disable-o3     	   Compile without -O3 optimization,
+   O3=$enableval,
+   O3=yes
+)
+
+AC_ARG_ENABLE(sum-send,
+   --enable-sum-send      Enable redundancy code sending,
+   SUM_SEND=$enableval,
+   SUM_SEND=no
+)
+
+AC_ARG_ENABLE(mark,
+   --disable-mark     	   Disable SO_MARK support on socket. Only available in Linux >=2.6.25,
+   MARK=$enableval,
+   MARK=yes
+)
+
+AC_ARG_ENABLE(syslog,
+   --disable-syslog          Disable syslog output,
+   SYSLOG=$enableval,
+   SYSLOG=yes
+)
+
+dnl enable low memory opt
+AC_ARG_ENABLE(low-mem,
+   --enable-low-mem         Compile for low ram device,
+   LOW_MEM=$enableval,
+   LOW_MEM=no
+)
+
+AC_ARG_ENABLE(json,
+   --enable-json              JSON logging,
+   JSON=$enableval,
+   JSON=no
+)
+
+dnl enable verbose debug
+AC_ARG_ENABLE(debugg,
+   --enable-debugg     	   Compile with verbose logging for debug,
+   DEBUGG=$enableval,
+   DEBUGG=no
+)
+
+AC_ARG_ENABLE(self-testing,
+   --enable-self-testing         Compile with self-testing support,
+   SELFTESTING=$enableval,
+   SELFTESTING=no
+)
+
+AC_ARG_ENABLE(client-only,
+   --enable-client-only     	   Client only version,
+   CLIENTONLY=$enableval,
+   CLIENTONLY=no
+)
+
+AC_ARG_WITH(ssl-headers,
+   --with-ssl-headers=DIR  Crypto Include files location,
+   SSL_HDR_DIR="$withval"
+   CPPFLAGS="$CPPFLAGS -I$withval" 
+)
+AC_ARG_WITH(ssl-lib,
+   --with-ssl-lib=DIR      Crypto Library location,
+   LIBS="$LIBS -L$withval" 
+)
+
+AC_ARG_WITH(lzo-headers,
+   --with-lzo-headers=DIR     LZO Include files location,
+   LZO_HDR_DIR="$withval"
+)
+AC_ARG_WITH(lzo-lib,
+   --with-lzo-lib=DIR         LZO Library location,
+   LIBS="$LIBS -L$withval" 
+)
+
+AC_ARG_WITH(blowfish-headers,
+   --with-blowfish-headers=DIR     Blowfish Include files location,
+   BLOWFISH_HDR_DIR="$withval"
+)
+
+AC_ARG_WITH(socks-lib,
+   --with-socks-lib=DIR         SOCKS Library location,
+   LIBS="$LIBS -L$withval" 
+)
+
+dnl Guess host type.
+AC_CANONICAL_HOST
+AC_CANONICAL_SYSTEM
+
+dnl Check for programs.
+AC_PROG_YACC
+AC_PROG_LEX
+AC_PROG_CC
+AC_PROG_INSTALL
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_C_INLINE
+
+dnl Check for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS(sys/resource.h netdb.h sched.h resolv.h arpa/inet.h)
+AC_CHECK_HEADERS(netinet/ip.h netinet/in.h netinet/tcp.h netinet/in_systm.h)
+AC_CHECK_HEADERS(libutil.h sys/sockio.h)
+
+dnl Check for libsocket
+AC_SEARCH_LIBS(socket, socket)
+
+dnl Check for libnsl
+AC_SEARCH_LIBS(inet_ntoa, nsl)
+
+dnl Check for pthread
+AC_SEARCH_LIBS(pthread_create, pthread)
+
+dnl Check for libresolv
+AC_SEARCH_LIBS(gethostbyname, resolv nsl)
+
+dnl Check for librt
+AC_SEARCH_LIBS(nanosleep, rt posix4)
+
+dnl Check for setproctitle in libutil
+AC_SEARCH_LIBS(setproctitle, util bsd, AC_DEFINE(HAVE_SETPROC_TITLE) )
+
+if test "$MARK" = "no"; then
+	  CFLAGS="$CFLAGS -DW_O_SO_MARK=1"
+fi
+
+if test "$SYSLOG" = "yes"; then
+          CFLAGS="$CFLAGS -DSYSLOG=1"
+fi
+
+if test "$SUM_SEND" = "yes"; then
+          CFLAGS="$CFLAGS -DSUM_SEND=1"
+fi
+
+if test "$DEBUGG" = "yes"; then
+	  CFLAGS="$CFLAGS -DDEBUGG=1"
+fi
+
+if test "$SELFTESTING" = "yes"; then
+          CFLAGS="$CFLAGS -DTESTING=1"
+fi
+
+if test "$LOW_MEM" = "yes"; then
+          CFLAGS="$CFLAGS -DLOW_MEM=1"
+fi
+
+if test "$JSON" = "yes"; then
+          CFLAGS="$CFLAGS -DJSON=1"
+fi
+
+if test "$O3" = "yes"; then
+	  CFLAGS="$CFLAGS -O3"
+fi
+
+if test "$CLIENTONLY" = "yes"; then
+	  CFLAGS="$CFLAGS -DCLIENTONLY=1"
+fi
+
+AC_MSG_RESULT()
+
+AC_CHECK_FUNCS([getpt grantpt unlockpt ptsname])
+
+OS_REL=`uname -r | tr -d '[A-Za-z\-\_\.]'`
+case $host_os in
+	*linux*)
+	     OS_DIR="linux"
+	     AC_CHECK_HEADERS(linux/if_tun.h)
+	     ;;
+	*solaris*)
+	     OS_DIR="svr4"
+	     ;;
+	*freebsd*)
+	     if test "$OS_REL" -ge "40"; then 
+	        OS_DIR="freebsd"
+	     fi
+	     ;;
+	*openbsd*)
+	     if test "$OS_REL" -ge "25"; then 
+	        OS_DIR="openbsd"
+	     fi
+	     ;;
+esac	     
+AC_LINK_DRV(`cat vtun.drivers`, $OS_DIR)
+
+AC_MSG_RESULT()
+
+dnl Build release name
+changequote(<,>)
+dnl REL=`echo 'BRANCH-3_X' | tr -d '$: \-' | sed 's/^[A-Za-z]*//' | sed 's/\_/\./'`
+REL="0.1b"
+changequote([,])
+
+AC_DEFINE_UNQUOTED(VTUN_VER, "$REL `date '+%m/%d/%Y'`")
+
+AC_OUTPUT(Makefile)

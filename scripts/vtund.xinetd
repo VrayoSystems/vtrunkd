@@ -1,0 +1,13 @@
+service unlisted
+{
+        type                    = UNLISTED
+        port                    = 5000
+        socket_type             = stream
+        protocol                = tcp
+        wait                    = no
+        user                    = root
+        server                  = /usr/local/sbin/vtund
+        server_args             = -i
+        disable                 = yes
+#	bind			= aa.bb.cc.dd
+}

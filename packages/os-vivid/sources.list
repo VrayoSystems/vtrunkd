@@ -1,0 +1,8 @@
+deb http://us.archive.ubuntu.com/ubuntu/ vivid main universe restricted multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ vivid main universe restricted multiverse
+
+deb http://us.archive.ubuntu.com/ubuntu/ vivid-security main universe restricted multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ vivid-security main universe restricted multiverse
+
+deb http://us.archive.ubuntu.com/ubuntu/ vivid-updates main universe restricted multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ vivid-updates main universe restricted multiverse
