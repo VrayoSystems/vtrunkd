@@ -21,7 +21,7 @@ set -e
 case "$1" in
     configure)
 
-	pip install cffi==10.0.0
+	pip install cffi==1.0.0
 	
     ;;
 
