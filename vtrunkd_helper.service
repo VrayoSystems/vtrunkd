@@ -1,0 +1,11 @@
+[Unit]
+Description=Network link bonding and multichannel VPN
+
+[Service]
+Type=forking
+ExecStart=/opt/vtrunkd_helper/vtrunkd_helper --mode 0660 \
+ --dirmode 0750 \
+ --daemon --pidfile /var/run/vtrunkd_helper.pid
+
+[Install]
+WantedBy=multi-user.target
