@@ -20,6 +20,9 @@ set -e
 
 case "$1" in
     configure)
+
+	pip install cffi==10.0.0
+	
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
