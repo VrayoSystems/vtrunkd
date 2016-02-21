@@ -9,7 +9,7 @@ Homepage: http://vrayo.com
 
 Package: vtrunkd2
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, udev [linux-any] | makedev [linux-any], python-pip
+Depends: ${shlibs:Depends}, ${misc:Depends}, udev [linux-any] | makedev [linux-any], python-pip, python-all-dev, libffi-dev
 Description: Wireless channel trunking daemon
  The first software inverse multiplexing solution for connected automotive,
  live streaming, bonded internet and more.
