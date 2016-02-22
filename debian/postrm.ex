@@ -1,5 +1,5 @@
 #!/bin/sh
-# postrm script for vtrunkd2
+# postrm script for vtrunkd
 #
 # see: dh_installdeb(1)
 
