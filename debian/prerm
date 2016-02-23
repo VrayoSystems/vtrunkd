@@ -9,7 +9,7 @@ case ${1} in
 
     remove|upgrade|deconfigure)
 	
-	service vtrunkd-helper stop
+	service vtrunkd-helper stop || true
 	
     ;;
 
