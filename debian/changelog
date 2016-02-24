@@ -1,0 +1,5 @@
+vtrunkd (0.1-1) unstable; urgency=low
+
+  * Initial release (Closes: #205)
+
+ -- David Parunakian <dp@dp.io>  Sat, 16 Jan 2016 00:07:40 +0300

@@ -1,0 +1,15 @@
+Source: vtrunkd
+Section: net
+Priority: optional
+Maintainer: David Parunakian <dp@dp.io>
+Build-Depends: debhelper (>= 9), autotools-dev, bison, flex, build-essential, liblzo2-dev,
+ zlib1g-dev, libssl-dev
+Standards-Version: 3.9.5
+Homepage: http://vrayo.com
+
+Package: vtrunkd
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, udev [linux-any] | makedev [linux-any], python-pip, python-all-dev, libffi-dev
+Description: Wireless channel trunking daemon
+ The first software inverse multiplexing solution for connected automotive,
+ live streaming, bonded internet and more.
