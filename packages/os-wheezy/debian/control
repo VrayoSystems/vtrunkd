@@ -2,7 +2,7 @@ Source: vtrunkd2
 Section: net
 Priority: optional
 Maintainer: David Parunakian <dp@dp.io>
-Build-Depends: debhelper (>= 5), quilt, autotools-dev, bison, flex, build-essential, liblzo2-dev,
+Build-Depends: debhelper (>= 5), autotools-dev, bison, flex, build-essential, liblzo2-dev,
  zlib1g-dev, libssl-dev
 Standards-Version: 3.9.1
 Homepage: http://vrayo.com

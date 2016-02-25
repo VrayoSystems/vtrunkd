@@ -1,4 +1,4 @@
-vtrunkd2 (0.1-1) unstable; urgency=low
+vtrunkd2 (0.1-1) stable; urgency=low
 
   * Initial release (Closes: #205)
 
