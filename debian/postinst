@@ -8,7 +8,7 @@ set -e
 case "$1" in
     configure)
 
-	pip install cffi==1.0.0
+	pip install cffi==1.0.0 snakemq==1.2
 
     service vtrunkd-helper start
 	
