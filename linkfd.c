@@ -1274,7 +1274,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
     for (int i = 0; i < RESEND_BUF_SIZE; i++) {// TODO need to reduce search depth 100 200 1000 ??????
 //                vlog(LOG_INFO, "j %i chan_num %i seq_num %"PRIu32" ", j, shm_conn_info->resend_frames_buf[j].chan_num, shm_conn_info->resend_frames_buf[j].seq_num);
         if ((shm_conn_info->resend_frames_buf[j].chan_num == chan_num) && (shm_conn_info->resend_frames_buf[j].len != 0)) {
-            if( shm_conn_info->resend_frames_buf[j].seq_num = *seq_num ) { // AND is the one we're seeking for
+            if( shm_conn_info->resend_frames_buf[j].seq_num == *seq_num ) { // AND is the one we're seeking for
                 if(!timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <)) { // packet is not too old
                     statb.p_tooold++;
                 }
@@ -1290,7 +1290,7 @@ int get_resend_frame(int chan_num, uint32_t *seq_num, char **out, int *sender_pi
                       timercmp(&expiration_date, &shm_conn_info->resend_frames_buf[j].time_stamp, <) // packet is not too old
                       && ( (top_seq_num - shm_conn_info->resend_frames_buf[j].seq_num) < expnum ) // AND we can send it and all of the rest to top in MLD time in case of DDS
                       && timercmp(&continuum_date, &shm_conn_info->resend_frames_buf[j].time_stamp, >=) // AND packet is not too early
-                      && ( shm_conn_info->resend_frames_buf[j].seq_num = *seq_num ) // AND is the one we're seeking for
+                      && ( shm_conn_info->resend_frames_buf[j].seq_num == *seq_num ) // AND is the one we're seeking for
             ) {
                 *seq_num = shm_conn_info->resend_frames_buf[j].seq_num;
                 len = shm_conn_info->resend_frames_buf[j].len;

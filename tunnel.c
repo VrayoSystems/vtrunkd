@@ -249,6 +249,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv, 
 
     vlog(LOG_INFO, "fd_server waiting for a connection...\n");
     int select_counter = 0;
+    int shm_sem_held = 0; /* tracks whether we exited the loop holding shm_sem */
     while (!fdserver_term) {
         int done, n = 0, i;
 
@@ -300,6 +301,7 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv, 
             if ( srv && ( (cur_time.tv_sec - shm_conn_info->alive) > PROCESS_FD_SHM_TIMEOUT )) {
                 sem_wait(shm_sem);
                 if(shm_conn_info->usecount == 0) {
+                    shm_sem_held = 1; /* intentionally keep holding through teardown below */
                     break;
                 } else {
                     vlog(LOG_ERR, "Process %s dead but usecount = %d, continuing", dev, shm_conn_info->usecount);
@@ -314,7 +316,14 @@ int run_fd_server(int fd, char * dev, struct conn_info *shm_conn_info, int srv, 
     }
     
     vlog(LOG_INFO, "Killing old connections");
-    /* Make sure it's dead */
+    /* Make sure it's dead.
+     * We reach here either via the usecount==0 break (shm_sem HELD) or via
+     * fdserver_term / select error (shm_sem NOT held). Acquire it if needed:
+     * posting an un-held semaphore would raise its count above 1 and let two
+     * processes into the shm critical section simultaneously. */
+    if (!shm_sem_held) {
+        sem_wait(shm_sem);
+    }
     for (int i = 0; i < MAX_TCP_PHYSICAL_CHANNELS; i++) {
         if (!(shm_conn_info->channels_mask & (1 << i))) {
             continue;
