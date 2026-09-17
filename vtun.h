@@ -28,6 +28,23 @@
 #include "const.h"
 #include "version.h"
 #include <semaphore.h>
+#include <errno.h>
+
+/* vtrunkd installs signal handlers without SA_RESTART and processes signal
+ * each other (SIGUSR1) at runtime. A signal landing inside sem_wait() makes
+ * it return -1/EINTR; every call site in this codebase ignores the return
+ * value and proceeds AS IF the semaphore was acquired, then does a paired
+ * sem_post() later — corrupting the semaphore count and eventually
+ * deadlocking (or double-releasing) the shared-memory critical sections.
+ * This wrapper restarts the wait on EINTR so callers get real acquisition. */
+static inline int sem_wait_eintr_safe(sem_t *s) {
+    int r;
+    do {
+        r = sem_wait(s);
+    } while (r == -1 && errno == EINTR);
+    return r;
+}
+#define sem_wait(s) sem_wait_eintr_safe(s)
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>

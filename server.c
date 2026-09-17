@@ -233,7 +233,6 @@ void listener(void)
         perror("shm semaphore initilization");
         exit(1);
     }
-    sem_init(&shm_sem, 1, 1);
 
     while ( (!server_term) || (server_term == VTUN_SIG_HUP) ) {
         opt = sizeof(cl_addr);
